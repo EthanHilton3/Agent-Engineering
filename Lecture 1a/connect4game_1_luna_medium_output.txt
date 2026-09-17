@@ -1,0 +1,472 @@
+$ python basic_completion_app.py Connect4prompt.md --model 'gpt-5.6-luna' --reasoning medium
+Below is a complete `connect4game.py` program. Save it as that filename and run it with:
+
+```bash
+python connect4game.py
+```
+
+```python
+"""
+Connect Four - Console Game
+
+Modes:
+1. Single player: Human vs Computer
+2. Two players: Human vs Human
+
+Run with:
+    python connect4game.py
+"""
+
+import os
+import random
+import time
+
+
+ROWS = 6
+COLUMNS = 7
+EMPTY = " "
+PLAYER_ONE = "X"
+PLAYER_TWO = "O"
+
+# ANSI colors
+RESET = "\033[0m"
+RED = "\033[91m"
+YELLOW = "\033[93m"
+CYAN = "\033[96m"
+GREEN = "\033[92m"
+
+
+def clear_screen():
+    """Clear the console screen."""
+    os.system("cls" if os.name == "nt" else "clear")
+
+
+def create_board():
+    """Create and return an empty Connect Four board."""
+    return [[EMPTY for _ in range(COLUMNS)] for _ in range(ROWS)]
+
+
+def print_title():
+    print(f"{CYAN}======================================={RESET}")
+    print(f"{CYAN}           CONNECT FOUR{RESET}")
+    print(f"{CYAN}======================================={RESET}")
+
+
+def display_board(board):
+    """Display the game board in the console."""
+    clear_screen()
+    print_title()
+    print()
+
+    print("     " + "   ".join(str(number) for number in range(1, COLUMNS + 1)))
+    print("   +" + "---+" * COLUMNS)
+
+    for row in board:
+        cells = []
+        for cell in row:
+            if cell == PLAYER_ONE:
+                colored_cell = f"{RED}{cell}{RESET}"
+            elif cell == PLAYER_TWO:
+                colored_cell = f"{YELLOW}{cell}{RESET}"
+            else:
+                colored_cell = cell
+
+            cells.append(f" {colored_cell} ")
+
+        print("   |" + "|".join(cells) + "|")
+        print("   +" + "---+" * COLUMNS)
+
+    print()
+    print(f"   {RED}X{RESET} = Player 1    {YELLOW}O{RESET} = Player 2 / Computer")
+    print()
+
+
+def is_valid_column(board, column):
+    """Return True if a move can be made in the selected column."""
+    return 0 <= column < COLUMNS and board[0][column] == EMPTY
+
+
+def get_valid_columns(board):
+    """Return a list of columns that are not full."""
+    return [column for column in range(COLUMNS) if is_valid_column(board, column)]
+
+
+def drop_piece(board, column, piece):
+    """
+    Place a piece in a column.
+
+    Returns the row where the piece was placed, or None if the column is full.
+    """
+    for row in range(ROWS - 1, -1, -1):
+        if board[row][column] == EMPTY:
+            board[row][column] = piece
+            return row
+
+    return None
+
+
+def undo_piece(board, column):
+    """Remove the highest piece from a column."""
+    for row in range(ROWS):
+        if board[row][column] != EMPTY:
+            board[row][column] = EMPTY
+            return
+
+
+def board_is_full(board):
+    """Return True if there are no empty spaces remaining."""
+    return len(get_valid_columns(board)) == 0
+
+
+def check_winner(board, piece):
+    """Return True if the specified piece has four connected pieces."""
+    # Horizontal checks
+    for row in range(ROWS):
+        for column in range(COLUMNS - 3):
+            if all(board[row][column + offset] == piece for offset in range(4)):
+                return True
+
+    # Vertical checks
+    for row in range(ROWS - 3):
+        for column in range(COLUMNS):
+            if all(board[row + offset][column] == piece for offset in range(4)):
+                return True
+
+    # Diagonal: down and right
+    for row in range(ROWS - 3):
+        for column in range(COLUMNS - 3):
+            if all(board[row + offset][column + offset] == piece for offset in range(4)):
+                return True
+
+    # Diagonal: up and right
+    for row in range(3, ROWS):
+        for column in range(COLUMNS - 3):
+            if all(board[row - offset][column + offset] == piece for offset in range(4)):
+                return True
+
+    return False
+
+
+def evaluate_window(window, piece):
+    """Score a group of four board positions."""
+    opponent = PLAYER_ONE if piece == PLAYER_TWO else PLAYER_TWO
+    score = 0
+
+    piece_count = window.count(piece)
+    empty_count = window.count(EMPTY)
+    opponent_count = window.count(opponent)
+
+    if piece_count == 4:
+        score += 100
+    elif piece_count == 3 and empty_count == 1:
+        score += 5
+    elif piece_count == 2 and empty_count == 2:
+        score += 2
+
+    if opponent_count == 3 and empty_count == 1:
+        score -= 4
+
+    return score
+
+
+def score_position(board, piece):
+    """Evaluate how favorable the board is for a player."""
+    opponent = PLAYER_ONE if piece == PLAYER_TWO else PLAYER_TWO
+    score = 0
+
+    # Prefer the center column.
+    center_column = [board[row][COLUMNS // 2] for row in range(ROWS)]
+    score += center_column.count(piece) * 3
+
+    # Horizontal windows
+    for row in range(ROWS):
+        for column in range(COLUMNS - 3):
+            window = board[row][column:column + 4]
+            score += evaluate_window(window, piece)
+
+    # Vertical windows
+    for row in range(ROWS - 3):
+        for column in range(COLUMNS):
+            window = [
+                board[row + offset][column]
+                for offset in range(4)
+            ]
+            score += evaluate_window(window, piece)
+
+    # Down-right diagonal windows
+    for row in range(ROWS - 3):
+        for column in range(COLUMNS - 3):
+            window = [
+                board[row + offset][column + offset]
+                for offset in range(4)
+            ]
+            score += evaluate_window(window, piece)
+
+    # Up-right diagonal windows
+    for row in range(3, ROWS):
+        for column in range(COLUMNS - 3):
+            window = [
+                board[row - offset][column + offset]
+                for offset in range(4)
+            ]
+            score += evaluate_window(window, piece)
+
+    # Small additional penalty for dangerous opponent positions.
+    if check_winner(board, opponent):
+        score -= 100000
+
+    return score
+
+
+def minimax(board, depth, maximizing_player, alpha, beta):
+    """
+    Search possible future moves and return:
+    (best_score, best_column)
+    """
+    valid_columns = get_valid_columns(board)
+
+    if check_winner(board, PLAYER_TWO):
+        return 1_000_000 + depth, None
+
+    if check_winner(board, PLAYER_ONE):
+        return -1_000_000 - depth, None
+
+    if depth == 0 or not valid_columns:
+        return score_position(board, PLAYER_TWO), None
+
+    # Search center columns first for stronger and faster play.
+    ordered_columns = sorted(
+        valid_columns,
+        key=lambda column: abs((COLUMNS // 2) - column)
+    )
+
+    if maximizing_player:
+        best_score = float("-inf")
+        best_column = random.choice(valid_columns)
+
+        for column in ordered_columns:
+            drop_piece(board, column, PLAYER_TWO)
+            score, _ = minimax(board, depth - 1, False, alpha, beta)
+            undo_piece(board, column)
+
+            if score > best_score:
+                best_score = score
+                best_column = column
+
+            alpha = max(alpha, best_score)
+            if alpha >= beta:
+                break
+
+        return best_score, best_column
+
+    best_score = float("inf")
+    best_column = random.choice(valid_columns)
+
+    for column in ordered_columns:
+        drop_piece(board, column, PLAYER_ONE)
+        score, _ = minimax(board, depth - 1, True, alpha, beta)
+        undo_piece(board, column)
+
+        if score < best_score:
+            best_score = score
+            best_column = column
+
+        beta = min(beta, best_score)
+        if alpha >= beta:
+            break
+
+    return best_score, best_column
+
+
+def computer_move(board):
+    """Choose a move for the computer."""
+    valid_columns = get_valid_columns(board)
+
+    # Take an immediate winning move if one exists.
+    for column in valid_columns:
+        drop_piece(board, column, PLAYER_TWO)
+        winning_move = check_winner(board, PLAYER_TWO)
+        undo_piece(board, column)
+
+        if winning_move:
+            return column
+
+    # Otherwise, search ahead.
+    _, column = minimax(
+        board,
+        depth=5,
+        maximizing_player=True,
+        alpha=float("-inf"),
+        beta=float("inf"),
+    )
+
+    if column is None:
+        column = random.choice(valid_columns)
+
+    return column
+
+
+def get_human_move(board, player_name):
+    """Ask a human player for a column selection."""
+    while True:
+        choice = input(
+            f"{player_name}, choose a column (1-{COLUMNS}), "
+            "or type H for help: "
+        ).strip().lower()
+
+        if choice == "h":
+            print()
+            print("Choose a column number to drop your piece.")
+            print("The piece falls to the lowest available position.")
+            print("Type Q at any time to quit the game.")
+            print()
+            continue
+
+        if choice == "q":
+            return "quit"
+
+        if not choice.isdigit():
+            print("Please enter a valid column number.")
+            continue
+
+        column = int(choice) - 1
+
+        if not 0 <= column < COLUMNS:
+            print(f"Choose a number from 1 to {COLUMNS}.")
+            continue
+
+        if not is_valid_column(board, column):
+            print("That column is full. Try another one.")
+            continue
+
+        return column
+
+
+def choose_game_mode():
+    """Display the mode selection menu."""
+    while True:
+        clear_screen()
+        print_title()
+        print()
+        print("1. Single Player - Human vs Computer")
+        print("2. Two Players - Human vs Human")
+        print("Q. Quit")
+        print()
+
+        choice = input("Select a game mode: ").strip().lower()
+
+        if choice in ("1", "2", "q"):
+            return choice
+
+        print("Please choose 1, 2, or Q.")
+        time.sleep(1)
+
+
+def show_result(message):
+    """Display a result message and wait for the player."""
+    print()
+    print(f"{GREEN}{message}{RESET}")
+    input("\nPress Enter to continue...")
+
+
+def play_game(mode):
+    """Play one complete game."""
+    board = create_board()
+    current_player = PLAYER_ONE
+
+    while True:
+        display_board(board)
+
+        if mode == "1":
+            if current_player == PLAYER_ONE:
+                column = get_human_move(board, "Your move")
+            else:
+                print("The computer is thinking...")
+                time.sleep(0.5)
+                column = computer_move(board)
+        else:
+            player_name = (
+                "Player 1" if current_player == PLAYER_ONE else "Player 2"
+            )
+            column = get_human_move(board, player_name)
+
+        if column == "quit":
+            return False
+
+        drop_piece(board, column, current_player)
+
+        if check_winner(board, current_player):
+            display_board(board)
+
+            if mode == "1":
+                if current_player == PLAYER_ONE:
+                    show_result("Congratulations! You beat the computer!")
+                else:
+                    show_result("The computer wins this time!")
+            else:
+                winner_name = (
+                    "Player 1" if current_player == PLAYER_ONE else "Player 2"
+                )
+                show_result(f"{winner_name} wins! Great game!")
+
+            return True
+
+        if board_is_full(board):
+            display_board(board)
+            show_result("It's a draw! The board is completely full.")
+            return True
+
+        current_player = (
+            PLAYER_TWO if current_player == PLAYER_ONE else PLAYER_ONE
+        )
+
+
+def main():
+    """Start and manage the game."""
+    while True:
+        mode = choose_game_mode()
+
+        if mode == "q":
+            clear_screen()
+            print("Thanks for playing Connect Four!")
+            break
+
+        play_game(mode)
+
+        while True:
+            choice = input(
+                "\nPlay another game? (Y = yes, M = main menu, Q = quit): "
+            ).strip().lower()
+
+            if choice == "y":
+                break
+
+            if choice == "m":
+                break
+
+            if choice == "q":
+                clear_screen()
+                print("Thanks for playing Connect Four!")
+                return
+
+            print("Please enter Y, M, or Q.")
+
+        if choice == "y":
+            continue
+
+        if choice == "q":
+            break
+
+
+if __name__ == "__main__":
+    main()
+```
+23.57 seconds elapsed
+----------- Usage ------------
+~~~~~~~~~gpt-5.6-luna~~~~~~~~~
+Input (tokens): 105
+Output (tokens): 3208
+Reasoning (tokens): 445
+gpt-5.6-luna cost (USD): $0.003871
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Total cost (USD): $0.003871

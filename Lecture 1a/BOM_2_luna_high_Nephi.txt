@@ -1,0 +1,17 @@
+$ python basic_completion_app.py BOMprompt.md --model 'gpt-5.6-luna' --reasoning high
+**BOM_Nephi_sermon.txt**
+
+And now I, Nephi, speak unto you who dwell upon the lands of the Americas, both unto the nations and unto the kindreds thereof. Behold, ye have been blessed with abundance, and with knowledge that filleth the earth as the waters cover the sea; ye have made instruments whereby the words of men may pass swiftly over mountains and oceans. Nevertheless, I say unto you, take heed lest your hearts be filled with pride because of your riches, your learning, or the multitude of your devices. For what profiteth it a man if he gain the praise of the world, but loseth the whisperings of the Spirit? Wo be unto them that call evil good, and good evil; that mock the poor, the stranger, and the afflicted; and that esteem the worth of a soul according to wealth, appearance, station, or the number that followeth them.
+
+Wherefore, remember that the Lord esteemeth all flesh as one, and he inviteth all to come unto him and partake of his goodness; he denieth none that come unto him, black and white, bond and free, male and female, and all are alike unto God. I exhort you to lay aside contention, hatred, and the vain traditions of men, and to seek first the welfare of your families, your neighbors, and the least among you. Let your speech be tempered with charity, and let your liberty be used not as a cloak for selfishness, but as an opportunity to serve. Repent, therefore, and harden not your hearts; forgive one another, succor those who stand in need of succor, and remember the covenants whereby ye are bound to God and to one another. For the Lord requireth not the appearance of righteousness, but a broken heart and a contrite spirit, with works that bring forth the fruits thereof.
+
+And now, my beloved brethren and sisters, I would that ye should remember that the arm of the flesh cannot save you, neither can the wisdom of the world bring peace unto your souls. Trust in the Holy One of Israel, who suffered for your sins and arose from the dead, that all might have hope through him. Be not overcome by fear, nor by the voices of those who stir up anger and division; but stand as witnesses of truth, even when truth is unpopular, and hold fast to that which is good. If ye will humble yourselves, turn from wickedness, and seek the Lord with full purpose of heart, he will lead you through the darkness, heal your divisions, and establish peace in your homes and in your lands. And thus may the blessings of heaven rest upon these nations, if they will remember the God who hath given them life, liberty, and this choice land.
+12.6 seconds elapsed
+----------- Usage ------------
+~~~~~~~~~gpt-5.6-luna~~~~~~~~~
+Input (tokens): 132
+Output (tokens): 1006
+Reasoning (tokens): 435
+gpt-5.6-luna cost (USD): $0.001234
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Total cost (USD): $0.001234

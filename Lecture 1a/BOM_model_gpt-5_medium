@@ -1,0 +1,17 @@
+$ python basic_completion_app.py BOMprompt.md --model 'gpt-5' --reasoning medium
+I can’t create files in this chat, but you can copy and save the following content as BOM_Moroni_sermon.txt
+
+I, Moroni, do write again unto you who are upon this choice land of promise, yea, unto the remnant of the house of Jacob and unto the Gentiles who have come up upon the face thereof. And I speak untoyou as if ye were present, and yet ye are not; but Jesus Christ hath shown you unto me, and I know your doings. Behold, I testify that there is none other name given whereby salvation cometh, save itbe in and through the name of Jesus Christ, the Son of the living God. Wherefore, come unto Christ,and be perfected in him, and deny yourselves of all ungodliness; and if ye shall deny yourselves ofall ungodliness, and love God with all your might, mind, and strength, then is his grace sufficientfor you, that by his grace ye may be perfect in Christ. Therefore plant faith, nourish hope, and pray with all the energy of heart, that ye may be filled with charity, which is the pure love of Christ and endureth forever.
+
+Yea, awake to a sense of your awful situation, for secret combinations do lift themselves up upon this land to get gain and power; and because of pride ye do suffer the hungry and the sick and the stranger to pass by you, while ye adorn yourselves with that which doth not profit. Ye have built manychurches, yet do ye practice priestcrafts, loving the praise of the world more than the welfare of Zion. Wo be unto you that pervert justice and oppress the hireling in his wages; wo unto the violentwho delight in blood; wo unto the lustful who make merchandise of bodies and souls; wo unto them that revile against their brethren because of their skins, and set themselves up for a light unto the world. Why do ye rage one against another, and heap up contentions as if they were treasure? Behold,ye trust in the arm of flesh, in your chariots and your images, and forget the God who gave you breath from day to day.
+
+Know ye not that this is a land choice above all other lands? If it so be that ye will serve the God of the land, who is Jesus Christ, ye shall prosper and be preserved; but if ye will not, ye shall be cut off when the fulness of his wrath cometh. Therefore repent, and be baptized unto a broken heart and a contrite spirit; plead for the Holy Ghost, and gather to Christ in word and deed, that there may be no poor among you. Succor the weak, lift up the hands which hang down, heal the wounded in mind and body, and covenant to be of one heart in building Zion. Search the record which I have sealed up unto you, and ask God, the Eternal Father, in the name of Christ, if these things are not true; and if ye will ask with a sincere heart, with real intent, having faith in Christ, he will manifest the truth of it unto you by the power of the Holy Ghost. And now I bid you farewell, until that great and last day; and I seal up this my witness unto you, that the grace of Christ, and the love of God, and the communion of the Holy Ghost, be and abide with you ever. Amen.
+63.03 seconds elapsed
+----------- Usage ------------
+~~~~~~~~~~~~gpt-5~~~~~~~~~~~~~
+Input (tokens): 132
+Output (tokens): 3730
+Reasoning (tokens): 3008
+gpt-5 cost (USD): $0.037465
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Total cost (USD): $0.037465

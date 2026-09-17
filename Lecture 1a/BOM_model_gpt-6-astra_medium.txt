@@ -1,0 +1,23 @@
+$ python basic_completion_app.py BOMprompt.md --model 'gpt-6-astra' --reasoning medium
+Traceback (most recent call last):
+  File "C:\Users\ethan\Documents\GitHub\Agent Engineering\Lecture 1a\basic_completion_app.py", line29, in <module>
+    main(args.model, args.prompt_file.read_text(), args.reasoning)
+    ~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\ethan\Documents\GitHub\Agent Engineering\Lecture 1a\basic_completion_app.py", line16, in main
+    response = client.responses.create(**kwargs)
+  File "C:\Users\ethan\AppData\Roaming\Python\Python313\site-packages\openai\resources\responses\responses.py", line 1041, in create
+    return self._post(
+           ~~~~~~~~~~^
+        "/responses",
+        ^^^^^^^^^^^^^
+    ...<47 lines>...
+        stream_cls=Stream[ResponseStreamEvent],
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\ethan\AppData\Roaming\Python\Python313\site-packages\openai\_base_client.py", line1368, in post
+    return cast(ResponseT, self.request(cast_to, opts, stream=stream, stream_cls=stream_cls))
+                           ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\ethan\AppData\Roaming\Python\Python313\site-packages\openai\_base_client.py", line1141, in request
+    raise self._make_status_error_from_response(err.response) from None
+openai.PermissionDeniedError: Error code: 403 - {'error': {'message': 'Project `proj_VgMGroPkOI59V2J6MSlkiyvd` does not have access to model `gpt-6-astra`', 'type': 'invalid_request_error', 'param': None, 'code': 'model_not_found'}}

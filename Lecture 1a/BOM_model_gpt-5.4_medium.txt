@@ -1,0 +1,17 @@
+$ python basic_completion_app.py BOMprompt.md --model 'gpt-5.4' --reasoning medium
+**BOM_Moroni_sermon.txt**
+
+My beloved brethren, and also ye fair inhabitants of the isles and continents of the Americas, behold, I speak unto you as one crying from the dust, whose voice is weak in writing, but whose desire is that ye should lay hold upon Christ. For I perceive that ye dwell in a day of much light and also of gross darkness; for knowledge covereth the earth, and yet many know not God; and men speak peace while their hearts are set upon gain, and they build up fine sanctuaries unto the praise of the world, and suffer the poor, the meek, and the broken in heart to mourn without comfort. Yea, I would speak plainly unto you concerning pride, and contention, and the shedding of innocent blood, and secretcombinations, which seek power and riches and overthrow the freedom of all lands and nations. Remember that whatsoever nation shall uphold such things until they spread over the land, behold, they ripen for destruction; wherefore repent, and choose justice, mercy, and humility before the Holy One of Israel.
+
+And now I would exhort you that ye deny not the gifts of God, neither say in your hearts that miracles are done away, for the arm of the Lord is not shortened that he cannot save in your day as in days of old. Turn away from the pride of your learning if it causeth you to mock faith, and turn away also from blind zeal if it causeth you to despise knowledge; but seek wisdom by study and also by faith, having charity, which is the pure love of Christ. Let fathers and mothers teach their children to pray, and let children honor their fathers and mothers; let the rich impart of their substance, let the strong lift up the hands which hang down, and let every man and woman be chaste, honest, and true in covenant. For the doctrine of Christ changeth not: ye must come unto him with a broken heartand a contrite spirit, repent and be baptized, receive the Holy Ghost, and endure in holiness and hope unto the end.
+
+Wherefore, awake and arise from the dust, O ye people of this choice land, and harden not your hearts against the Lord, nor against one another; for the enemy of your souls delighteth in wrath, in division, and in making your hearts fail you through fear. But perfect love casteth out fear. Search the words of the prophets, remember the covenants of the Father, and come unto Christ, that ye may beperfected in him; and if ye will turn unto him, he will make weak things become strong unto you, and your homes shall be places of light, and your communities places of refuge, and your nations shallyet be preserved by righteousness. And now I bid you farewell for a little season, until the great day when ye shall stand before the bar of God; and then shall ye know that I have spoken unto you insoberness and in the power of the Spirit of Christ.
+37.71 seconds elapsed
+----------- Usage ------------
+~~~~~~~~~~~gpt-5.4~~~~~~~~~~~~
+Input (tokens): 132
+Output (tokens): 955
+Reasoning (tokens): 339
+gpt-5.4 cost (USD): $0.017487
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Total cost (USD): $0.017487

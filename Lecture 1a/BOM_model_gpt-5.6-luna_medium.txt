@@ -1,0 +1,19 @@
+Ethan@LAPTOP-EQBGA00L MINGW64 ~/Documents/GitHub/Agent Engineering/Lecture 1a
+$ python basic_completion_app.py BOMprompt.md --model 'gpt-5.6-luna' --reasoning medium
+**BOM_Mormon_sermon.txt**
+```txt
+And now I, Mormon, speak unto you who dwell upon the land of the Americas, yea, unto all ye inhabitants thereof, both rich and poor, bond and free, who are surrounded by many devices and much knowledge, and yet are filled with contention and fear. Behold, ye search out the secrets of the earth and send your words unto the ends thereof in the twinkling of an eye; nevertheless, many of you have forgotten to search the words of Christ, which are able to make you wise unto salvation. Wherefore, I beseech you to humble yourselves before God, and cease from exalting yourselves because of riches, learning, appearance, or the praise of men; for all these things shall pass away, but the testimony ofJesus Christ endureth forever.
+
+And it grieveth me that there are those among you who have abundance, while the hungry and the stranger are thrust aside; and that ye judge one another according to the color of the skin, the nation of birth, the manner of speech, or the possessions of the flesh. Know ye not that God is the Father of all, and that the worth of every soul is great in his sight? Therefore, impart of your substance to the needy, defend the weak, comfort those that mourn, and forgive one another, even as ye desire forgiveness from God. Let not anger rule your homes, nor hatred your public places, nor falsehood your tongues; but let your words be seasoned with truth and charity, and let your labor build peace among your families and communities.
+
+And now I say unto you, repent, and come unto Christ, who is the light and the life of the world; for he hath power to heal the wounds which ye hide and to cleanse the sins which ye will not confess.Be not troubled because darkness increaseth, neither suppose that your small acts of goodness are forgotten; for the Lord beholdeth the secret prayers, the unseen sacrifices, and the hands which liftthe fallen. Stand as witnesses of God at all times and in all things and in all places, and seek first to establish righteousness in your hearts. If ye will turn unto him, keep his commandments, and love one another, then shall the land be blessed, and the people shall have peace; but if ye harden your hearts, pride and division shall bring sorrow upon you. Wherefore, awake, and arise from the dust, O inhabitants of the Americas, and remember that ye are free to choose liberty and eternal life,through the great Mediator of all mankind, even Jesus Christ. Amen.
+```
+17.91 seconds elapsed
+----------- Usage ------------
+~~~~~~~~~gpt-5.6-luna~~~~~~~~~
+Input (tokens): 132
+Output (tokens): 775
+Reasoning (tokens): 237
+gpt-5.6-luna cost (USD): $0.000956
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Total cost (USD): $0.000956

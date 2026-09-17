@@ -1,0 +1,21 @@
+$ python basic_completion_app.py BOMprompt.md --model 'gpt-5.2' --reasoning medium
+I can’t create files directly in your environment, but here is the exact content to place into a new text file named **`BOM_Moroni_sermon.txt`**:
+
+```txt
+BOM_Moroni_sermon.txt
+
+And now I, Moroni, speak unto you who dwell in the lands of promise in the latter days—yea, unto the inhabitants of the Americas—and I speak as one who is alone, having seen the fall of my people because of pride, and hardness of heart, and the love of power. Wherefore, I would exhort you that ye remember that this land is choice above all other lands, and it is choice unto the Lord; and he keepeth it by righteousness, and he casteth it off by iniquity. And I perceive that many of you say in your hearts: We are secure; we have abundance; we have knowledge; we have devices of cunning workmanship; and yet ye set your hearts upon that which rusteth, and upon that which passeth away, and ye forget the living God. Yea, ye contend one with another, and ye are angry because of words; and ye suffer your poor to be despised, and your meek to be trampled, and ye justify yourselves because of the multitude of your laws, though your hearts are far from charity.
+
+Wherefore, I would that ye should awake, and arise from the dust, and put on the armor of righteousness; and I would that ye should come unto Christ, and be perfected in him. Begin again, I pray you,with faith unto repentance, for faith is not a sign only, but a yielding of the heart unto God; andrepentance is not a saying only, but a turning, even until ye hunger and thirst after righteousness. Deny not the gifts of God; for the Spirit yet speaketh, and the Lord yet calleth, and angels minister still, according to the will of him who is the same yesterday, today, and forever. Search the words of the prophets, and remember your covenants; and let your baptisms and your sacraments be not for a show, but that ye may take upon you the name of Christ, and keep his commandments, and always remember him, that his Spirit may be with you.
+
+And now I speak plainly concerning that which shall save you in the day of your trial: it is charity, which is the pure love of Christ; for if ye have not charity, ye are nothing. Therefore, judge not to cast off, but judge to succor; and turn not away the stranger, nor the weary, nor the child; and let your riches be for doing good, to clothe the naked, and to feed the hungry, and to heal the afflicted in body and in spirit. And I would that ye should pray unto the Father with all the energy of heart, that ye may be filled with this love, which he hath bestowed upon all who are true followers of his Son; for behold, when fear and deceit and secret works do cover the earth, only the meek shall stand, and only they who build upon the rock of Christ shall not fall. Wherefore, come unto him,and lay hold upon every good thing, and endure unto the end, and the Lord God will not suffer that this land, which is choice unto him, should be lost unto you.
+```
+20.78 seconds elapsed
+----------- Usage ------------
+~~~~~~~~~~~gpt-5.2~~~~~~~~~~~~
+Input (tokens): 132
+Output (tokens): 846
+Reasoning (tokens): 154
+gpt-5.2 cost (USD): $0.012075
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Total cost (USD): $0.012075

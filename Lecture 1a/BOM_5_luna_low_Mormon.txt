@@ -1,0 +1,17 @@
+$ python basic_completion_app.py BOMprompt.md --model 'gpt-5.6-luna' --reasoning low
+**BOM_Mormon_sermon.txt**
+
+Behold, I, Mormon, speak unto you who dwell upon the land of promise, yea, even unto the inhabitants of the Americas in these latter days. And I perceive that many of you are laden with knowledge, yet are poor in wisdom; for ye have made great inventions, but have not always remembered the Creator from whom all blessings come. Ye are swift to speak and slow to hearken, swift to condemn and slow to forgive, and the noise of the world hath entered into your hearts until ye can scarcely hear the still, small voice of the Spirit. Wherefore, I beseech you to humble yourselves before God, and search the word of Christ, that ye may know the truth and be not carried about by every wind of opinion, fear, or contention.
+
+Remember that the Lord esteemeth all flesh as one, and that there are no strangers nor enemies in the household of God. Therefore, cease to despise the poor, the stranger, the weak, and them that mourn; for inasmuch as ye have done it unto the least of these, ye have done it unto Him. Let your abundance become a blessing unto the needy, and let your liberty be joined with righteousness, lest ye use it for a cloak of pride or oppression. Contend not one with another because of difference in nation, color, party, language, or belief, but contend earnestly for the faith which is in Christ, and let your words be tempered with charity, which suffereth long, and is kind, and seeketh not her own.
+
+And now I, Mormon, testify unto you that Jesus Christ is the Son of God, the Light and Life of the world, and that He hath power to heal both nations and broken hearts. Repent, therefore, and come unto Him with a broken heart and a contrite spirit; forgive as ye desire forgiveness, and build your homes and communities upon truth, mercy, and remembrance. If ye will pray always, serve one another, and endure in faith unto the end, the Lord shall preserve you spiritually amid the storms of the latter days. And may the grace of God the Father, and the merits of His Son, Jesus Christ, and the power of the Holy Ghost abide with you forever. Amen.
+13.62 seconds elapsed
+----------- Usage ------------
+~~~~~~~~~gpt-5.6-luna~~~~~~~~~
+Input (tokens): 132
+Output (tokens): 621
+Reasoning (tokens): 151
+gpt-5.6-luna cost (USD): $0.000772
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Total cost (USD): $0.000772

@@ -1,0 +1,41 @@
+ python basic_completion_app.py BOMprompt.md --model 'gpt-4.1' --reasoning medium
+Certainly! For this exercise, I'll write as Mormon, whose style is reflective, urgent, and mournful, yet hopeful. Here is the discourse and the requested file output.
+
+---
+
+**BOM_Mormon_sermon.txt:**
+
+> Behold, my beloved brethren and sisters among the remnants of Israel and the Gentiles upon this land, yea, even all inhabitants of the Americas, I, Mormon, who am constrained by the Spirit, speak unto you as one who hath seen many destructions and great sorrows. For behold, ye live in days of confusion, when the hearts of men are stirred up unto anger one against another, and secret combinations flourish, and many do walk in pride and seek after their own gain, even at the expense of the poorand the needy. I fear lest the judgments of God shall yet be poured out upon this land, even as upon my own people, if ye repent not.
+
+> Therefore, I exhort you, yea, I plead with you, that ye remember the words of the Savior, who hath said: "Love one another; as I have loved you." Seek not to dominate thy neighbor but to lift him up, to heal the wounded heart, and to succor the weak. Let your homes be sanctuaries of faith and prayer and let not the power of evil enter therein. Remember, that to every man is given a measure of the Spirit of Christ, that he may know good from evil; therefore, choose the right and forsake the works of darkness and contention, whether they be in your homes, in your assemblies, or in the councils of your nations.
+
+> And now, beloved, I would that ye remember that the promises of the Lord are unto all those who repent and come unto Him. Yea, though the world is in commotion, and though calamities may increase, the Lord hath covenanted with this land that it is a land of promise unto the righteous. Cling unto the mercy of Christ and let His Atonement heal your divisions and cleanse your souls. Prepare yourselves, for the coming of the Lord draweth nigh, and blessed are they who shall be found faithful in the last day.
+
+---
+
+**To create the file** using Python:
+
+```python
+sermon = """
+Behold, my beloved brethren and sisters among the remnants of Israel and the Gentiles upon this land, yea, even all inhabitants of the Americas, I, Mormon, who am constrained by the Spirit, speak unto you as one who hath seen many destructions and great sorrows. For behold, ye live in days of confusion, when the hearts of men are stirred up unto anger one against another, and secret combinations flourish, and many do walk in pride and seek after their own gain, even at the expense of the poor and the needy. I fear lest the judgments of God shall yet be poured out upon this land, even as upon my own people, if ye repent not.
+
+Therefore, I exhort you, yea, I plead with you, that ye remember the words of the Savior, who hath said: "Love one another; as I have loved you." Seek not to dominate thy neighbor but to lift him up,to heal the wounded heart, and to succor the weak. Let your homes be sanctuaries of faith and prayer and let not the power of evil enter therein. Remember, that to every man is given a measure of theSpirit of Christ, that he may know good from evil; therefore, choose the right and forsake the works of darkness and contention, whether they be in your homes, in your assemblies, or in the councils of your nations.
+
+And now, beloved, I would that ye remember that the promises of the Lord are unto all those who repent and come unto Him. Yea, though the world is in commotion, and though calamities may increase, the Lord hath covenanted with this land that it is a land of promise unto the righteous. Cling unto the mercy of Christ and let His Atonement heal your divisions and cleanse your souls. Prepare yourselves, for the coming of the Lord draweth nigh, and blessed are they who shall be found faithful in thelast day.
+"""
+
+with open('BOM_Mormon_sermon.txt', 'w') as file:
+    file.write(sermon)
+
+print("Sermon written to BOM_Mormon_sermon.txt")
+```
+
+Would you like the content in another author's voice, or a different doctrinal focus?
+12.49 seconds elapsed
+----------- Usage ------------
+~~~~~~~~~~~gpt-4.1~~~~~~~~~~~~
+Input (tokens): 133
+Output (tokens): 911
+gpt-4.1 cost (USD): $0.007554
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Total cost (USD): $0.007554

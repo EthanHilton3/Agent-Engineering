@@ -1,0 +1,17 @@
+$ python basic_completion_app.py BOMprompt.md --model 'gpt-5.6-luna' --reasoning medium
+**BOM_Mormon_sermon.txt**
+
+Behold, I, Mormon, speak unto you who dwell upon this land in these latter days. I have seen, as it were, the wars and contentions of nations, and the pride of the people, and the sorrow that cometh because men love darkness more than light. Ye have multiplied your knowledge, and your cities are great, and the voice of the multitude is as the roaring of the sea; nevertheless, many of you have forgotten the God who gave you breath. Ye trust in riches, in the arm of flesh, and in the wisdom of men, and ye set your hearts one against another because of color, station, possession, and the vain traditions of your fathers. I say unto you, remember that ye are all alikeunto God, and that the worth of every soul is great in his sight.
+
+Therefore, repent, and harden not your hearts any longer. Cease to strive one with another, and seek not to destroy those who differ from you, for contention is of thedevil, and the devil is the father of lies. Let your abundance become a blessing unto the poor, the stranger, the afflicted, and the lonely; for if ye have not charity, ye are nothing. Love your enemies, forgive those who trespass against you, and lift up the hands which hang down. Be not deceived by those who promise peace while they nourish anger, nor by those who call evil good and good evil. The Lord requireth a broken heart and a contrite spirit, and he will receive all who come unto him with sincerity, whether they be learned or unlearned, rich or poor, bond or free.
+
+And now I exhort you to come unto Christ, who is the author of peace and the giver of salvation. Believe in him, and believe that he hath power to heal not only the wounds of the body but also the bitterness of the soul. Pray for your families, your communities, and your enemies; search the words of the prophets; and remember the covenants which ye have made, not merely with your lips but by the manner in which ye live. If ye will humble yourselves, repent, and serve one another, the Lord will gather you as a hen gathereth her chickens, and he will make of your divided peoples one heart and one mind. But if ye will persist in pride and hatred, behold, ye shall bring upon yourselves the sorrow which followeth wickedness. Choose, therefore, the way of life, that ye may have peace in this land and inherit the joy prepared for all who endure in faith unto the end.
+12.83 seconds elapsed
+----------- Usage ------------
+~~~~~~~~~gpt-5.6-luna~~~~~~~~~
+Input (tokens): 132
+Output (tokens): 702
+Reasoning (tokens): 165
+gpt-5.6-luna cost (USD): $0.000869
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Total cost (USD): $0.000869

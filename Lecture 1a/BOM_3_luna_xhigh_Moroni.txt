@@ -1,0 +1,19 @@
+$ python basic_completion_app.py BOMprompt.md --model 'gpt-5.6-luna' --reasoning xhigh
+Filename: `BOM_Moroni_sermon.txt`
+
+```txt
+Behold, I, Moroni, speak unto you who dwell upon the land which the Lord hath preserved for a wise purpose. I speak unto you as though ye were present, and I would that ye should remember that the nations of the earth are not established by riches, nor by the wisdom of men, nor by the strength of armies, but by righteousness. Behold,there is much contention among you; one seeketh to rise above another, and many trust in the arm of flesh while they forget the God who gave them breath. Ye are surrounded by many voices, and by images and words that enter into your homes and hearts; therefore, watch yourselves, lest ye call evil good and good evil, and lest the cares of the world drown out the still voice of the Spirit.
+
+Wherefore, I would exhort you to come unto Christ, and lay hold upon every good thing. Have faith in him, repent of your sins, and seek to be changed by the power of the Holy Ghost; for no nation, family, or soul can have peace while it refuseth the commandments of God. Remember that the Lord requireth not only that ye speak of love,but that ye love the poor, the stranger, the widow, and the fatherless, and that ye forgive those who trespass against you. If ye possess riches, use them to bless rather than to exalt yourselves; if ye possess knowledge, use it to serve rather than to mock; and if ye have influence, use it to lift the fallen rather than to gather followers unto your own name. For charity is the pure love of Christ, and except ye have charity, ye are nothing.
+
+And now I exhort you to cast away pride, secret hatred, dishonesty, and every form of oppression; for behold, these things destroy both peoples and homes. Contend not against one another except it be against sin, and let your disagreements be governed by truth, meekness, and a desire to understand. Remember that the devil seeketh to divide you, that he may lead you captive; but the Savior inviteth all to come unto him, and denieth none who repent. Therefore, seek peace in your families, honesty in your labor, mercy in your judgments, and holiness in your hearts. And if ye will come unto Christ with full purpose of heart, he will heal your wounds, strengthen your faith, and make of you a people prepared to stand in righteousness, even in the midst of a troubled world.
+```
+19.79 seconds elapsed
+----------- Usage ------------
+~~~~~~~~~gpt-5.6-luna~~~~~~~~~
+Input (tokens): 132
+Output (tokens): 1558
+Reasoning (tokens): 1034
+gpt-5.6-luna cost (USD): $0.001896
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Total cost (USD): $0.001896

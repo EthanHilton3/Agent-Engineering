@@ -1,0 +1,19 @@
+$ python basic_completion_app.py BOMprompt.md --model 'gpt-5.6-luna' --reasoning max
+Filename: `BOM_Moroni_sermon.txt`
+
+```text
+And now I, Moroni, speak unto you, the inhabitants of the Americas, and unto all who shall dwell upon this land in the latter days. Behold, the Lord hath not forgotten you, neither hath his arm been shortened; but ye have forgotten him when ye have set your hearts upon riches, influence, and the praise of men. Ye contend one with another, and many lift up their voices in anger while the cries of the poor, the stranger, and the sorrowful are scarcely heard. I exhort you, therefore, to awake and arise from your slumber, and remember that Jesus Christ is the foundation of all righteousness; for no nation, family, or soul can stand long upon pride, but only upon repentance, humility, and faith in him.
+
+Be not deceived by the multitude of voices that rush upon you through your devices, for the adversary stirreth up anger, envy, and fear, that ye might judge before ye understand and hate those whom God hath commanded you to love. The Spirit of Christ is given unto every person, that he may know good from evil; therefore seek truth with humility, and try every teaching by the fruits which it bringeth forth. Let your knowledge make you more merciful, and not more proud; and if ye have abundance, impart freely unto the poor, the hungry, the stranger, and the afflicted. For faith without works isdead, and worship which doth not relieve suffering is but an empty sound before God.
+
+Wherefore, come unto Christ, and be perfected in him through his grace. Repent of your hatred, forgive one another, protect the weak, and use your liberty to bless rather than to oppress. Pray unto the Father with a sincere heart that he will bestow upon you charity, which is the pure love of Christ; for if ye have not charity, ye are nothing. And now I exhort you to remember these things, and toseek peace in your homes, your communities, and your nations. If ye shall do these things with faith in the Lord, he will strengthen you against the storms of the latter days, and his grace shall abide with you forever.
+```
+40.95 seconds elapsed
+----------- Usage ------------
+~~~~~~~~~gpt-5.6-luna~~~~~~~~~
+Input (tokens): 132
+Output (tokens): 3046
+Reasoning (tokens): 2588
+gpt-5.6-luna cost (USD): $0.003682
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Total cost (USD): $0.003682
