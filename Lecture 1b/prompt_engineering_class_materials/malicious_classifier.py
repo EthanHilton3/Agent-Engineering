@@ -6,7 +6,7 @@ from time import time
 import pandas as pd
 from openai import OpenAI
 
-from usage import print_usage
+from homework.usage import print_usage
 
 
 # get the email data. Schema is: subject,body,label {0,1}

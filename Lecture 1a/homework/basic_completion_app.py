@@ -1,6 +1,6 @@
 from openai import OpenAI
 from time import time
-from usage import print_usage
+from homework.usage import print_usage
 from pathlib import Path
 import sys
 import argparse

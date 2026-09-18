@@ -6,7 +6,7 @@ from time import time
 
 from openai import OpenAI
 
-from usage import print_usage
+from homework.usage import print_usage
 
 
 def main(model: str, prompt: str, sports_texts: dict):

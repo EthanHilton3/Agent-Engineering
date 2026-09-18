@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from openai import OpenAI
-from usage import print_usage
+from homework.usage import print_usage
 
 
 TOOLS = [

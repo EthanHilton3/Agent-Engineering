@@ -2,7 +2,7 @@ from time import time
 
 from openai import Client
 
-from usage import print_usage
+from homework.usage import print_usage
 
 
 def main():
