@@ -1,0 +1,50 @@
+{
+  "type": "object",
+  "properties": {
+    "title": {
+      "type": "string",
+      "description": "Title of the address"
+    },
+    "speaker": {
+      "type": "string",
+      "description": "Name of the speaker"
+    },
+    "key_takeaways": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "The main points or lessons a listener should walk away with"
+    },
+    "speaker_emphasis": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Themes, phrases, or ideas the speaker returned to repeatedly or stressed as personally important to them"
+    },
+    "custom_criteria": {
+      "type": "object",
+      "properties": {
+        "criterion_name": {
+          "type": "string",
+          "description": "Name of the custom criterion being searched for"
+        },
+        "matches": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Each instance in the transcript that meets the criterion"
+        }
+      },
+      "required": ["criterion_name", "matches"],
+      "additionalProperties": false
+    },
+    "filename": {
+      "type": "string",
+      "description": "Target filename, e.g. DEVO_output.md"
+    },
+    "file_type": {
+      "type": "string",
+      "enum": ["txt", "py", "md"],
+      "description": "File extension (without the dot) the content should be saved as"
+    }
+  },
+  "required": ["title", "speaker", "key_takeaways", "speaker_emphasis", "custom_criteria", "filename", "file_type"],
+  "additionalProperties": false
+}

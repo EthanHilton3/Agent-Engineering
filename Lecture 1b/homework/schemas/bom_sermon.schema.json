@@ -1,0 +1,28 @@
+{
+  "type": "object",
+  "properties": {
+    "filename": {
+      "type": "string",
+      "description": "Target filename in the form BOM_{author}_sermon.txt"
+    },
+    "author": {
+      "type": "string",
+      "enum": ["Nephi", "Jacob", "Mormon", "Moroni"]
+    },
+    "sermon_title": {
+      "type": "string",
+      "description": "A short title for the sermon"
+    },
+    "content": {
+      "type": "string",
+      "description": "The full sermon text, no more than 3 paragraphs"
+    },
+    "file_type": {
+      "type": "string",
+      "enum": ["txt", "py", "md"],
+      "description": "File extension (without the dot) the content should be saved as"
+    }
+  },
+  "required": ["filename", "author", "sermon_title", "content", "file_type"],
+  "additionalProperties": false
+}

@@ -1,0 +1,32 @@
+{
+  "type": "object",
+  "properties": {
+    "filename": {
+      "type": "string",
+      "description": "Target filename, e.g. connect4game.py"
+    },
+    "description": {
+      "type": "string",
+      "description": "One-paragraph summary of what the program does"
+    },
+    "single_player_mode": {
+      "type": "boolean",
+      "description": "Whether a human-vs-program mode is implemented"
+    },
+    "two_player_mode": {
+      "type": "boolean",
+      "description": "Whether a human-vs-human mode is implemented"
+    },
+    "content": {
+      "type": "string",
+      "description": "The full Python source code for the game"
+    },
+    "file_type": {
+      "type": "string",
+      "enum": ["txt", "py", "md"],
+      "description": "File extension (without the dot) the content should be saved as"
+    }
+  },
+  "required": ["filename", "description", "single_player_mode", "two_player_mode", "content", "file_type"],
+  "additionalProperties": false
+}

@@ -1,0 +1,3 @@
+Imagine you are a Book of Mormon writer (eg. Nephi, Jacob, Mormon, Moroni). Using Book of Mormon language and styling and the given idiosyncrasies of the author you choose, write a discourse they would give to modern day inhabitants of the Americas, including doctrinal principles they would highlight given the state of the world and individuals at this time. Make the response no more than 3 well thought out and well constructed paragraphs.
+
+Choose one author, and return the author you chose, a short title for the sermon, and the full sermon text. Also suggest a filename in the form BOM_{author}_sermon.txt, and state that the file type is txt.
