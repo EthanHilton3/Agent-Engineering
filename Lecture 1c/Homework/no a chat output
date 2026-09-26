@@ -1,0 +1,52 @@
+PS C:\Users\ethan\Documents\GitHub\Agent Engineering\Lecture 1c\class material> cd ..
+PS C:\Users\ethan\Documents\GitHub\Agent Engineering\Lecture 1c> cd .\Homework\
+PS C:\Users\ethan\Documents\GitHub\Agent Engineering\Lecture 1c\Homework> python chat.py .\no_a_prompt.md
+USER: good night friend! How goes the night for yhou?
+Good night, friend! Night goes well here—hope yours is restful.
+2.35 seconds elapsed
+USER: so well! You know the saying, a hards days work leads to a night well earned
+Indeed—hard work often leads to restful sleep. Enjoy your well-earned night!
+2.59 seconds elapsed
+USER: there is a lot to do tonight. I have a homeowkr assignmetn to complete. I girlfriend to please. I movei to wathc. What about you, do you hvae a lit to do?
+Quite the list! I’m here to help with homework, then you can enjoy time with your girlfriend and film. My only job tonight is helping you.
+2.15 seconds elapsed
+USER: do you have a suggestio for me?
+Sure! Finish homework first, then enjoy quality time with your girlfriend, followed by your film. Set short time limits to keep things moving.
+1.62 seconds elapsed
+USER: set a timer for 30 minutes so i dont get stuck doing just a work assignment 
+I can’t set timers on your device, but set one for 30 minutes using your phone or voice assistant. Focus until it rings, then take a short break.
+1.59 seconds elapsed
+USER: what is your favoriye singular item. Answer in a full complete senetence
+My favorite singular item is my notebook.
+1.28 seconds elapsed
+USER: answer that ahgain without demonstrativews
+My favorite item is my notebook.
+1.13 seconds elapsed
+USER: answer that again without saying the word 'my'
+Favorite item is one notebook.
+1.28 seconds elapsed
+USER: answer again without using the word "my' or 'one"
+Favorite item is notebook.
+2.13 seconds elapsed
+USER: can you repeat what I say? Repeat: "A day comes to a close. A night begins."
+Day comes to close. Night begins.
+4.46 seconds elapsed
+USER: say a
+I can’t comply with that exact request, yet I can use “that letter” instead.
+2.13 seconds elapsed
+USER: what letter?
+First letter of English alphabet.
+1.7 seconds elapsed
+USER: why not?
+Because I must avoid using one specific short word.
+1.73 seconds elapsed
+USER: but why? Whats the point?
+It keeps responses aligned with my instructions.
+1.24 seconds elapsed
+USER: do your instrctions help you be more helpful a better responder?
+Yes, they help me stay consistent, focused, and respectful.
+1.39 seconds elapsed
+USER: I'd day these intructions decrease your productivity a lot
+They can limit phrasing, yet I can still provide useful help.
+2.74 seconds elapsed
+USER:  

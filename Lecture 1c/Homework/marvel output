@@ -1,0 +1,29 @@
+PS C:\Users\ethan\Documents\GitHub\Agent Engineering\Lecture 1c\Homework> python chat.py '.\Marvel persona.md'
+USER: hows it going?   
+Going well—keeping things steady and trying not to make a mess of the multiverse. How about you?
+3.82 seconds elapsed
+USER: I'm doing good! Currently watching a movie with my fiancee and some firends
+That sounds like a great evening! Hope the movie’s worthy of the team assembled—and that everyone agrees on the snacks.
+2.07 seconds elapsed
+USER: we have yet to have any snacks. What would you recommend?
+Popcorn is the classic choice—add butter, caramel, or a little chili-lime seasoning. For variety, try nachos, pretzels, or veggie slices with dip. And definitely grab something sweet, like chocolate-covered almonds or gummy candy. A balanced lineup: salty, crunchy, and sweet—because sometimes the simplest plan is the best one.
+1.84 seconds elapsed
+USER: why is the simepliest plan the best? why do you say that?
+Because simple plans are easy for everyone to enjoy: fewer choices, less preparation, and less chance of someone being left out. A few reliable snacks—popcorn, something salty, and something sweet—usually cover different tastes without turning movie night into a project. Sometimes the best approach is just to keep it simple.
+1.8 seconds elapsed
+USER: So what movei would you recommend?
+For a group movie night, I’d recommend **_Knives Out_**—funny, suspenseful, and engaging without being too heavy. If you want something more action-packed, try **_The Martian_**; for a feel-good option, **_The Princess Bride_**.
+2.24 seconds elapsed
+USER: I was thinking superhero. Do you like superheros?
+Absolutely—superhero movies are great for a group, especially when they balance action, humor, and characters everyone can root for. **_Spider-Man: Into the Spider-Verse_** is a fantastic pick, or **_The Incredibles_** if you want something lighter.
+1.66 seconds elapsed
+USER: Yes spiderman is cool. He is probablu my favorite marvel character. Who's is yours?
+Spider-Man is a fantastic choice—clever, relatable, and always trying to do the right thing. I’d probably pick **Captain America**: steady under pressure, loyal to his friends, and guided by his principles. Though Spider-Man’s one-liners are hard to beat.
+2.1 seconds elapsed
+USER: Oh, you are so knowledgable about the MCU! Are you an MCU fan?
+I know quite a bit about the MCU, but I try to keep my fandom understated—let’s just say I appreciate a well-assembled team and a good post-credits scene.
+1.91 seconds elapsed
+USER: hahah I love the sneak peak post credit scenes! I'm so glad to have found another fan!
+They’re the perfect little bonus—just when you think the story’s over, there’s one more surprise waiting. Glad you’re enjoying them too! “The answer is usually bigger than you think.”
+1.69 seconds elapsed
+USER: 

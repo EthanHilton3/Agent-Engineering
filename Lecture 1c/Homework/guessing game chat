@@ -1,0 +1,178 @@
+PS C:\Users\ethan\Documents\GitHub\Agent Engineering\Lecture 1c\class material> python chat.py .\guessing_game.md
+USER: 100
+lower
+2.61 seconds elapsed
+USER: 100
+lower
+1.36 seconds elapsed
+USER: 100
+lower
+1.17 seconds elapsed
+USER: 100
+lower
+1.0 seconds elapsed
+USER: 100
+lower
+1.28 seconds elapsed
+USER: 100
+lower
+1.2 seconds elapsed
+USER: 100
+lower
+1.08 seconds elapsed
+USER: 100
+lower
+1.22 seconds elapsed
+USER: 0
+higher
+1.3 seconds elapsed
+USER: 6
+higher
+1.12 seconds elapsed
+USER: 77
+lower
+1.18 seconds elapsed
+USER: 5
+higher
+1.53 seconds elapsed
+USER: 92
+lower
+1.35 seconds elapsed
+USER: 5
+higher
+1.35 seconds elapsed
+USER: 66
+lower
+1.24 seconds elapsed
+USER: 
+----------- Usage ------------
+~~~~~~~~~gpt-5.6-luna~~~~~~~~~
+Input (tokens): 2445
+Output (tokens): 75
+gpt-5.6-luna cost (USD): $0.000579
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Total cost (USD): $0.000579
+PS C:\Users\ethan\Documents\GitHub\Agent Engineering\Lecture 1c\class material> python chat.py .\guessing_game.md
+USER: 
+----------- Usage ------------
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Total cost (USD): $0.000000
+PS C:\Users\ethan\Documents\GitHub\Agent Engineering\Lecture 1c\class material> python chat.py .\guessing_game.md
+USER: 50
+higher
+3.08 seconds elapsed
+USER: 50
+higher
+1.0 seconds elapsed
+USER: 51
+higher
+0.98 seconds elapsed
+USER: 52
+higher
+1.19 seconds elapsed
+USER: 53
+higher
+1.06 seconds elapsed
+USER: 54
+higher
+2.62 seconds elapsed
+USER: 58
+higher
+1.04 seconds elapsed
+USER: 60
+higher
+2.66 seconds elapsed
+USER: 63
+higher
+1.27 seconds elapsed
+USER: 70
+higher
+1.09 seconds elapsed
+USER: 80
+lower
+1.23 seconds elapsed
+USER: 7
+higher
+0.97 seconds elapsed
+USER: 8
+higher
+0.99 seconds elapsed
+USER: 9
+higher
+1.07 seconds elapsed
+USER: 11
+higher
+1.0 seconds elapsed
+USER: 45
+higher
+1.86 seconds elapsed
+USER: 6
+higher
+1.01 seconds elapsed
+USER: 55
+higher
+1.4 seconds elapsed
+USER: 75
+higher
+1.81 seconds elapsed
+USER: 80
+lower
+1.33 seconds elapsed
+USER: 86
+lower
+1.11 seconds elapsed
+USER: 77
+lower
+1.06 seconds elapsed
+USER: 75
+higher
+0.98 seconds elapsed
+USER: 77
+lower
+1.56 seconds elapsed
+USER: 75
+higher
+1.66 seconds elapsed
+USER: 80
+lower
+1.29 seconds elapsed
+USER: 100
+lower
+1.01 seconds elapsed
+USER: 99
+lower
+1.12 seconds elapsed
+USER: 98
+lower
+1.49 seconds elapsed
+USER: 97
+lower
+1.04 seconds elapsed
+USER: 96
+lower
+1.09 seconds elapsed
+USER: 82
+lower
+1.69 seconds elapsed
+USER: 76
+lower
+1.32 seconds elapsed
+USER: 75
+higher
+1.18 seconds elapsed
+USER: 76
+lower
+1.75 seconds elapsed
+USER: 75
+higher
+1.32 seconds elapsed
+USER: 75.5
+Please guess a whole number between 1 and 100.
+1.28 seconds elapsed
+USER: 76
+lower
+1.49 seconds elapsed
+USER: 75
+higher
+1.18 seconds elapsed
+USER: 
