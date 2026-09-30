@@ -1,0 +1,18 @@
+{
+  "type": "object",
+  "properties": {
+    "answer": {
+      "type": "string",
+      "description": "The final answer to the question."
+    },
+    "reasoning": {
+      "type": "string",
+      "description": "Step-by-step reasoning used to work out the answer."
+    }
+  },
+  "required": [
+    "answer",
+    "reasoning"
+  ],
+  "additionalProperties": false
+}
