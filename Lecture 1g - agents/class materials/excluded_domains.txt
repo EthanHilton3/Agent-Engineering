@@ -1,0 +1,5 @@
+# Domains to exclude from the news search.
+# Add one domain per line. Blank lines and comments are ignored.
+reddit.com
+quora.com
+wikipedia.org
