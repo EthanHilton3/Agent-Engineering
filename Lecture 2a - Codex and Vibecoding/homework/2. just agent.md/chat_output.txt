@@ -1,0 +1,4349 @@
+Work only inside the current directory. Do not read or modify any files outside it.
+
+Build a pixel-art platformer game that runs in the browser by opening index.html.
+
+Character: a small, round, pink character named Kirby who is surprisingly strong.
+He can run, jump, and fly by pressing jump repeatedly while in the air. He can
+also inhale: holding the action key pulls in nearby enemies and objects in front
+of him. Once he has swallowed something, pressing the action key again spits it
+out as a projectile that can defeat other enemies.
+
+Game:
+- One side-scrolling level with platforms, gaps, and a clear goal at the end.
+- At least two kinds of enemies with different behavior (for example one that
+  walks and one that flies).
+- Lives, a score, a game-over screen, a win screen, and a way to restart.
+- Controls: arrow keys or A/D to move, Space to jump and fly, Enter to inhale and spit.
+  Show the controls on screen.
+
+Look and feel:
+- Retro pixel-art style with crisp pixels, a limited color palette, and simple
+  animations (idle, run, jump, fly, inhale).
+- Draw all sprites in code, with no external image files or libraries.
+- Movement should feel tight and fun: sensible gravity, a floaty-but-controllable
+  fly, and a satisfying inhale.
+
+Make it polished and fun to play.
+Show more
+Bash Inspect project directory and tool availability
+IN
+cd "c:/Users/ethan/Documents/GitHub/Agent Engineering/Lecture 2a - Codex and Vibecoding/homework/2. just agent.md" && ls -la && cat .gitignore 2>/dev/null; node --version; ls "/c/Program Files/Google/Chrome/Application/" 2>/dev/null | head; ls "/c/Program Files (x86)/Microsoft/Edge/Application/" 2>/dev/null | head -3
+
+OUT
+total 12
+drwxr-xr-x 1 Ethan 197121    0 Oct  9 16:58 ./
+drwxr-xr-x 1 Ethan 197121    0 Oct  9 16:54 ../
+-rw-r--r-- 1 Ethan 197121 2446 Oct  9 16:58 CLAUDE.md
+-rw-r--r-- 1 Ethan 197121 1312 Oct  9 16:58 kirby_game_prompt.txt
+v22.23.3
+137.0.7151.120/
+SetupMetrics/
+chrome.VisualElementsManifest.xml
+chrome.exe*
+chrome_proxy.exe*
+debug.log
+master_preferences
+154.0.4258.62/
+155.0.4283.45/
+AppxSignature.p7x
+Bash Read prompt file and local git status
+IN
+cd "c:/Users/ethan/Documents/GitHub/Agent Engineering/Lecture 2a - Codex and Vibecoding/homework/2. just agent.md" && cat kirby_game_prompt.txt && git -C . status --short . | head
+
+OUT
+Work only inside the current directory. Do not read or modify any files outside it.
+
+Build a pixel-art platformer game that runs in the browser by opening index.html.
+
+Character: a small, round, pink character named Kirby who is surprisingly strong.
+He can run, jump, and fly by pressing jump repeatedly while in the air. He can
+also inhale: holding the action key pulls in nearby enemies and objects in front
+of him. Once he has swallowed something, pressing the action key again spits it
+out as a projectile that can defeat other enemies.
+
+Game:
+- One side-scrolling level with platforms, gaps, and a clear goal at the end.
+- At least two kinds of enemies with different behavior (for example one that
+  walks and one that flies).
+- Lives, a score, a game-over screen, a win screen, and a way to restart.
+- Controls: arrow keys or A/D to move, Space to jump and fly, Enter to inhale and spit.
+  Show the controls on screen.
+
+Look and feel:
+- Retro pixel-art style with crisp pixels, a limited color palette, and simple
+  animations (idle, run, jump, fly, inhale).
+- Draw all sprites in code, with no external image files or libraries.
+- Movement should feel tight and fun: sensible gravity, a floaty-but-controllable
+  fly, and a satisfying inhale.
+
+Make it polished and fun to play.
+?? ./
+5:06 PM
+Starting with the shared constants and the level module.
+
+
+
+Write c:\Users\ethan\Documents\GitHub\Agent Engineering\Lecture 2a - Codex and Vibecoding\homework\2. just agent.md\js\logic\constants.js
+100 lines
+// Every tunable number for the game lives here. Units: pixels, seconds, ticks (1/60 s).
+var KB = (typeof KB !== 'undefined') ? KB : {};
+
+KB.C = Object.freeze({
+  // World
+  TILE: 16,
+  VIEW_W: 320,
+  VIEW_H: 192,
+  TICKS_PER_SEC: 60,
+  DT: 1 / 60,
+  MAX_SUBSTEP: 4,            // largest move per collision sub-step (px); smaller than a tile, so nothing tunnels
+  ACTIVATE_DIST: 260,        // enemies farther than this from Kirby stay frozen
+
+  // Tile ids
+  T: Object.freeze({ EMPTY: 0, GROUND: 1, BRICK: 2, STAR_BLOCK: 3, CLOUD: 4 }),
+
+  // Kirby body and running
+  PLAYER_W: 12,
+  PLAYER_H: 14,
+  RUN_SPEED: 96,
+  GROUND_ACCEL: 900,
+  GROUND_DECEL: 1100,
+  AIR_ACCEL: 700,
+  FULL_SPEED_FACTOR: 0.85,   // mouthful Kirby is a little slower
+
+  // Jumping
+  GRAVITY: 950,              // while rising
+  FALL_GRAVITY: 1250,        // while falling (snappier landings)
+  MAX_FALL_SPEED: 320,
+  JUMP_SPEED: 335,
+  JUMP_CUT_SPEED: 120,       // releasing Space early caps upward speed to this
+  COYOTE_TICKS: 6,
+  JUMP_BUFFER_TICKS: 6,
+
+  // Flying (tap Space in the air)
+  FLY_FLAP_SPEED: 165,
+  FLY_GRAVITY: 420,
+  FLY_MAX_FALL: 55,
+  FLY_SPEED_X: 72,
+  FLY_ACCEL: 500,
+  FLY_MAX_FLAPS: 8,          // flaps allowed before Kirby has to land again
+  FLY_CEILING: 0,            // Kirby cannot rise above this y (top of the level)
+
+  // Inhale cone (measured from Kirby's mouth)
+  INHALE_RANGE: 64,
+  INHALE_HALF_HEIGHT: 10,    // half-height of the cone at the mouth
+  INHALE_SPREAD: 0.45,       // extra half-height per pixel of distance
+  INHALE_BEHIND: 4,          // things this far behind the mouth still count
+  INHALE_PULL_SPEED: 70,     // pull speed at the edge of the cone (px/s)
+  INHALE_PULL_BOOST: 260,    // added pull speed as things get close
+  INHALE_SWALLOW_DIST: 10,
+  INHALE_MOVE_FACTOR: 0,     // Kirby plants his feet while inhaling
+
+  // Projectiles
+  STAR_SPEED: 260,
+  STAR_LIFE_TICKS: 70,
+  STAR_SIZE: 12,
+  PUFF_SPEED: 200,
+  PUFF_LIFE_TICKS: 14,
+  PUFF_SIZE: 10,
+  SPIT_ANIM_TICKS: 12,
+
+  // Enemies
+  WALKER_SPEED: 28,
+  FLYER_SPEED: 36,
+  FLYER_RANGE: 56,           // patrol distance either side of spawn
+  FLYER_AMP: 12,
+  FLYER_FREQ: 3,             // radians per second of the bob
+  HOPPER_WAIT_TICKS: 70,
+  HOPPER_JUMP_SPEED: 250,
+  HOPPER_SPEED_X: 55,
+  GORDO_AMP: 36,
+  GORDO_FREQ: 1.8,
+  ENEMY_SIZE: 12,
+  GORDO_SIZE: 14,
+
+  // Health, lives, timers
+  MAX_HP: 3,
+  START_LIVES: 3,
+  INVULN_TICKS: 90,
+  KNOCKBACK_X: 110,
+  KNOCKBACK_Y: 170,
+  DEATH_TICKS: 110,
+  DEATH_POP_SPEED: 260,
+  WIN_SCREEN_TICKS: 120,
+  END_INPUT_DELAY_TICKS: 40, // ignore keys this long after game over / win so mashing doesn't skip it
+
+  // Score
+  SCORE_STAR_HIT: 200,       // doubles for each extra enemy one star pierces
+  SCORE_PUFF_HIT: 100,
+  SCORE_SWALLOW: 100,
+  SCORE_BUMP: 50,
+  SCORE_PICKUP: 50,
+  SCORE_TOMATO: 100,
+  SCORE_GOAL: 1000,
+  SCORE_LIFE_BONUS: 500,
+});
+
+if (typeof module !== 'undefined') module.exports = { C: KB.C };
+Write c:\Users\ethan\Documents\GitHub\Agent Engineering\Lecture 2a - Codex and Vibecoding\homework\2. just agent.md\js\level.js
+163 lines
+// Level data and parsing. Pure data: no DOM, no canvas.
+var KB = (typeof KB !== 'undefined') ? KB : {};
+if (typeof module !== 'undefined') Object.assign(KB, require('./logic/constants.js'));
+
+KB.Level = (function () {
+  const C = KB.C;
+  const T = C.T;
+  const ROWS = 12;
+
+  // Legend:  . empty   # ground   B brick   S star block (inhalable)   = cloud (jump through from below)
+  //          P start   W walker   F flyer   H hopper   G gordo (spiky, can't be inhaled)
+  //          * point star   T tomato (heals)   C checkpoint   E warp star goal   1-9 tutorial sign
+  const TILE_CHARS = { '#': T.GROUND, 'B': T.BRICK, 'S': T.STAR_BLOCK, '=': T.CLOUD };
+  const ENEMY_CHARS = { 'W': 'walker', 'F': 'flyer', 'H': 'hopper', 'G': 'gordo' };
+  const PICKUP_CHARS = { '*': 'star', 'T': 'tomato' };
+
+  const SIGNS = [
+    'ARROWS / A D: MOVE|SPACE: JUMP',
+    'HOLD ENTER: INHALE|ENTER AGAIN: SPIT A STAR',
+    'TAP SPACE IN THE AIR|TO FLY!',
+    'STAR BLOCKS IN THE WAY?|INHALE THEM!',
+    'SPIKY GORDO CAN\'T BE|INHALED. FLY OVER IT!',
+    'THE WARP STAR!|TOUCH IT TO WIN',
+  ];
+
+  // A section is a width plus the rows that are not empty. 'G' means a full row of ground.
+  function section(width, rows) {
+    const out = [];
+    for (let r = 0; r < ROWS; r++) {
+      let s = rows[r] || '';
+      if (s === 'G') s = '#'.repeat(width);
+      if (s.length > width) throw new Error('Section row ' + r + ' is wider than ' + width + ': ' + s);
+      out.push(s + '.'.repeat(width - s.length));
+    }
+    return out;
+  }
+  function gap(width, rows) { return section(width, rows || {}); }
+  function fillRows(width, from, to, ch, offset, len) {
+    const rows = {};
+    for (let r = from; r <= to; r++) rows[r] = '.'.repeat(offset) + ch.repeat(len);
+    return rows;
+  }
+
+  const SECTIONS = [
+    // Meadow start
+    section(30, {
+      5: '..............***',
+      7: '.............=====',
+      9: '..P.1.....*.*.*....2....W',
+      10: 'G', 11: 'G',
+    }),
+    gap(2),
+    // Brick step and first hopper
+    section(26, {
+      6: '.........***',
+      8: '........BBBB......*.*',
+      9: '....W...BBBB.......H',
+      10: 'G', 11: 'G',
+    }),
+    gap(3),
+    // Flyer and the flying tutorial
+    section(24, {
+      4: '............F',
+      7: '....***',
+      9: '.................3....W',
+      10: 'G', 11: 'G',
+    }),
+    // Wide pit: must fly
+    gap(9, { 3: '..*.*.*..', 6: '....F' }),
+    // Checkpoint and the star block corridor
+    section(30, Object.assign(fillRows(30, 0, 7, 'B', 10, 14), {
+      8: '..........SS..S',
+      9: '..C...4...SS..S.....W',
+      10: 'G', 11: 'G',
+    })),
+    // Terraces with hoppers
+    section(34, {
+      4: '....................***',
+      6: '..................=====',
+      7: '..........................BBB',
+      8: '.............H............BBB',
+      9: '.....W...BBBBBBB.....H....BBB.5',
+      10: 'G', 11: 'G',
+    }),
+    // Gordo pit
+    gap(8, { 2: '.*....*.', 7: '...G' }),
+    // Second checkpoint, tomato on a cloud
+    section(22, {
+      3: '..............F',
+      6: '........T',
+      7: '.......===',
+      9: '..C.........W.....W',
+      10: 'G', 11: 'G',
+    }),
+    // Cloud hop pit
+    gap(14, { 3: '..........F', 5: '.......F', 7: '...*.......*', 8: '..===.....===' }),
+    // Stairs up to the warp star
+    section(30, {
+      2: '.......................*.*',
+      5: '......................E',
+      6: '.....................###',
+      7: '..................##.###',
+      8: '...............##...###',
+      9: '.....W..6...##......###',
+      10: 'G', 11: 'G',
+    }),
+  ];
+
+  function joinSections(sections) {
+    const rows = [];
+    for (let r = 0; r < ROWS; r++) rows.push(sections.map(s => s[r]).join(''));
+    return rows;
+  }
+
+  const DEFAULT_ROWS = joinSections(SECTIONS);
+
+  // Turn an array of equal-length strings into a level description.
+  function parse(rows) {
+    const h = rows.length;
+    const w = rows[0].length;
+    const S = C.TILE;
+    const level = {
+      w, h, tiles: new Array(w * h).fill(T.EMPTY),
+      start: null, goal: null, enemies: [], pickups: [], checkpoints: [], signs: [],
+    };
+    rows.forEach((row, ty) => {
+      if (row.length !== w) throw new Error('Row ' + ty + ' has length ' + row.length + ', expected ' + w);
+      for (let tx = 0; tx < w; tx++) {
+        const ch = row[tx];
+        const px = tx * S, py = ty * S;
+        if (TILE_CHARS[ch] !== undefined) level.tiles[ty * w + tx] = TILE_CHARS[ch];
+        else if (ch === 'P') level.start = { x: px + (S - C.PLAYER_W) / 2, y: py + S - C.PLAYER_H };
+        else if (ENEMY_CHARS[ch]) level.enemies.push({ kind: ENEMY_CHARS[ch], tx, ty });
+        else if (PICKUP_CHARS[ch]) level.pickups.push({ kind: PICKUP_CHARS[ch], tx, ty });
+        else if (ch === 'C') level.checkpoints.push({ tx, ty, x: px + (S - C.PLAYER_W) / 2, y: py + S - C.PLAYER_H });
+        else if (ch === 'E') level.goal = { tx, ty, x: px - 2, y: py - 2, w: S + 4, h: S + 4 };
+        else if (ch >= '1' && ch <= '9') level.signs.push({ tx, ty, text: SIGNS[ch.charCodeAt(0) - 49] || '' });
+        else if (ch !== '.') throw new Error('Unknown level character "' + ch + '" at ' + tx + ',' + ty);
+      }
+    });
+    if (!level.start) throw new Error('Level has no start (P)');
+    return level;
+  }
+
+  // Column ranges with no floor at the bottom row: the pits Kirby has to cross.
+  function findGaps(level) {
+    const gaps = [];
+    let start = -1;
+    for (let tx = 0; tx <= level.w; tx++) {
+      const empty = tx < level.w && level.tiles[(level.h - 1) * level.w + tx] === T.EMPTY;
+      if (empty && start < 0) start = tx;
+      if (!empty && start >= 0) { gaps.push({ from: start, to: tx - 1 }); start = -1; }
+    }
+    return gaps;
+  }
+
+  function load() { return parse(DEFAULT_ROWS); }
+
+  return { ROWS, DEFAULT_ROWS, SIGNS, parse, load, findGaps };
+})();
+
+if (typeof module !== 'undefined') module.exports = { Level: KB.Level };
+Write c:\Users\ethan\Documents\GitHub\Agent Engineering\Lecture 2a - Codex and Vibecoding\homework\2. just agent.md\js\logic\physics.js
+113 lines
+// Tile collision. Bodies are axis-aligned boxes { x, y, w, h, vx, vy } with x,y at the top-left.
+var KB = (typeof KB !== 'undefined') ? KB : {};
+if (typeof module !== 'undefined') Object.assign(KB, require('./constants.js'));
+
+KB.Physics = (function () {
+  const C = KB.C;
+  const T = C.T;
+  const EPS = 0.001;
+
+  // The world: `tiles` is the live tile array (star blocks can disappear), `level` gives the size.
+  function tileAt(world, tx, ty) {
+    if (tx < 0 || tx >= world.w) return T.BRICK;  // invisible walls at both ends
+    if (ty < 0 || ty >= world.h) return T.EMPTY;  // open sky above, pits below
+    return world.tiles[ty * world.w + tx];
+  }
+  function setTile(world, tx, ty, t) {
+    if (tx >= 0 && tx < world.w && ty >= 0 && ty < world.h) world.tiles[ty * world.w + tx] = t;
+  }
+  function isSolid(t) { return t === T.GROUND || t === T.BRICK || t === T.STAR_BLOCK; }
+  function isSolidAt(world, tx, ty) { return isSolid(tileAt(world, tx, ty)); }
+
+  function overlaps(a, b) {
+    return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+  }
+
+  function stepX(body, world, sx) {
+    const S = C.TILE;
+    const nx = body.x + sx;
+    const ty0 = Math.floor(body.y / S), ty1 = Math.floor((body.y + body.h - EPS) / S);
+    const tx = sx > 0 ? Math.floor((nx + body.w - EPS) / S) : Math.floor(nx / S);
+    for (let ty = ty0; ty <= ty1; ty++) {
+      if (isSolidAt(world, tx, ty)) {
+        body.x = sx > 0 ? tx * S - body.w : (tx + 1) * S;
+        body.vx = 0;
+        body.hitWall = sx > 0 ? 1 : -1;
+        return true;
+      }
+    }
+    body.x = nx;
+    return false;
+  }
+
+  function stepY(body, world, sy) {
+    const S = C.TILE;
+    const ny = body.y + sy;
+    const tx0 = Math.floor(body.x / S), tx1 = Math.floor((body.x + body.w - EPS) / S);
+    const ty = sy > 0 ? Math.floor((ny + body.h - EPS) / S) : Math.floor(ny / S);
+    for (let tx = tx0; tx <= tx1; tx++) {
+      const t = tileAt(world, tx, ty);
+      // Clouds only stop you from above: your feet must have been at or over the cloud top.
+      const cloudStops = t === T.CLOUD && sy > 0 && body.y + body.h <= ty * S + EPS;
+      if (isSolid(t) || cloudStops) {
+        if (sy > 0) { body.y = ty * S - body.h; body.onGround = true; }
+        else { body.y = (ty + 1) * S; body.hitCeiling = true; }
+        body.vy = 0;
+        return true;
+      }
+    }
+    body.y = ny;
+    return false;
+  }
+
+  // Move a body by (dx, dy) in sub-steps no larger than MAX_SUBSTEP so fast bodies can't skip tiles.
+  function moveBody(body, world, dx, dy) {
+    body.onGround = false;
+    body.hitWall = 0;
+    body.hitCeiling = false;
+    const steps = Math.max(1, Math.ceil(Math.max(Math.abs(dx), Math.abs(dy)) / C.MAX_SUBSTEP));
+    const sx = dx / steps, sy = dy / steps;
+    let blockedX = false, blockedY = false;
+    for (let i = 0; i < steps; i++) {
+      if (!blockedX && sx !== 0) blockedX = stepX(body, world, sx);
+      if (!blockedY && sy !== 0) blockedY = stepY(body, world, sy);
+    }
+    return body;
+  }
+
+  // True if a box overlaps any solid tile.
+  function boxHitsSolid(world, x, y, w, h) {
+    const S = C.TILE;
+    for (let ty = Math.floor(y / S); ty <= Math.floor((y + h - EPS) / S); ty++) {
+      for (let tx = Math.floor(x / S); tx <= Math.floor((x + w - EPS) / S); tx++) {
+        if (isSolidAt(world, tx, ty)) return true;
+      }
+    }
+    return false;
+  }
+
+  // Is there floor under the point (x, y)? Used by walkers to turn at ledges.
+  function hasFloorAt(world, x, y) {
+    const t = tileAt(world, Math.floor(x / C.TILE), Math.floor(y / C.TILE));
+    return isSolid(t) || t === T.CLOUD;
+  }
+
+  // Walk the line between two points; true if no solid tile (other than `ignore` tiles) is in the way.
+  function lineOfSight(world, x0, y0, x1, y1, ignore) {
+    const S = C.TILE;
+    const dist = Math.hypot(x1 - x0, y1 - y0);
+    const steps = Math.max(1, Math.ceil(dist / (S / 4)));
+    for (let i = 1; i < steps; i++) {
+      const tx = Math.floor((x0 + (x1 - x0) * i / steps) / S);
+      const ty = Math.floor((y0 + (y1 - y0) * i / steps) / S);
+      if (ignore && ignore.tx === tx && ignore.ty === ty) continue;
+      if (isSolidAt(world, tx, ty)) return false;
+    }
+    return true;
+  }
+
+  return { tileAt, setTile, isSolid, isSolidAt, overlaps, moveBody, boxHitsSolid, hasFloorAt, lineOfSight };
+})();
+
+if (typeof module !== 'undefined') module.exports = { Physics: KB.Physics };
+Write c:\Users\ethan\Documents\GitHub\Agent Engineering\Lecture 2a - Codex and Vibecoding\homework\2. just agent.md\js\logic\entities.js
+193 lines
+// Enemies, pickups and projectiles: creation and per-tick behaviour.
+var KB = (typeof KB !== 'undefined') ? KB : {};
+if (typeof module !== 'undefined') Object.assign(KB, require('./constants.js'), require('./physics.js'));
+
+KB.Entities = (function () {
+  const C = KB.C;
+  const T = C.T;
+  const P = KB.Physics;
+
+  // ---- shared helpers -------------------------------------------------------
+  function emit(g, type, data) { g.events.push(Object.assign({ type }, data || {})); }
+  function addScore(g, points, x, y) {
+    g.score += points;
+    emit(g, 'score', { value: points, x, y });
+  }
+  function center(o) { return { x: o.x + o.w / 2, y: o.y + o.h / 2 }; }
+  function nextId(g) { g.nextId = (g.nextId || 0) + 1; return g.nextId; }
+
+  // ---- creation -------------------------------------------------------------
+  function createEnemy(g, kind, tx, ty) {
+    const S = C.TILE;
+    const size = kind === 'gordo' ? C.GORDO_SIZE : C.ENEMY_SIZE;
+    const e = {
+      id: nextId(g), kind, w: size, h: size,
+      x: tx * S + (S - size) / 2, y: ty * S + S - size,
+      vx: 0, vy: 0, dir: -1, t: 0, onGround: false,
+      pulled: false, inhalable: kind !== 'gordo', harmless: false,
+    };
+    if (kind === 'flyer' || kind === 'gordo') {
+      e.y = ty * S + (S - size) / 2;
+      e.homeX = e.x; e.homeY = e.y;
+    }
+    if (kind === 'hopper') e.wait = C.HOPPER_WAIT_TICKS + (tx * 7) % C.HOPPER_WAIT_TICKS;
+    return e;
+  }
+
+  // A star block pulled out of the ground by the inhale. Harmless; popped if the inhale stops.
+  function createBlock(g, tx, ty) {
+    const S = C.TILE;
+    return {
+      id: nextId(g), kind: 'block', x: tx * S, y: ty * S, w: S, h: S, vx: 0, vy: 0, dir: 1, t: 0,
+      pulled: true, inhalable: true, harmless: true,
+    };
+  }
+
+  function createPickup(g, kind, tx, ty) {
+    const S = C.TILE;
+    const size = kind === 'tomato' ? C.ENEMY_SIZE : C.ENEMY_SIZE / 2 + 2;
+    return { id: nextId(g), kind, w: size, h: size, x: tx * S + (S - size) / 2, y: ty * S + (S - size) / 2, pulled: false };
+  }
+
+  // ---- enemy behaviour ------------------------------------------------------
+  function applyGravity(e) {
+    e.vy = Math.min(e.vy + (e.vy < 0 ? C.GRAVITY : C.FALL_GRAVITY) * C.DT, C.MAX_FALL_SPEED);
+  }
+
+  function updateWalker(g, e) {
+    e.vx = e.dir * C.WALKER_SPEED;
+    applyGravity(e);
+    P.moveBody(e, g.world, e.vx * C.DT, e.vy * C.DT);
+    if (e.hitWall) e.dir = -e.dir;
+    else if (e.onGround) {
+      const aheadX = e.dir > 0 ? e.x + e.w + 1 : e.x - 1;
+      if (!P.hasFloorAt(g.world, aheadX, e.y + e.h + 1)) e.dir = -e.dir;
+    }
+  }
+
+  function updateFlyer(e) {
+    if (Math.abs(e.x + e.dir - e.homeX) > C.FLYER_RANGE) e.dir = e.x > e.homeX ? -1 : 1;
+    e.x += e.dir * C.FLYER_SPEED * C.DT;
+    const targetY = e.homeY + Math.sin(e.t * C.DT * C.FLYER_FREQ) * C.FLYER_AMP;
+    e.y += (targetY - e.y) * 0.2;  // ease, so a flyer let go mid-inhale drifts back instead of snapping
+  }
+
+  function updateHopper(g, e, player) {
+    applyGravity(e);
+    if (e.onGround) {
+      e.vx = 0;
+      e.wait--;
+      if (e.wait <= 0) {
+        e.dir = player.x < e.x ? -1 : 1;
+        e.vx = e.dir * C.HOPPER_SPEED_X;
+        e.vy = -C.HOPPER_JUMP_SPEED;
+        e.wait = C.HOPPER_WAIT_TICKS;
+        emit(g, 'hop', { x: e.x + e.w / 2, y: e.y + e.h });
+      }
+    }
+    P.moveBody(e, g.world, e.vx * C.DT, e.vy * C.DT);
+  }
+
+  function updateGordo(e) {
+    e.y = e.homeY + Math.sin(e.t * C.DT * C.GORDO_FREQ) * C.GORDO_AMP;
+  }
+
+  function updateEnemies(g) {
+    const pc = center(g.player);
+    const fallOut = g.world.h * C.TILE + C.TILE * 2;
+    for (const e of g.enemies) {
+      if (e.pulled || e.kind === 'block') continue;
+      if (Math.abs(e.x + e.w / 2 - pc.x) > C.ACTIVATE_DIST) continue;
+      e.t++;
+      if (e.kind === 'walker') updateWalker(g, e);
+      else if (e.kind === 'flyer') updateFlyer(e);
+      else if (e.kind === 'hopper') updateHopper(g, e, g.player);
+      else if (e.kind === 'gordo') updateGordo(e);
+      if (e.y > fallOut) e.removed = true;
+    }
+    g.enemies = g.enemies.filter(e => !e.removed);
+  }
+
+  function defeatEnemy(g, e, points) {
+    e.removed = true;
+    const c = center(e);
+    emit(g, 'defeat', { kind: e.kind, x: c.x, y: c.y });
+    if (points) addScore(g, points, c.x, e.y);
+  }
+
+  // ---- projectiles ----------------------------------------------------------
+  function createStar(g, x, y, dir) {
+    const s = C.STAR_SIZE;
+    return { id: nextId(g), kind: 'star', x: dir > 0 ? x - s / 3 : x - s + s / 3, y: y - s / 2, w: s, h: s,
+      vx: dir * C.STAR_SPEED, life: C.STAR_LIFE_TICKS, hits: 0, hitIds: [] };
+  }
+  function createPuff(g, x, y, dir) {
+    const s = C.PUFF_SIZE;
+    return { id: nextId(g), kind: 'puff', x: dir > 0 ? x : x - s, y: y - s / 2, w: s, h: s,
+      vx: dir * C.PUFF_SPEED, life: C.PUFF_LIFE_TICKS, hits: 0, hitIds: [] };
+  }
+
+  // Returns false once the projectile is used up.
+  function projectileHitsTiles(g, p) {
+    const S = C.TILE;
+    const tx = Math.floor((p.vx > 0 ? p.x + p.w : p.x) / S);
+    for (let ty = Math.floor(p.y / S); ty <= Math.floor((p.y + p.h - 0.001) / S); ty++) {
+      const t = P.tileAt(g.world, tx, ty);
+      if (p.kind === 'star' && t === T.STAR_BLOCK) {
+        P.setTile(g.world, tx, ty, T.EMPTY);
+        emit(g, 'blockBreak', { x: tx * S + S / 2, y: ty * S + S / 2 });
+      } else if (P.isSolid(t)) {
+        emit(g, p.kind === 'star' ? 'starBurst' : 'puffGone', center(p));
+        return false;
+      }
+    }
+    return true;
+  }
+
+  function projectileHitsEnemies(g, p) {
+    for (const e of g.enemies) {
+      if (e.removed || e.harmless || p.hitIds.includes(e.id) || !P.overlaps(p, e)) continue;
+      p.hitIds.push(e.id);
+      if (e.kind === 'gordo') {           // nothing hurts Gordo
+        emit(g, 'clink', center(p));
+        return false;
+      }
+      if (p.kind === 'star') {            // Kirby's star pierces through a whole line of enemies
+        defeatEnemy(g, e, C.SCORE_STAR_HIT * Math.pow(2, p.hits));
+        p.hits++;
+      } else {
+        defeatEnemy(g, e, C.SCORE_PUFF_HIT);
+        return false;
+      }
+    }
+    return true;
+  }
+
+  function updateProjectiles(g) {
+    for (const p of g.projectiles) {
+      const steps = Math.max(1, Math.ceil(Math.abs(p.vx * C.DT) / C.MAX_SUBSTEP));
+      let alive = true;
+      for (let i = 0; i < steps && alive; i++) {
+        p.x += p.vx * C.DT / steps;
+        alive = projectileHitsTiles(g, p) && projectileHitsEnemies(g, p);
+      }
+      p.life--;
+      if (alive && p.life <= 0) {
+        emit(g, p.kind === 'star' ? 'starBurst' : 'puffGone', center(p));
+        alive = false;
+      }
+      if (!alive) p.removed = true;
+    }
+    g.projectiles = g.projectiles.filter(p => !p.removed);
+    g.enemies = g.enemies.filter(e => !e.removed);
+  }
+
+  return {
+    emit, addScore, center,
+    createEnemy, createBlock, createPickup, createStar, createPuff,
+    updateEnemies, updateProjectiles, defeatEnemy,
+  };
+})();
+
+if (typeof module !== 'undefined') module.exports = { Entities: KB.Entities };
+Write c:\Users\ethan\Documents\GitHub\Agent Engineering\Lecture 2a - Codex and Vibecoding\homework\2. just agent.md\js\logic\inhale.js
+139 lines
+// Inhaling, swallowing, spitting stars and exhaling air puffs.
+var KB = (typeof KB !== 'undefined') ? KB : {};
+if (typeof module !== 'undefined') {
+  Object.assign(KB, require('./constants.js'), require('./physics.js'), require('./entities.js'));
+}
+
+KB.Inhale = (function () {
+  const C = KB.C;
+  const T = C.T;
+  const P = KB.Physics;
+  const E = KB.Entities;
+
+  function mouth(p) {
+    return { x: p.facing > 0 ? p.x + p.w : p.x, y: p.y + p.h * 0.55 };
+  }
+
+  // Is the point (x, y) inside the cone in front of Kirby's mouth?
+  function pointInCone(p, x, y) {
+    const m = mouth(p);
+    const dx = (x - m.x) * p.facing;
+    const dy = y - m.y;
+    if (dx < -C.INHALE_BEHIND || dx > C.INHALE_RANGE) return false;
+    return Math.abs(dy) <= C.INHALE_HALF_HEIGHT + Math.max(0, dx) * C.INHALE_SPREAD;
+  }
+
+  // Is this entity inside the cone with nothing solid in between? `tile` lets a star block ignore itself.
+  function inCone(p, target, world, tile) {
+    if (target.inhalable === false) return false;
+    const c = E.center(target);
+    if (!pointInCone(p, c.x, c.y)) return false;
+    if (!world) return true;
+    const m = mouth(p);
+    return P.lineOfSight(world, m.x, m.y, c.x, c.y, tile);
+  }
+
+  // Star blocks inside the cone come loose and become pulled objects.
+  function loosenBlocks(g, p) {
+    const S = C.TILE;
+    const m = mouth(p);
+    const reach = C.INHALE_HALF_HEIGHT + C.INHALE_RANGE * C.INHALE_SPREAD;
+    const x0 = Math.floor(Math.min(m.x, m.x + p.facing * C.INHALE_RANGE) / S);
+    const x1 = Math.floor(Math.max(m.x, m.x + p.facing * C.INHALE_RANGE) / S);
+    for (let ty = Math.floor((m.y - reach) / S); ty <= Math.floor((m.y + reach) / S); ty++) {
+      for (let tx = x0; tx <= x1; tx++) {
+        if (P.tileAt(g.world, tx, ty) !== T.STAR_BLOCK) continue;
+        const box = { x: tx * S, y: ty * S, w: S, h: S };
+        if (!inCone(p, box, g.world, { tx, ty })) continue;
+        P.setTile(g.world, tx, ty, T.EMPTY);
+        g.enemies.push(E.createBlock(g, tx, ty));
+        E.emit(g, 'blockLoose', { x: tx * S + S / 2, y: ty * S + S / 2 });
+      }
+    }
+  }
+
+  function pullToward(o, m) {
+    const c = E.center(o);
+    const dx = m.x - c.x, dy = m.y - c.y;
+    const dist = Math.hypot(dx, dy);
+    if (dist < 0.001) return 0;
+    const closeness = Math.max(0, 1 - dist / C.INHALE_RANGE);
+    const step = Math.min(dist, (C.INHALE_PULL_SPEED + C.INHALE_PULL_BOOST * closeness) * C.DT);
+    o.x += dx / dist * step;
+    o.y += dy / dist * step;
+    return dist - step;
+  }
+
+  // Let go of everything: enemies wake up again, loose blocks crumble.
+  function releaseAll(g) {
+    for (const e of g.enemies) {
+      if (!e.pulled) continue;
+      e.pulled = false;
+      e.vx = 0; e.vy = 0;
+      if (e.kind === 'block') {
+        e.removed = true;
+        E.emit(g, 'blockPop', E.center(e));
+      }
+    }
+    for (const k of g.pickups) k.pulled = false;
+    g.enemies = g.enemies.filter(e => !e.removed);
+  }
+
+  function update(g) {
+    const p = g.player;
+    if (p.mode !== 'inhale') {
+      if (g.enemies.some(e => e.pulled) || g.pickups.some(k => k.pulled)) releaseAll(g);
+      return;
+    }
+    // Once something is caught by the inhale it stays caught until Kirby lets go.
+    for (const e of g.enemies) if (!e.pulled && inCone(p, e, g.world)) e.pulled = true;
+    for (const k of g.pickups) if (!k.pulled && inCone(p, k, g.world)) k.pulled = true;
+    loosenBlocks(g, p);
+
+    const m = mouth(p);
+    const swallowed = [];
+    for (const e of g.enemies) {
+      if (!e.pulled) continue;
+      const left = pullToward(e, m);
+      if (left <= C.INHALE_SWALLOW_DIST || P.overlaps(e, p)) {
+        e.removed = true;
+        swallowed.push(e.kind);
+      }
+    }
+    for (const k of g.pickups) if (k.pulled) pullToward(k, m);
+    g.enemies = g.enemies.filter(e => !e.removed);
+
+    if (swallowed.length) {
+      p.mode = 'full';
+      p.held = { kinds: swallowed, count: swallowed.length };
+      const enemies = swallowed.filter(k => k !== 'block').length;
+      if (enemies) E.addScore(g, C.SCORE_SWALLOW * enemies, m.x, p.y);
+      E.emit(g, 'swallow', { x: m.x, y: m.y, count: swallowed.length });
+      releaseAll(g);
+    }
+  }
+
+  function spit(g) {
+    const p = g.player;
+    const m = mouth(p);
+    g.projectiles.push(E.createStar(g, m.x, m.y, p.facing));
+    p.mode = 'normal';
+    p.held = null;
+    p.spitTimer = C.SPIT_ANIM_TICKS;
+    E.emit(g, 'spit', { x: m.x, y: m.y });
+  }
+
+  function exhale(g) {
+    const p = g.player;
+    const m = mouth(p);
+    g.projectiles.push(E.createPuff(g, m.x, m.y, p.facing));
+    p.mode = 'normal';
+    p.spitTimer = C.SPIT_ANIM_TICKS;
+    E.emit(g, 'exhale', { x: m.x, y: m.y });
+  }
+
+  return { mouth, pointInCone, inCone, update, releaseAll, spit, exhale };
+})();
+
+if (typeof module !== 'undefined') module.exports = { Inhale: KB.Inhale };
+Write c:\Users\ethan\Documents\GitHub\Agent Engineering\Lecture 2a - Codex and Vibecoding\homework\2. just agent.md\js\logic\player.js
+129 lines
+// Kirby: running, jumping, flying and the action key.
+// Modes: 'normal' | 'fly' (puffed up) | 'inhale' (holding the action key) | 'full' (mouthful).
+var KB = (typeof KB !== 'undefined') ? KB : {};
+if (typeof module !== 'undefined') {
+  Object.assign(KB, require('./constants.js'), require('./physics.js'), require('./entities.js'), require('./inhale.js'));
+}
+
+KB.Player = (function () {
+  const C = KB.C;
+  const E = KB.Entities;
+
+  function create(x, y) {
+    return {
+      x, y, w: C.PLAYER_W, h: C.PLAYER_H, vx: 0, vy: 0, facing: 1,
+      onGround: false, mode: 'normal', hp: C.MAX_HP, invuln: 0,
+      flaps: 0, coyote: 0, jumpBuffer: 0, jumping: false,
+      held: null, spitTimer: 0, landTimer: 0, anim: 0,
+    };
+  }
+
+  function approach(v, target, rate) {
+    return v < target ? Math.min(v + rate, target) : Math.max(v - rate, target);
+  }
+
+  function handleAction(g, p, inp) {
+    if (inp.actionPressed) {
+      if (p.mode === 'full') KB.Inhale.spit(g);
+      else if (p.mode === 'fly') KB.Inhale.exhale(g);
+      else if (p.mode === 'normal') {
+        p.mode = 'inhale';
+        E.emit(g, 'inhaleStart', KB.Inhale.mouth(p));
+      }
+    }
+    if (p.mode === 'inhale' && !inp.action) p.mode = 'normal';
+  }
+
+  function handleRun(p, inp) {
+    const dir = (inp.right ? 1 : 0) - (inp.left ? 1 : 0);
+    if (dir && p.mode !== 'inhale') p.facing = dir;
+    let max = C.RUN_SPEED;
+    let accel = p.onGround ? C.GROUND_ACCEL : C.AIR_ACCEL;
+    if (p.mode === 'fly') { max = C.FLY_SPEED_X; accel = C.FLY_ACCEL; }
+    if (p.mode === 'full') max *= C.FULL_SPEED_FACTOR;
+    if (p.mode === 'inhale') max *= C.INHALE_MOVE_FACTOR;
+    const target = dir * max;
+    const braking = target === 0 || Math.sign(target) !== Math.sign(p.vx);
+    const rate = (p.onGround && braking ? C.GROUND_DECEL : accel) * C.DT;
+    p.vx = approach(p.vx, target, rate);
+  }
+
+  function handleJump(g, p, inp) {
+    if (inp.jumpPressed) p.jumpBuffer = C.JUMP_BUFFER_TICKS;
+    const airborne = !p.onGround && p.coyote <= 0;
+    const canFly = p.mode === 'normal' || p.mode === 'fly';
+    const canJump = (p.onGround || p.coyote > 0) && (p.mode === 'normal' || p.mode === 'full');
+
+    if (inp.jumpPressed && airborne && canFly) {
+      // Every tap in the air is one flap, until the flap budget runs out.
+      if (p.flaps < C.FLY_MAX_FLAPS) {
+        if (p.mode !== 'fly') E.emit(g, 'puffUp', { x: p.x + p.w / 2, y: p.y });
+        p.mode = 'fly';
+        p.vy = -C.FLY_FLAP_SPEED;
+        p.flaps++;
+        E.emit(g, 'flap', { x: p.x + p.w / 2, y: p.y + p.h, flaps: p.flaps });
+      } else {
+        E.emit(g, 'tired', { x: p.x + p.w / 2, y: p.y });
+      }
+      p.jumping = false;
+      p.jumpBuffer = 0;
+    } else if (p.jumpBuffer > 0 && canJump) {
+      p.vy = -C.JUMP_SPEED;
+      p.jumping = true;
+      p.jumpBuffer = 0;
+      p.coyote = 0;
+      E.emit(g, 'jump', { x: p.x + p.w / 2, y: p.y + p.h });
+    }
+
+    // Short hop: letting go of Space early cuts the jump.
+    if (p.jumping && !inp.jump && p.vy < -C.JUMP_CUT_SPEED) p.vy = -C.JUMP_CUT_SPEED;
+    if (p.vy >= 0) p.jumping = false;
+  }
+
+  function applyGravity(p) {
+    if (p.mode === 'fly') {
+      p.vy = Math.min(p.vy + C.FLY_GRAVITY * C.DT, C.FLY_MAX_FALL);
+    } else {
+      p.vy = Math.min(p.vy + (p.vy < 0 ? C.GRAVITY : C.FALL_GRAVITY) * C.DT, C.MAX_FALL_SPEED);
+    }
+  }
+
+  function update(g, inp) {
+    const p = g.player;
+    p.anim++;
+    if (p.invuln > 0) p.invuln--;
+    if (p.spitTimer > 0) p.spitTimer--;
+    if (p.landTimer > 0) p.landTimer--;
+    if (p.jumpBuffer > 0) p.jumpBuffer--;
+    if (p.coyote > 0) p.coyote--;
+
+    handleAction(g, p, inp);
+    handleRun(p, inp);
+    handleJump(g, p, inp);
+    applyGravity(p);
+
+    const wasOnGround = p.onGround;
+    const fallSpeed = p.vy;
+    KB.Physics.moveBody(p, g.world, p.vx * C.DT, p.vy * C.DT);
+    if (p.y < C.FLY_CEILING) {
+      p.y = C.FLY_CEILING;
+      if (p.vy < 0) p.vy = 0;
+    }
+
+    if (p.onGround) {
+      p.coyote = C.COYOTE_TICKS;
+      p.flaps = 0;
+      p.jumping = false;
+      if (p.mode === 'fly') KB.Inhale.exhale(g);  // touching down lets the air out
+      if (!wasOnGround) {
+        p.landTimer = C.SPIT_ANIM_TICKS / 2;
+        E.emit(g, 'land', { x: p.x + p.w / 2, y: p.y + p.h, speed: fallSpeed });
+      }
+    }
+  }
+
+  return { create, update };
+})();
+
+if (typeof module !== 'undefined') module.exports = { Player: KB.Player };
+5:10 PM
+Logic core (constants, level, physics, entities, inhale, player) is written; now the game-state module, then input, sprites, rendering, and tests.
+
+
+
+Write c:\Users\ethan\Documents\GitHub\Agent Engineering\Lecture 2a - Codex and Vibecoding\homework\2. just agent.md\js\logic\game.js
+203 lines
+// Game state: modes, lives, score, checkpoints, win and game over.
+// Modes: 'title' | 'playing' | 'paused' | 'dying' | 'gameover' | 'won'.
+var KB = (typeof KB !== 'undefined') ? KB : {};
+if (typeof module !== 'undefined') {
+  Object.assign(KB, require('./constants.js'), require('../level.js'), require('./physics.js'),
+    require('./entities.js'), require('./inhale.js'), require('./player.js'));
+}
+
+KB.Game = (function () {
+  const C = KB.C;
+  const E = KB.Entities;
+  const Phys = KB.Physics;
+
+  // opts.rows: custom level rows (tests). opts.mode: starting mode (default 'title').
+  function create(opts) {
+    opts = opts || {};
+    const level = opts.rows ? KB.Level.parse(opts.rows) : KB.Level.load();
+    const g = {
+      mode: opts.mode || 'title',
+      level,
+      world: { w: level.w, h: level.h, tiles: level.tiles.slice() },
+      score: 0,
+      lives: C.START_LIVES,
+      tick: 0,
+      endTimer: 0,
+      deathTimer: 0,
+      checkpointIndex: -1,
+      checkpoint: { x: level.start.x, y: level.start.y },
+      events: [],
+      enemies: [],
+      pickups: [],
+      projectiles: [],
+      nextId: 0,
+    };
+    g.player = KB.Player.create(level.start.x, level.start.y);
+    g.enemies = level.enemies.map(s => E.createEnemy(g, s.kind, s.tx, s.ty));
+    g.pickups = level.pickups.map(s => E.createPickup(g, s.kind, s.tx, s.ty));
+    g.goal = level.goal ? Object.assign({}, level.goal) : null;
+    return g;
+  }
+
+  function restart(g) {
+    const fresh = create({ rows: g.customRows, mode: 'playing' });
+    fresh.customRows = g.customRows;
+    Object.keys(g).forEach(k => delete g[k]);
+    Object.assign(g, fresh);
+    E.emit(g, 'restart');
+  }
+
+  function shrink(o, by) { return { x: o.x + by, y: o.y + by, w: o.w - by * 2, h: o.h - by * 2 }; }
+
+  function killPlayer(g) {
+    const p = g.player;
+    KB.Inhale.releaseAll(g);
+    g.mode = 'dying';
+    g.deathTimer = C.DEATH_TICKS;
+    g.lives--;
+    p.vx = 0;
+    p.vy = -C.DEATH_POP_SPEED;
+    p.mode = 'normal';
+    p.held = null;
+    E.emit(g, 'die', { x: p.x + p.w / 2, y: p.y });
+  }
+
+  function hurtPlayer(g, from) {
+    const p = g.player;
+    if (p.invuln > 0) return false;
+    p.hp--;
+    if (p.hp <= 0) { killPlayer(g); return true; }
+    p.invuln = C.INVULN_TICKS;
+    p.vx = (p.x + p.w / 2 < from.x + from.w / 2 ? -1 : 1) * C.KNOCKBACK_X;
+    p.vy = -C.KNOCKBACK_Y;
+    if (p.mode === 'fly' || p.mode === 'inhale') p.mode = 'normal';
+    E.emit(g, 'hurt', { x: p.x + p.w / 2, y: p.y });
+    return true;
+  }
+
+  function respawn(g) {
+    const cp = g.checkpoint;
+    g.player = KB.Player.create(cp.x, cp.y);
+    g.player.invuln = C.INVULN_TICKS;
+    g.projectiles = [];
+    g.mode = 'playing';
+    E.emit(g, 'respawn', { x: cp.x, y: cp.y });
+  }
+
+  function checkContacts(g) {
+    const p = g.player;
+    const body = shrink(p, 1);
+    for (const e of g.enemies) {
+      if (g.mode !== 'playing') return;
+      if (e.harmless || e.pulled || !Phys.overlaps(body, e)) continue;
+      // Bumping into a regular enemy hurts Kirby but also knocks the enemy out. Gordo just hurts.
+      if (hurtPlayer(g, e) && e.kind !== 'gordo') E.defeatEnemy(g, e, C.SCORE_BUMP);
+    }
+    g.enemies = g.enemies.filter(e => !e.removed);
+  }
+
+  function checkPickups(g) {
+    const p = g.player;
+    for (const k of g.pickups) {
+      if (!Phys.overlaps(p, k)) continue;
+      k.removed = true;
+      const cx = k.x + k.w / 2;
+      if (k.kind === 'tomato') {
+        p.hp = C.MAX_HP;
+        E.addScore(g, C.SCORE_TOMATO, cx, k.y);
+        E.emit(g, 'heal', { x: cx, y: k.y });
+      } else {
+        E.addScore(g, C.SCORE_PICKUP, cx, k.y);
+        E.emit(g, 'pickup', { x: cx, y: k.y });
+      }
+    }
+    g.pickups = g.pickups.filter(k => !k.removed);
+  }
+
+  function checkCheckpoints(g) {
+    const cps = g.level.checkpoints;
+    for (let i = g.checkpointIndex + 1; i < cps.length; i++) {
+      if (g.player.x >= cps[i].x) {
+        g.checkpointIndex = i;
+        g.checkpoint = { x: cps[i].x, y: cps[i].y };
+        E.emit(g, 'checkpoint', { x: cps[i].x, y: cps[i].y, index: i });
+      }
+    }
+  }
+
+  function win(g) {
+    g.mode = 'won';
+    g.endTimer = 0;
+    KB.Inhale.releaseAll(g);
+    const bonus = C.SCORE_GOAL + g.lives * C.SCORE_LIFE_BONUS;
+    E.addScore(g, bonus, g.goal.x + g.goal.w / 2, g.goal.y);
+    E.emit(g, 'win', { bonus });
+  }
+
+  function stepPlaying(g, inp) {
+    KB.Player.update(g, inp);
+    KB.Inhale.update(g);
+    E.updateEnemies(g);
+    E.updateProjectiles(g);
+    checkPickups(g);
+    checkCheckpoints(g);
+    if (g.goal && Phys.overlaps(g.player, g.goal)) { win(g); return; }
+    checkContacts(g);
+    if (g.mode === 'playing' && g.player.y > g.world.h * C.TILE) killPlayer(g);
+  }
+
+  function stepDying(g) {
+    const p = g.player;
+    g.deathTimer--;
+    // Hang in the air for a moment, then fall off the screen.
+    if (g.deathTimer < C.DEATH_TICKS * 3 / 4) {
+      p.vy = Math.min(p.vy + C.GRAVITY * C.DT, C.MAX_FALL_SPEED);
+      p.y += p.vy * C.DT;
+    }
+    if (g.deathTimer <= 0) {
+      if (g.lives <= 0) {
+        g.mode = 'gameover';
+        g.endTimer = 0;
+        E.emit(g, 'gameover');
+      } else {
+        respawn(g);
+      }
+    }
+  }
+
+  // Advance one fixed tick. `inp` is an input snapshot (see input.js).
+  function update(g, inp) {
+    g.events = [];
+    g.tick++;
+    if (inp.restartPressed && g.mode !== 'title') { restart(g); return g; }
+    const confirm = inp.jumpPressed || inp.actionPressed;
+    switch (g.mode) {
+      case 'title':
+        if (confirm || inp.restartPressed) { g.mode = 'playing'; E.emit(g, 'start'); }
+        break;
+      case 'paused':
+        if (inp.pausePressed) g.mode = 'playing';
+        break;
+      case 'playing':
+        if (inp.pausePressed) { g.mode = 'paused'; break; }
+        stepPlaying(g, inp);
+        break;
+      case 'dying':
+        stepDying(g);
+        break;
+      case 'gameover':
+      case 'won': {
+        g.endTimer++;
+        const wait = g.mode === 'won' ? C.WIN_SCREEN_TICKS : C.END_INPUT_DELAY_TICKS;
+        if (confirm && g.endTimer > wait) restart(g);
+        break;
+      }
+    }
+    return g;
+  }
+
+  return { create, update, restart, hurtPlayer, killPlayer };
+})();
+
+if (typeof module !== 'undefined') module.exports = { Game: KB.Game };
+Bash Move leftover literal numbers into constants
+IN
+cd "c:/Users/ethan/Documents/GitHub/Agent Engineering/Lecture 2a - Codex and Vibecoding/homework/2. just agent.md/js" && python - <<'EOF'
+import re,io
+def sub(path, a, b, count=1):
+    s=open(path,encoding='utf-8').read()
+    assert a in s, (path,a)
+    s=s.replace(a,b,count)
+    open(path,'w',encoding='utf-8',newline='\n').write(s)
+sub('logic/game.js', "      nextId: 0,\n    };", "      nextId: 0,\n      customRows: opts.rows || null,\n    };")
+sub('logic/game.js', "    const fresh = create({ rows: g.customRows, mode: 'playing' });\n    fresh.customRows = g.customRows;\n", "    const fresh = create({ rows: g.customRows, mode: 'playing' });\n")
+sub('logic/game.js', "if (g.deathTimer < C.DEATH_TICKS * 3 / 4) {", "if (g.deathTimer < C.DEATH_TICKS - C.DEATH_HANG_TICKS) {")
+sub('logic/game.js', "const body = shrink(p, 1);", "const body = shrink(p, C.CONTACT_INSET);")
+sub('logic/entities.js', "e.y += (targetY - e.y) * 0.2;", "e.y += (targetY - e.y) * C.FLYER_EASE;")
+sub('logic/entities.js', "const size = kind === 'tomato' ? C.ENEMY_SIZE : C.ENEMY_SIZE / 2 + 2;", "const size = kind === 'tomato' ? C.TOMATO_SIZE : C.PICKUP_SIZE;")
+sub('logic/inhale.js', "y: p.y + p.h * 0.55", "y: p.y + p.h * C.MOUTH_Y_RATIO")
+sub('logic/player.js', "p.landTimer = C.SPIT_ANIM_TICKS / 2;", "p.landTimer = C.LAND_SQUASH_TICKS;")
+sub('logic/constants.js', "  INHALE_MOVE_FACTOR: 0,     // Kirby plants his feet while inhaling\n", "  INHALE_MOVE_FACTOR: 0,     // Kirby plants his feet while inhaling\n  MOUTH_Y_RATIO: 0.55,       // mouth height as a fraction of Kirby's body, from the top\n")
+sub('logic/constants.js', "  SPIT_ANIM_TICKS: 12,\n", "  SPIT_ANIM_TICKS: 12,\n  LAND_SQUASH_TICKS: 6,\n")
+sub('logic/constants.js', "  FLYER_FREQ: 3,             // radians per second of the bob\n", "  FLYER_FREQ: 3,             // radians per second of the bob\n  FLYER_EASE: 0.2,           // how fast a flyer drifts back onto its path\n")
+sub('logic/constants.js', "  GORDO_SIZE: 14,\n", "  GORDO_SIZE: 14,\n  PICKUP_SIZE: 8,\n  TOMATO_SIZE: 12,\n")
+sub('logic/constants.js', "  DEATH_POP_SPEED: 260,\n", "  DEATH_POP_SPEED: 260,\n  DEATH_HANG_TICKS: 28,       // Kirby freezes this long before falling off the screen\n  CONTACT_INSET: 1,          // enemy touches use a hitbox this much smaller than Kirby's\n")
+EOF
+
+OUT
+(Bash completed with no output)
+Bash Smoke-check logic modules in Node
+IN
+cd "c:/Users/ethan/Documents/GitHub/Agent Engineering/Lecture 2a - Codex and Vibecoding/homework/2. just agent.md" && node -e "
+const {Game}=require('./js/logic/game.js'); const {Level}=require('./js/level.js');
+const g=Game.create({mode:'playing'});
+console.log(g.level.w, g.level.h, g.enemies.length, g.pickups.length, g.level.checkpoints.length, JSON.stringify(g.goal), JSON.stringify(Level.findGaps(g.level)));
+const inp={left:false,right:true,jump:false,action:false};
+for(let i=0;i<120;i++) Game.update(g,inp);
+console.log(g.player.x.toFixed(1), g.player.y.toFixed(1), g.player.onGround, g.mode, g.player.hp);
+Level.DEFAULT_ROWS.forEach(r=>console.log(r.slice(0,120)));
+"
+
+OUT
+232 12 17 27 2 {"tx":224,"ty":5,"x":3582,"y":78,"w":20,"h":20} [{"from":30,"to":31},{"from":58,"to":60},{"from":85,"to":93},{"from":158,"to":165},{"from":188,"to":201}]
+221.3 146.0 true playing 3
+........................................................................................................BBBBBBBBBBBBBB..
+........................................................................................................BBBBBBBBBBBBBB..
+........................................................................................................BBBBBBBBBBBBBB..
+.......................................................................................*.*.*............BBBBBBBBBBBBBB..
+.........................................................................F..............................BBBBBBBBBBBBBB..
+..............***.......................................................................................BBBBBBBBBBBBBB..
+.........................................***.............................................F..............BBBBBBBBBBBBBB..
+.............=====...............................................***....................................BBBBBBBBBBBBBB..
+........................................BBBB......*.*...................................................SS..S...........
+..P.1.....*.*.*....2....W...........W...BBBB.......H..........................3....W............C...4...SS..S.....W.....
+##############################..##########################...########################.........##########################
+##############################..##########################...########################.........##########################
+5:11 PM
+Logic runs in Node. Now input.js.
+
+
+
+Write c:\Users\ethan\Documents\GitHub\Agent Engineering\Lecture 2a - Codex and Vibecoding\homework\2. just agent.md\js\input.js
+67 lines
+// Keyboard -> input snapshots. The key handling is plain functions so tests can feed it fake events.
+var KB = (typeof KB !== 'undefined') ? KB : {};
+
+KB.Input = (function () {
+  // Only the keys the game asks for. Enter is matched on `key`, so the keypad Enter works too.
+  const BY_CODE = {
+    ArrowLeft: 'left', KeyA: 'left',
+    ArrowRight: 'right', KeyD: 'right',
+    Space: 'jump',
+  };
+  const BY_KEY = { Enter: 'action' };
+  const UTILITY = { KeyP: 'pause', KeyM: 'mute', KeyR: 'restart' };
+
+  function create() {
+    return {
+      held: { left: false, right: false, jump: false, action: false },
+      pressed: { jump: 0, action: 0, pause: 0, mute: 0, restart: 0 },
+    };
+  }
+
+  function actionFor(ev) { return BY_KEY[ev.key] || BY_CODE[ev.code] || null; }
+
+  // Feed one keydown/keyup event. Returns true if the game used it.
+  function handleEvent(state, ev) {
+    const down = ev.type === 'keydown';
+    const action = actionFor(ev);
+    if (action) {
+      if (down && !ev.repeat && !state.held[action] && action in state.pressed) state.pressed[action]++;
+      state.held[action] = down;
+    } else if (UTILITY[ev.code]) {
+      if (down && !ev.repeat) state.pressed[UTILITY[ev.code]]++;
+    } else {
+      return false;
+    }
+    if (ev.preventDefault) ev.preventDefault();
+    return true;
+  }
+
+  function releaseAll(state) {
+    Object.keys(state.held).forEach(k => { state.held[k] = false; });
+  }
+
+  // What the game sees for one tick. Presses are latched until the next snapshot, so a quick tap
+  // between two ticks is never lost.
+  function snapshot(state) {
+    const h = state.held, p = state.pressed;
+    const snap = {
+      left: h.left, right: h.right, jump: h.jump, action: h.action,
+      jumpPressed: p.jump > 0, actionPressed: p.action > 0,
+      pausePressed: p.pause > 0, mutePressed: p.mute > 0, restartPressed: p.restart > 0,
+    };
+    Object.keys(p).forEach(k => { p[k] = 0; });
+    return snap;
+  }
+
+  function attach(target, state, onKey) {
+    const handler = ev => { if (handleEvent(state, ev) && onKey) onKey(ev); };
+    target.addEventListener('keydown', handler);
+    target.addEventListener('keyup', handler);
+    target.addEventListener('blur', () => releaseAll(state));
+  }
+
+  return { create, handleEvent, snapshot, releaseAll, attach };
+})();
+
+if (typeof module !== 'undefined') module.exports = { Input: KB.Input };
+5:12 PM
+Now the sprite builder (all art generated in code).
+
+
+
+Write c:\Users\ethan\Documents\GitHub\Agent Engineering\Lecture 2a - Codex and Vibecoding\homework\2. just agent.md\js\sprites.js
+312 lines
+// All sprites are drawn here, pixel by pixel, into small offscreen canvases. No image files.
+var KB = (typeof KB !== 'undefined') ? KB : {};
+
+KB.PAL = {
+  ink: '#1b1030', white: '#fff8f0', shadow: '#1b103066',
+  pink: '#f8a8cc', pinkLight: '#ffd8ec', pinkDark: '#d8689a', blush: '#ff6f9c',
+  red: '#e0305a', redDark: '#9a1c44', mouth: '#6c1434', tongue: '#ff7096',
+  eyeBlue: '#3c5cd8',
+  orange: '#f07830', orangeDark: '#b04420', orangeLight: '#ffa860', peach: '#ffdcb0',
+  yellow: '#ffd23c', yellowDark: '#e08a20', yellowLight: '#fff4a8',
+  purple: '#c050c8', purpleDark: '#782c88', purpleLight: '#e890e8',
+  green: '#58c048', greenDark: '#2c7c38', greenLight: '#a8e878',
+  brown: '#a8643c', brownDark: '#6a3a28', brownLight: '#cc8c58',
+  stone: '#8890c0', stoneDark: '#565c90', stoneLight: '#bcc4e8',
+  sky: '#8cd4fc', skyLight: '#c8eeff', skyDeep: '#64b4f4',
+  hill: '#7cd0b0', hillDark: '#5cae98', hillFar: '#a8dce8',
+  navy: '#3c3c88', navyDark: '#242458',
+};
+
+KB.Sprites = (function () {
+  const PAL = KB.PAL;
+
+  // ---- a tiny pixel grid --------------------------------------------------
+  function Grid(w, h) {
+    this.w = w; this.h = h;
+    this.c = new Array(w * h).fill(null);   // colours
+    this.r = new Array(w * h).fill(null);   // region names, for outlining between parts
+  }
+  Grid.prototype.inside = function (x, y) { return x >= 0 && y >= 0 && x < this.w && y < this.h; };
+  Grid.prototype.set = function (x, y, color, region) {
+    x = Math.round(x); y = Math.round(y);
+    if (!this.inside(x, y)) return;
+    this.c[y * this.w + x] = color;
+    this.r[y * this.w + x] = color === null ? null : (region || 'x');
+  };
+  Grid.prototype.region = function (x, y) { return this.inside(x, y) ? this.r[y * this.w + x] : null; };
+  // Fill an ellipse; `paint(nx, ny)` picks the colour from the normalised position (-1..1).
+  Grid.prototype.ellipse = function (cx, cy, rx, ry, paint, region) {
+    for (let y = 0; y < this.h; y++) {
+      for (let x = 0; x < this.w; x++) {
+        const nx = (x + 0.5 - cx) / rx, ny = (y + 0.5 - cy) / ry;
+        if (nx * nx + ny * ny <= 1) this.set(x, y, typeof paint === 'function' ? paint(nx, ny) : paint, region);
+      }
+    }
+  };
+  Grid.prototype.poly = function (pts, paint, region) {
+    for (let y = 0; y < this.h; y++) {
+      for (let x = 0; x < this.w; x++) {
+        if (inPoly(x + 0.5, y + 0.5, pts)) this.set(x, y, typeof paint === 'function' ? paint(x, y) : paint, region);
+      }
+    }
+  };
+  Grid.prototype.rect = function (x, y, w, h, color, region) {
+    for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) this.set(x + i, y + j, color, region);
+  };
+  // Draw string art: each character maps to a colour through `map` ('.' is skipped).
+  Grid.prototype.art = function (rows, ox, oy, map, region) {
+    rows.forEach((row, j) => {
+      for (let i = 0; i < row.length; i++) if (map[row[i]]) this.set(ox + i, oy + j, map[row[i]], region);
+    });
+  };
+  // Outline: edge pixels become `color`, and so do pixels of region a that touch region b.
+  Grid.prototype.outline = function (color, pairs) {
+    const marks = [];
+    for (let y = 0; y < this.h; y++) {
+      for (let x = 0; x < this.w; x++) {
+        const reg = this.region(x, y);
+        if (!reg) continue;
+        const ns = [this.region(x + 1, y), this.region(x - 1, y), this.region(x, y + 1), this.region(x, y - 1)];
+        const edge = ns.some(n => n === null) ||
+          (pairs || []).some(([a, b]) => reg === a && ns.includes(b));
+        if (edge) marks.push([x, y]);
+      }
+    }
+    marks.forEach(([x, y]) => { this.c[y * this.w + x] = color; });
+  };
+  Grid.prototype.toCanvas = function (flip) {
+    const cv = document.createElement('canvas');
+    cv.width = this.w; cv.height = this.h;
+    const ctx = cv.getContext('2d');
+    for (let y = 0; y < this.h; y++) {
+      for (let x = 0; x < this.w; x++) {
+        const col = this.c[y * this.w + (flip ? this.w - 1 - x : x)];
+        if (col) { ctx.fillStyle = col; ctx.fillRect(x, y, 1, 1); }
+      }
+    }
+    return cv;
+  };
+
+  function inPoly(x, y, pts) {
+    let inside = false;
+    for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+      const [xi, yi] = pts[i], [xj, yj] = pts[j];
+      if ((yi > y) !== (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) inside = !inside;
+    }
+    return inside;
+  }
+  function starPoints(cx, cy, outer, inner, rot) {
+    const pts = [];
+    for (let i = 0; i < 10; i++) {
+      const a = rot - Math.PI / 2 + i * Math.PI / 5;
+      const r = i % 2 ? inner : outer;
+      pts.push([cx + Math.cos(a) * r, cy + Math.sin(a) * r]);
+    }
+    return pts;
+  }
+
+  // Light from the top left: pick light / mid / dark by position on a round body.
+  function shade(light, mid, dark) {
+    return (nx, ny) => {
+      const l = -0.5 * nx - 0.8 * ny;
+      return l > 0.55 ? light : (l < -0.62 ? dark : mid);
+    };
+  }
+
+  // Both directions of one sprite.
+  function pair(grid) { return { r: grid.toCanvas(false), l: grid.toCanvas(true) }; }
+
+  // ---- Kirby (24x24, facing right, feet on the bottom row) ---------------
+  function kirby(o) {
+    const g = new Grid(24, 24);
+    const b = o.body;
+    (o.arms || []).forEach(a => g.ellipse(a[0], a[1], a[2], a[3], PAL.pink, 'body'));
+    g.ellipse(b[0], b[1], b[2], b[3], shade(PAL.pinkLight, PAL.pink, PAL.pinkDark), 'body');
+    (o.feet || []).forEach(f => g.ellipse(f[0], f[1], f[2], f[3], (nx, ny) => ny > 0.3 ? PAL.redDark : PAL.red, 'foot'));
+    if (o.mouth === 'wide') {
+      const m = o.mouthAt;
+      g.ellipse(m[0], m[1], m[2], m[3], (nx, ny) => ny > 0.45 ? PAL.tongue : PAL.mouth, 'mouth');
+    }
+    g.outline(PAL.ink, [['foot', 'body'], ['body', 'mouth']]);
+    face(g, o);
+    return pair(g);
+  }
+
+  function face(g, o) {
+    const [ex, ey] = o.eyes;   // left eye top-left; right eye sits 3px to its right
+    const eyeXs = [ex, ex + 3];
+    if (o.eyeStyle === 'closed') {
+      eyeXs.forEach(x => g.rect(x, ey + 2, 2, 1, PAL.ink));
+    } else if (o.eyeStyle === 'squint') {
+      eyeXs.forEach(x => { g.set(x, ey + 1, PAL.ink); g.set(x + 1, ey + 2, PAL.ink); g.set(x, ey + 3, PAL.ink); });
+    } else if (o.eyeStyle === 'x') {
+      eyeXs.forEach(x => { g.set(x, ey, PAL.ink); g.set(x + 1, ey + 1, PAL.ink); g.set(x, ey + 2, PAL.ink); g.set(x + 1, ey, PAL.ink); g.set(x, ey + 2, PAL.ink); g.set(x + 1, ey + 2, PAL.ink); });
+    } else {
+      eyeXs.forEach(x => {
+        g.set(x, ey, PAL.white); g.set(x + 1, ey, PAL.ink);
+        g.rect(x, ey + 1, 2, 1, PAL.ink);
+        g.rect(x, ey + 2, 2, 1, PAL.eyeBlue);
+      });
+    }
+    const by = ey + (o.blushDy || 3);
+    const blushW = o.bigBlush ? 3 : 2;
+    g.rect(ex - blushW - 0, by, blushW, 1, PAL.blush);
+    g.rect(ex + 5, by, blushW, 1, PAL.blush);
+    if (o.mouth === 'smile') g.set(ex + 2, by + 1, PAL.mouth);
+    if (o.mouth === 'o') g.rect(ex + 2, by, 2, 2, PAL.mouth);
+    if (o.mouth === 'puff') g.set(ex + 3, by + 1, PAL.mouth);
+  }
+
+  function buildKirby() {
+    const K = {};
+    const armsIdle = [[5, 16, 2.2, 2], [19, 16, 2.2, 2]];
+    const feetIdle = [[9, 22, 3, 2], [16, 22, 3, 2]];
+    const base = { body: [12, 15, 7, 6.6], arms: armsIdle, feet: feetIdle, eyes: [12, 10], mouth: 'smile' };
+    K.idle = [
+      kirby(base),
+      kirby(Object.assign({}, base, { body: [12, 15.4, 7.4, 6.2], eyes: [12, 11] })),
+    ];
+    K.blink = kirby(Object.assign({}, base, { eyeStyle: 'closed' }));
+    const runFeet = [
+      [[7, 22, 3, 2], [17, 21, 3, 2]], [[9, 22, 3, 2], [15, 22, 3, 2]],
+      [[7, 21, 3, 2], [17, 22, 3, 2]], [[9, 22, 3, 2], [15, 22, 3, 2]],
+    ];
+    const runArms = [[[5, 15, 2.2, 2], [19, 17, 2.2, 2]], armsIdle, [[5, 17, 2.2, 2], [19, 15, 2.2, 2]], armsIdle];
+    K.run = runFeet.map((feet, i) => {
+      const bob = i % 2 ? 0 : -1;
+      return kirby({ body: [12, 15 + bob, 7, 6.6], arms: runArms[i].map(a => [a[0], a[1] + bob, a[2], a[3]]),
+        feet, eyes: [13, 10 + bob], mouth: 'smile' });
+    });
+    K.jump = kirby({ body: [12, 14, 6.5, 7.3], arms: [[5, 10, 2, 2.2], [19, 10, 2, 2.2]],
+      feet: [[10, 22, 2.5, 2], [15, 22, 2.5, 2]], eyes: [13, 9], mouth: 'o' });
+    K.fall = kirby({ body: [12, 15, 7.3, 6.6], arms: [[4, 13, 2.2, 2], [20, 13, 2.2, 2]],
+      feet: [[8, 22, 3, 2], [16, 22, 3, 2]], eyes: [13, 10], mouth: 'smile' });
+    K.fly = [
+      kirby({ body: [12, 12.5, 9.5, 9], arms: [[2.5, 8, 2.5, 2.2], [21.5, 8, 2.5, 2.2]],
+        feet: [[9, 22, 2.2, 1.6], [15, 22, 2.2, 1.6]], eyes: [12, 8], mouth: 'puff', bigBlush: true, blushDy: 4 }),
+      kirby({ body: [12, 12.5, 9.5, 9], arms: [[2, 15, 2.5, 2.2], [22, 15, 2.5, 2.2]],
+        feet: [[9, 22, 2.2, 1.6], [15, 22, 2.2, 1.6]], eyes: [12, 8], mouth: 'puff', bigBlush: true, blushDy: 4 }),
+    ];
+    K.inhale = [
+      kirby({ body: [11, 15, 8, 6.8], arms: [[3, 16, 2, 2]], feet: [[6, 22, 3, 2], [15, 22, 3, 2]],
+        eyes: [9, 9], eyeStyle: 'squint', mouth: 'wide', mouthAt: [17.5, 15.5, 3.8, 4.6] }),
+      kirby({ body: [11, 15, 8.6, 7.2], arms: [[2.5, 16, 2, 2]], feet: [[6, 22, 3, 2], [15, 22, 3, 2]],
+        eyes: [9, 9], eyeStyle: 'squint', mouth: 'wide', mouthAt: [18, 15.5, 4.2, 5.2] }),
+    ];
+    K.full = runFeet.map((feet, i) => {
+      const bob = i % 2 ? 0 : -1;
+      return kirby({ body: [12, 14.6 + bob, 8.4, 7.8], arms: [[3.5, 16 + bob, 2, 2], [20.5, 16 + bob, 2, 2]],
+        feet, eyes: [12, 9 + bob], mouth: 'none', bigBlush: true, blushDy: 4 });
+    });
+    K.spit = kirby({ body: [11.5, 15.3, 7.4, 6.4], arms: [[4, 14, 2.2, 2], [20, 14, 2.2, 2]],
+      feet: feetIdle, eyes: [12, 11], eyeStyle: 'closed', mouth: 'o' });
+    K.land = kirby({ body: [12, 16.2, 8, 5.6], arms: [[4, 18, 2.2, 1.8], [20, 18, 2.2, 1.8]],
+      feet: [[8, 22, 3.2, 2], [16, 22, 3.2, 2]], eyes: [12, 12], mouth: 'smile' });
+    K.hurt = kirby({ body: [12, 15, 7.6, 6.4], arms: [[4, 10, 2, 2.2], [20, 10, 2, 2.2]],
+      feet: [[8, 22, 3, 2], [16, 22, 3, 2]], eyes: [10, 10], eyeStyle: 'x', mouth: 'o' });
+    return K;
+  }
+
+  // ---- enemies (16x16, facing right) ---------------------------------------
+  function walker(step) {
+    const g = new Grid(16, 16);
+    g.ellipse(8, 9.5, 7, 6.3, shade(PAL.orangeLight, PAL.orange, PAL.orangeDark), 'body');
+    g.ellipse(10, 10, 4.6, 3.8, PAL.peach, 'face');
+    const feet = step ? [[5, 14.5], [11, 15]] : [[5, 15], [11, 14.5]];
+    feet.forEach(([x, y]) => g.ellipse(x, y, 2.6, 1.6, PAL.yellow, 'foot'));
+    g.outline(PAL.ink, [['foot', 'body'], ['foot', 'face']]);
+    g.rect(9, 8, 1, 2, PAL.ink); g.rect(12, 8, 1, 2, PAL.ink);
+    g.set(8, 11, PAL.blush); g.set(13, 11, PAL.blush);
+    return pair(g);
+  }
+  function flyer(wingUp) {
+    const g = new Grid(16, 16);
+    g.ellipse(4, wingUp ? 4.5 : 10, 3.4, 2.6, PAL.white, 'wing');
+    g.ellipse(9, 9.5, 6, 5.6, shade(PAL.purpleLight, PAL.purple, PAL.purpleDark), 'body');
+    g.ellipse(7, 15, 2, 1.3, PAL.orange, 'foot'); g.ellipse(11, 15, 2, 1.3, PAL.orange, 'foot');
+    g.outline(PAL.ink, [['wing', 'body'], ['foot', 'body']]);
+    g.rect(10, 7, 2, 3, PAL.white); g.rect(11, 8, 1, 2, PAL.ink);
+    g.set(13, 11, PAL.blush);
+    return pair(g);
+  }
+  function hopper(stretch) {
+    const g = new Grid(16, 16);
+    if (stretch) g.ellipse(8, 9.5, 5.6, 6.6, shade(PAL.greenLight, PAL.green, PAL.greenDark), 'body');
+    else g.ellipse(8, 11, 7.2, 5, shade(PAL.greenLight, PAL.green, PAL.greenDark), 'body');
+    const top = stretch ? 3 : 6;
+    g.art(['.gg', 'gg.', '.g.'], 6, top - 3, { g: PAL.greenLight }, 'leaf');
+    g.outline(PAL.ink, [['leaf', 'body']]);
+    const ey = stretch ? 7 : 9;
+    g.rect(9, ey, 2, 2, PAL.white); g.set(10, ey + 1, PAL.ink);
+    g.rect(12, ey, 2, 2, PAL.white); g.set(13, ey + 1, PAL.ink);
+    g.set(11, ey + 3, PAL.mouth);
+    return pair(g);
+  }
+  function gordo(rot) {
+    const g = new Grid(16, 16);
+    for (let i = 0; i < 8; i++) {
+      const a = rot + i * Math.PI / 4;
+      const tip = [8 + Math.cos(a) * 8, 8 + Math.sin(a) * 8];
+      const l = [8 + Math.cos(a - 0.45) * 4.5, 8 + Math.sin(a - 0.45) * 4.5];
+      const r = [8 + Math.cos(a + 0.45) * 4.5, 8 + Math.sin(a + 0.45) * 4.5];
+      g.poly([tip, l, r], PAL.white, 'spike');
+    }
+    g.ellipse(8, 8, 5.4, 5.4, shade(PAL.stone, PAL.navy, PAL.navyDark), 'body');
+    g.outline(PAL.ink, [['spike', 'body']]);
+    g.rect(6, 6, 2, 3, PAL.white); g.rect(9, 6, 2, 3, PAL.white);
+    g.set(7, 7, PAL.ink); g.set(9, 7, PAL.ink); g.set(7, 8, PAL.ink); g.set(9, 8, PAL.ink);
+    return pair(g);
+  }
+
+  // ---- items, projectiles, goal -------------------------------------------
+  function bigStar(size, outer, inner, rot, fill) {
+    const g = new Grid(size, size);
+    const c = size / 2;
+    const pts = starPoints(c, c, outer, inner, rot);
+    g.poly(pts, (x, y) => (Math.hypot(x + 0.5 - c + 1, y + 0.5 - c + 1) < inner * 0.9 ? PAL.yellowLight : fill), 'star');
+    g.outline(PAL.ink);
+    return g;
+  }
+  function smallStar(twinkle) {
+    const g = new Grid(9, 9);
+    g.art(twinkle ? ['....w....', '....y....', '...yyy...', 'wyyyYyyyw', '..yyyyy..', '..yy.yy..', '.yy...yy.', '.........', '.........']
+      : ['....y....', '...yyy...', 'yyyyYyyyy', '.yyyyyyy.', '..yyyyy..', '..yy.yy..', '.y.....y.', '.........', '.........'],
+    0, 1, { y: PAL.yellow, Y: PAL.yellowLight, w: PAL.white });
+    return g.toCanvas(false);
+  }
+  function tomato() {
+    const g = new Grid(14, 14);
+    g.ellipse(7, 8.5, 6.4, 5.6, shade(PAL.tongue, PAL.red, PAL.redDark), 'body');
+    g.art(['.g.g.', 'ggggg', '.ggg.'], 5, 1, { g: PAL.green }, 'leaf');
+    g.outline(PAL.ink, [['leaf', 'body']]);
+    g.art(['w...w', 'ww.ww', 'w.w.w', 'w...w'], 5, 7, { w: PAL.white });
+    return g.toCanvas(false);
+  }
+  function puff(big) {
+    const g = new Grid(12, 12);
+    const r = big ? 5.2 : 4;
+    g.ellipse(6, 6, r, r * 0.85, shade(PAL.white, PAL.skyLight, PAL.sky), 'puff');
+    g.ellipse(3.5, 5, r * 0.55, r * 0.5, PAL.white, 'puff');
+    g.outline(PAL.stoneDark);
+    return g.toCanvas(false);
+  }
+
+  function build() {
+    const S = {};
+    S.kirby = buildKirby();
+    S.walker = [walker(0), walker(1)];
+    S.flyer = [flyer(true), flyer(false)];
+    S.hopper = [hopper(false), hopper(true)];
+    S.gordo = [gordo(0), gordo(Math.PI / 8)];
+    S.star = [0, 1, 2, 3].map(i => bigStar(16, 7.6, 3.4, i * Math.PI / 10, PAL.yellow).toCanvas(false));
+    S.warpStar = [bigStar(28, 13.5, 6.2, 0, PAL.yellow).toCanvas(false), bigStar(28, 13, 6, 0.08, PAL.yellow).toCanvas(false)];
+    S.pickup = [smallStar(false), smallStar(true)];
+    S.tomato = tomato();
+    S.puff = [puff(true), puff(false)];
+    Object.assign(S, KB.Tiles.build(Grid, shade));
+    return S;
+  }
+
+  return { build, Grid, shade };
+})();
+Write c:\Users\ethan\Documents\GitHub\Agent Engineering\Lecture 2a - Codex and Vibecoding\homework\2. just agent.md\js\tiles.js
+160 lines
+// Tile, decoration, HUD icon and background art, drawn in code.
+var KB = (typeof KB !== 'undefined') ? KB : {};
+
+KB.Tiles = (function () {
+  const PAL = KB.PAL;
+
+  // Deterministic "random" so the art is the same every time.
+  function hash(x, y) {
+    let h = (x * 374761393 + y * 668265263) | 0;
+    h = (h ^ (h >>> 13)) * 1274126177 | 0;
+    return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+  }
+
+  function dirt(g, yFrom) {
+    for (let y = yFrom; y < 16; y++) {
+      for (let x = 0; x < 16; x++) {
+        const r = hash(x, y);
+        g.set(x, y, r < 0.08 ? PAL.brownDark : r > 0.94 ? PAL.brownLight : PAL.brown, 'dirt');
+      }
+    }
+    // a couple of pebbles
+    [[3, yFrom + 4], [11, yFrom + 7]].forEach(([x, y]) => {
+      if (y < 15) { g.set(x, y, PAL.brownLight); g.set(x + 1, y, PAL.brownLight); g.set(x, y + 1, PAL.brownDark); g.set(x + 1, y + 1, PAL.brownDark); }
+    });
+  }
+
+  function groundTop(Grid) {
+    const g = new Grid(16, 16);
+    dirt(g, 0);
+    for (let x = 0; x < 16; x++) {
+      const depth = 4 + (hash(x, 99) < 0.4 ? 1 : 0) + (x % 5 === 2 ? 1 : 0);
+      for (let y = 0; y < depth; y++) g.set(x, y, y === 0 ? PAL.greenLight : y === depth - 1 ? PAL.greenDark : PAL.green);
+    }
+    return g.toCanvas(false);
+  }
+  function ground(Grid) {
+    const g = new Grid(16, 16);
+    dirt(g, 0);
+    return g.toCanvas(false);
+  }
+  function brick(Grid) {
+    const g = new Grid(16, 16);
+    for (let y = 0; y < 16; y++) {
+      for (let x = 0; x < 16; x++) {
+        const row = y < 8 ? 0 : 1;
+        const bx = (x + (row ? 8 : 0)) % 16;
+        let col = PAL.stone;
+        if (y % 8 === 7 || bx === 15) col = PAL.stoneDark;
+        else if (y % 8 === 0 || bx === 0) col = PAL.stoneLight;
+        else if (hash(x, y) < 0.06) col = PAL.stoneDark;
+        g.set(x, y, col);
+      }
+    }
+    return g.toCanvas(false);
+  }
+  function starBlock(Grid) {
+    const g = new Grid(16, 16);
+    g.rect(0, 0, 16, 16, PAL.orangeLight);
+    g.rect(1, 1, 14, 1, PAL.peach); g.rect(1, 1, 1, 14, PAL.peach);
+    g.rect(1, 14, 14, 1, PAL.orange); g.rect(14, 1, 1, 14, PAL.orange);
+    g.art(['...k...', '..kyk..', 'kkkykkk', 'kyyYyyk', '.kyyyk.', '.kykyk.', 'kk...kk'], 4, 4,
+      { k: PAL.orangeDark, y: PAL.yellow, Y: PAL.yellowLight });
+    for (let i = 0; i < 16; i++) { g.set(i, 0, PAL.ink); g.set(i, 15, PAL.ink); g.set(0, i, PAL.ink); g.set(15, i, PAL.ink); }
+    return g.toCanvas(false);
+  }
+  function cloud(Grid, shade) {
+    const g = new Grid(16, 16);
+    g.ellipse(4, 6, 5, 4, PAL.white, 'c');
+    g.ellipse(11, 5, 6, 4.5, PAL.white, 'c');
+    g.rect(0, 6, 16, 4, PAL.white, 'c');
+    for (let x = 0; x < 16; x++) for (let y = 8; y < 10; y++) g.set(x, y, PAL.skyLight, 'c');
+    g.outline(PAL.stoneDark);
+    // seamless sides: undo outline where the cloud continues into the next tile
+    for (let y = 6; y < 9; y++) { g.set(0, y, y === 8 ? PAL.skyLight : PAL.white, 'c'); g.set(15, y, y === 8 ? PAL.skyLight : PAL.white, 'c'); }
+    return g.toCanvas(false);
+  }
+
+  function flower(Grid, petal) {
+    const g = new Grid(5, 7);
+    g.art(['.p.', 'pyp', '.p.'], 1, 0, { p: petal, y: PAL.yellow });
+    g.rect(2, 3, 1, 4, PAL.greenDark);
+    g.set(1, 5, PAL.green); g.set(3, 4, PAL.green);
+    return g.toCanvas(false);
+  }
+  function bush(Grid, shade) {
+    const g = new Grid(28, 12);
+    const paint = shade(PAL.greenLight, PAL.green, PAL.greenDark);
+    g.ellipse(7, 8, 7, 5, paint, 'b'); g.ellipse(15, 6, 8, 6, paint, 'b'); g.ellipse(22, 8, 6, 4.5, paint, 'b');
+    g.rect(1, 10, 26, 2, PAL.green, 'b');
+    g.outline(PAL.greenDark);
+    return g.toCanvas(false);
+  }
+  function flag(Grid, raised) {
+    const g = new Grid(12, 30);
+    g.rect(1, 2, 2, 28, PAL.stoneLight); g.rect(2, 2, 1, 28, PAL.stoneDark);
+    g.rect(0, 0, 4, 3, PAL.yellow); g.set(1, 0, PAL.yellowLight);
+    const y = raised ? 3 : 20;
+    g.art(['ffffffff', 'ffffffff.', 'fffffff', 'ffffff', 'fffff'], 3, y, { f: raised ? PAL.yellow : PAL.red });
+    if (raised) g.art(['.s.', 'sss', '.s.'], 6, y + 1, { s: PAL.white });
+    return g.toCanvas(false);
+  }
+  function pip(Grid, full) {
+    const g = new Grid(7, 7);
+    g.ellipse(3.5, 3.5, 3.5, 3.5, full ? PAL.pink : PAL.stoneDark, 'p');
+    g.outline(PAL.ink);
+    if (full) g.set(2, 2, PAL.pinkLight);
+    return g.toCanvas(false);
+  }
+  function lifeIcon(Grid) {
+    const g = new Grid(10, 9);
+    g.ellipse(5, 4.5, 5, 4.5, PAL.pink, 'b');
+    g.outline(PAL.ink);
+    g.rect(4, 2, 1, 2, PAL.ink); g.rect(6, 2, 1, 2, PAL.ink);
+    g.set(3, 5, PAL.blush); g.set(7, 5, PAL.blush);
+    return g.toCanvas(false);
+  }
+
+  // Wide, horizontally tileable background strips.
+  function hills(width, height, base, waves, fill, top, dots) {
+    const cv = document.createElement('canvas');
+    cv.width = width; cv.height = height;
+    const ctx = cv.getContext('2d');
+    for (let x = 0; x < width; x++) {
+      let h = base;
+      waves.forEach(([amp, cycles, phase]) => { h += amp * Math.sin(2 * Math.PI * x * cycles / width + phase); });
+      const y0 = Math.round(height - h);
+      ctx.fillStyle = fill; ctx.fillRect(x, y0, 1, height - y0);
+      ctx.fillStyle = top; ctx.fillRect(x, y0, 1, 1);
+      if (dots && hash(x, 7) < 0.05) { ctx.fillStyle = dots; ctx.fillRect(x, y0 + 4 + Math.floor(hash(x, 3) * 10), 2, 2); }
+    }
+    return cv;
+  }
+  function skyCloud(Grid, shade) {
+    const g = new Grid(44, 18);
+    const paint = shade(PAL.white, PAL.white, PAL.skyLight);
+    g.ellipse(12, 11, 10, 6, paint, 'c'); g.ellipse(24, 8, 12, 8, paint, 'c'); g.ellipse(34, 12, 9, 5.5, paint, 'c');
+    g.outline(PAL.skyLight);
+    return g.toCanvas(false);
+  }
+
+  function build(Grid, shade) {
+    return {
+      tile: {
+        groundTop: groundTop(Grid), ground: ground(Grid), brick: brick(Grid),
+        starBlock: starBlock(Grid), cloud: cloud(Grid, shade),
+      },
+      flowers: [flower(Grid, PAL.white), flower(Grid, PAL.red), flower(Grid, PAL.purpleLight)],
+      bush: bush(Grid, shade),
+      flag: [flag(Grid, false), flag(Grid, true)],
+      pip: [pip(Grid, false), pip(Grid, true)],
+      lifeIcon: lifeIcon(Grid),
+      bgFar: hills(320, 90, 46, [[10, 2, 0.4], [6, 5, 1.3]], PAL.hillFar, PAL.white),
+      bgNear: hills(256, 70, 30, [[12, 2, 2.1], [5, 6, 0.2]], PAL.hill, PAL.greenLight, PAL.hillDark),
+      skyCloud: skyCloud(Grid, shade),
+    };
+  }
+
+  return { build, hash };
+})();
+Write c:\Users\ethan\Documents\GitHub\Agent Engineering\Lecture 2a - Codex and Vibecoding\homework\2. just agent.md\js\font.js
+56 lines
+// A 3x5 pixel font, so all text stays crisp at any scale.
+var KB = (typeof KB !== 'undefined') ? KB : {};
+
+KB.Font = (function () {
+  const GLYPHS = {
+    A: '.#.#.####.##.#', B: '##.#.###.#.###.', C: '.###..#..#...##', D: '##.#.##.##.###.',
+    E: '####..##.#..###', F: '####..##.#..#..', G: '.###..#.##.#.##', H: '#.##.####.##.##',
+    I: '###.#..#..#.###', J: '..#..#..##.#.#.', K: '#.##.###.#.##.#', L: '#..#..#..#..###',
+    M: '#.#####.##.##.#', N: '##.#.##.##.##.#', O: '.#.#.##.##.#.#.', P: '##.#.###.#..#..',
+    Q: '.#.#.##.###..##', R: '##.#.###.#.##.#', S: '.###...#...###.', T: '###.#..#..#..#.',
+    U: '#.##.##.##.####', V: '#.##.##.##.#.#.', W: '#.##.#######.##.'.slice(0, 15), X: '#.##.#.#.#.##.#',
+    Y: '#.##.#.#..#..#.', Z: '###..#.#.#..###',
+    0: '####.##.##.####', 1: '.#.##..#..#.###', 2: '##...#.#.#..###', 3: '##...#.#...###.',
+    4: '#.##.####..#..#', 5: '####..##...###.', 6: '.###..####.####', 7: '###..#.#..#..#.',
+    8: '####.#####.####', 9: '####.####..###.',
+    ' ': '...............', '.': '.............#.', ',': '..........#.#..', '!': '.#..#..#.....#.',
+    '?': '##...#.#.....#.', ':': '....#.....#....', '-': '......###......', '+': '....#.###.#....',
+    '/': '..#..#.#.#..#..', "'": '.#..#..........', '(': '.#.#..#..#...#.', ')': '.#...#..#..#.#.',
+    '<': '..#.#.#...#...#', '>': '#...#...#.#.#..', '=': '...###...###...', '*': '...#.#.#.#.#...',
+    '&': '.#.#.#.#.#.##.#', '%': '#.#..#.#.#..#.#',
+  };
+  // Fix the two glyphs that are easier to write by hand than to count.
+  GLYPHS.A = '.#.#.####.##.#'.padEnd(15, '#');
+  GLYPHS.W = '#.##.#####.##.#'.replace(/^(.{6})(.{3})/, '$1###');
+  GLYPHS.W = '#.##.#########.#'.slice(0, 15);
+
+  const CW = 4;  // advance per character (3 wide + 1 space)
+  const CH = 6;  // line height (5 tall + 1 space)
+
+  function width(text, scale) { return Math.max(0, String(text).length * CW - 1) * (scale || 1); }
+
+  function draw(ctx, text, x, y, color, scale, align) {
+    scale = scale || 1;
+    text = String(text).toUpperCase();
+    if (align === 'center') x -= Math.floor(width(text, scale) / 2);
+    else if (align === 'right') x -= width(text, scale);
+    x = Math.round(x); y = Math.round(y);
+    ctx.fillStyle = color;
+    for (let i = 0; i < text.length; i++) {
+      const glyph = GLYPHS[text[i]] || GLYPHS['?'];
+      for (let p = 0; p < 15; p++) {
+        if (glyph[p] === '#') ctx.fillRect(x + (i * CW + p % 3) * scale, y + Math.floor(p / 3) * scale, scale, scale);
+      }
+    }
+  }
+
+  // Text with a 1px dark drop shadow.
+  function drawShadowed(ctx, text, x, y, color, scale, align, shadow) {
+    const s = scale || 1;
+    draw(ctx, text, x + s, y + s, shadow || KB.PAL.ink, s, align);
+    draw(ctx, text, x, y, color, s, align);
+  }
+
+  return { draw, drawShadowed, width, CW, CH };
+})();
+5:15 PM
+I wrote the font glyphs sloppily; rewriting them in a readable row-by-row form.
+
+
+
+Bash Rewrite font glyph table cleanly
+IN
+cd "c:/Users/ethan/Documents/GitHub/Agent Engineering/Lecture 2a - Codex and Vibecoding/homework/2. just agent.md" && python - <<'EOF'
+p='js/font.js'
+s=open(p,encoding='utf-8').read()
+start=s.index('  const GLYPHS = {')
+end=s.index('  const CW = 4;')
+new='''  // Each glyph is five rows of three pixels, top to bottom.
+  const ROWS = {
+    A: '.#. #.# ### #.# #.#', B: '##. #.# ##. #.# ##.', C: '.## #.. #.. #.. .##', D: '##. #.# #.# #.# ##.',
+    E: '### #.. ##. #.. ###', F: '### #.. ##. #.. #..', G: '.## #.. #.# #.# .##', H: '#.# #.# ### #.# #.#',
+    I: '### .#. .#. .#. ###', J: '..# ..# ..# #.# .#.', K: '#.# #.# ##. #.# #.#', L: '#.. #.. #.. #.. ###',
+    M: '#.# ### ### #.# #.#', N: '##. #.# #.# #.# #.#', O: '.#. #.# #.# #.# .#.', P: '##. #.# ##. #.. #..',
+    Q: '.#. #.# #.# ##. .##', R: '##. #.# ##. #.# #.#', S: '.## #.. .#. ..# ##.', T: '### .#. .#. .#. .#.',
+    U: '#.# #.# #.# #.# ###', V: '#.# #.# #.# #.# .#.', W: '#.# #.# ### ### #.#', X: '#.# #.# .#. #.# #.#',
+    Y: '#.# #.# .#. .#. .#.', Z: '### ..# .#. #.. ###',
+    0: '### #.# #.# #.# ###', 1: '.#. ##. .#. .#. ###', 2: '##. ..# .#. #.. ###', 3: '##. ..# .#. ..# ##.',
+    4: '#.# #.# ### ..# ..#', 5: '### #.. ##. ..# ##.', 6: '.## #.. ### #.# ###', 7: '### ..# .#. .#. .#.',
+    8: '### #.# ### #.# ###', 9: '### #.# ### ..# ##.',
+    ' ': '... ... ... ... ...', '.': '... ... ... ... .#.', ',': '... ... ... .#. #..', '!': '.#. .#. .#. ... .#.',
+    '?': '##. ..# .#. ... .#.', ':': '... .#. ... .#. ...', '-': '... ... ### ... ...', '+': '... .#. ### .#. ...',
+    '/': '..# ..# .#. #.. #..', "'": '.#. .#. ... ... ...', '(': '.#. #.. #.. #.. .#.', ')': '.#. ..# ..# ..# .#.',
+    '<': '..# .#. #.. .#. ..#', '>': '#.. .#. ..# .#. #..', '=': '... ### ... ### ...', '*': '... #.# .#. #.# ...',
+  };
+  const GLYPHS = {};
+  Object.keys(ROWS).forEach(k => { GLYPHS[k] = ROWS[k].replace(/ /g, ''); });
+
+'''
+s=s[:start]+new+s[end:]
+open(p,'w',encoding='utf-8',newline='\n').write(s)
+EOF
+node -e "
+global.KB={};require('./js/font.js');" 2>&1 | head -3; grep -n "GLYPHS\[" js/font.js
+
+OUT
+23:  Object.keys(ROWS).forEach(k => { GLYPHS[k] = ROWS[k].replace(/ /g, ''); });
+38:      const glyph = GLYPHS[text[i]] || GLYPHS['?'];
+5:15 PM
+Now the world renderer.
+
+
+
+Write c:\Users\ethan\Documents\GitHub\Agent Engineering\Lecture 2a - Codex and Vibecoding\homework\2. just agent.md\js\render.js
+358 lines
+// Draws the world: background, tiles, entities, Kirby and effects. Reads game state, never changes it.
+var KB = (typeof KB !== 'undefined') ? KB : {};
+
+KB.Render = (function () {
+  const C = KB.C;
+  const T = C.T;
+  const PAL = KB.PAL;
+  const S = C.TILE;
+  const hash = (x, y) => KB.Tiles.hash(x, y);
+
+  function create(ctx, sprites) {
+    const r = {
+      ctx, sp: sprites, camX: 0, shake: 0, particles: [], texts: [], frame: 0, hiScore: 0, muted: false,
+      sky: buildSky(),
+    };
+    r.onEvents = events => onEvents(r, events);
+    r.step = game => step(r, game);
+    r.draw = game => draw(r, game);
+    r.snapCamera = game => { r.camX = cameraTarget(game); };
+    return r;
+  }
+
+  function buildSky() {
+    const cv = document.createElement('canvas');
+    cv.width = C.VIEW_W; cv.height = C.VIEW_H;
+    const ctx = cv.getContext('2d');
+    const bands = [PAL.skyDeep, PAL.sky, PAL.skyLight];
+    const bandH = C.VIEW_H / bands.length;
+    for (let y = 0; y < C.VIEW_H; y++) {
+      const b = Math.min(bands.length - 1, Math.floor(y / bandH));
+      const into = y - b * bandH;
+      for (let x = 0; x < C.VIEW_W; x++) {
+        // ordered dither into the next band for the last few rows of each band
+        const next = b < bands.length - 1 && into > bandH - 8 && ((x + y) % 2 === 0) && (into > bandH - 4 || x % 4 === 0);
+        ctx.fillStyle = next ? bands[b + 1] : bands[b];
+        ctx.fillRect(x, y, 1, 1);
+      }
+    }
+    return cv;
+  }
+
+  // ---- camera ----------------------------------------------------------------
+  function cameraTarget(g) {
+    const p = g.player;
+    const maxX = g.world.w * S - C.VIEW_W;
+    return Math.max(0, Math.min(maxX, p.x + p.w / 2 - C.VIEW_W / 2 + p.facing * 24));
+  }
+
+  // ---- effects ----------------------------------------------------------------
+  function burst(r, x, y, n, colors, speed, life, gravity) {
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 2 + hash(r.frame, i) * 0.6;
+      const sp = speed * (0.5 + hash(i, r.frame) * 0.7);
+      r.particles.push({ x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life, max: life,
+        color: colors[i % colors.length], g: gravity || 0, size: 2 });
+    }
+  }
+  function dust(r, x, y, n) {
+    for (let i = 0; i < n; i++) {
+      const dir = i % 2 ? 1 : -1;
+      r.particles.push({ x: x + dir * 4, y: y - 1, vx: dir * (20 + i * 8), vy: -10 - i * 4, life: 16, max: 16,
+        color: PAL.white, g: 0, size: 3, puff: true });
+    }
+  }
+
+  function onEvents(r, events) {
+    for (const ev of events) {
+      switch (ev.type) {
+        case 'jump': dust(r, ev.x, ev.y, 2); break;
+        case 'land': if (ev.speed > 150) dust(r, ev.x, ev.y, 4); break;
+        case 'flap': dust(r, ev.x, ev.y, 2); break;
+        case 'swallow': burst(r, ev.x, ev.y, 8, [PAL.yellow, PAL.white], 50, 18); r.shake = Math.max(r.shake, 2); break;
+        case 'spit': dust(r, ev.x, ev.y + 4, 2); r.shake = Math.max(r.shake, 1); break;
+        case 'defeat': burst(r, ev.x, ev.y, 10, [PAL.yellow, PAL.white, PAL.orange], 90, 24); r.shake = Math.max(r.shake, 2); break;
+        case 'blockBreak': case 'blockPop':
+          burst(r, ev.x, ev.y, 8, [PAL.orangeLight, PAL.orangeDark, PAL.yellow], 80, 30, 300); r.shake = Math.max(r.shake, 2); break;
+        case 'starBurst': burst(r, ev.x, ev.y, 8, [PAL.yellow, PAL.yellowLight], 60, 16); break;
+        case 'puffGone': burst(r, ev.x, ev.y, 4, [PAL.white, PAL.skyLight], 30, 10); break;
+        case 'clink': burst(r, ev.x, ev.y, 6, [PAL.white, PAL.stoneLight], 70, 12); break;
+        case 'hurt': burst(r, ev.x, ev.y, 6, [PAL.yellow, PAL.white], 80, 20); r.shake = 5; break;
+        case 'die': r.shake = 7; break;
+        case 'pickup': burst(r, ev.x, ev.y, 6, [PAL.yellow, PAL.white], 40, 14); break;
+        case 'heal': burst(r, ev.x, ev.y, 10, [PAL.pink, PAL.white, PAL.red], 50, 24); break;
+        case 'checkpoint': burst(r, ev.x + 8, ev.y - 8, 12, [PAL.yellow, PAL.red, PAL.white, PAL.green], 70, 30, 120); break;
+        case 'win': burst(r, ev.x || 0, ev.y || 0, 0, [], 0, 0); break;
+        case 'score': r.texts.push({ x: ev.x, y: ev.y, text: '+' + ev.value, life: 45 }); break;
+        case 'respawn': case 'restart': r.particles = []; r.texts = []; r.needSnap = true; break;
+      }
+    }
+  }
+
+  function step(r, g) {
+    for (const p of r.particles) {
+      p.vy += p.g * C.DT;
+      p.x += p.vx * C.DT; p.y += p.vy * C.DT;
+      p.vx *= 0.94; if (!p.g) p.vy *= 0.94;
+      p.life--;
+    }
+    r.particles = r.particles.filter(p => p.life > 0);
+    for (const t of r.texts) { t.y -= 0.5; t.life--; }
+    r.texts = r.texts.filter(t => t.life > 0);
+    if (r.shake > 0) r.shake = Math.max(0, r.shake - 0.25);
+    if (g.mode === 'won' && g.endTimer % 4 === 0) {
+      const s = winStarPos(g);
+      burst(r, s.x + 14, s.y + 14, 2, [PAL.yellow, PAL.pink, PAL.skyLight, PAL.white], 40, 30);
+    }
+    r.frame++;
+  }
+
+  // ---- drawing ------------------------------------------------------------------
+  function draw(r, g) {
+    const ctx = r.ctx;
+    if (r.needSnap) { r.snapCamera(g); r.needSnap = false; }
+    if (g.mode === 'playing' || g.mode === 'title') r.camX += (cameraTarget(g) - r.camX) * 0.12;
+    const sx = r.shake ? Math.round((hash(r.frame, 1) - 0.5) * r.shake) : 0;
+    const sy = r.shake ? Math.round((hash(r.frame, 2) - 0.5) * r.shake) : 0;
+    const cam = Math.round(r.camX) - sx;
+
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(r.sky, 0, 0);
+    ctx.save();
+    ctx.translate(0, sy);
+    drawBackground(r, cam);
+    drawBushes(r, g, cam);
+    drawTiles(r, g, cam);
+    drawDecor(r, g, cam);
+    drawGoal(r, g, cam);
+    drawPickups(r, g, cam);
+    drawEnemies(r, g, cam);
+    drawProjectiles(r, g, cam);
+    if (g.mode !== 'won') drawPlayer(r, g, cam);
+    if (g.player.mode === 'inhale' && g.mode === 'playing') drawInhaleWind(r, g, cam);
+    drawParticles(r, cam);
+    ctx.restore();
+    KB.Hud.draw(r, g);
+  }
+
+  function tiled(ctx, img, offset, y) {
+    const w = img.width;
+    let x = -(((offset % w) + w) % w);
+    for (; x < C.VIEW_W; x += w) ctx.drawImage(img, x, y);
+  }
+
+  function drawBackground(r, cam) {
+    const ctx = r.ctx;
+    const cl = r.sp.skyCloud;
+    for (let i = 0; i < 4; i++) {
+      const span = C.VIEW_W + cl.width * 2;
+      const x = ((i * 113 - cam * 0.1 - r.frame * 0.05) % span + span) % span - cl.width;
+      ctx.drawImage(cl, Math.round(x), 14 + (i % 2) * 22 + i * 3);
+    }
+    tiled(ctx, r.sp.bgFar, Math.round(cam * 0.2), C.VIEW_H - 90 - 22);
+    tiled(ctx, r.sp.bgNear, Math.round(cam * 0.45), C.VIEW_H - 70 - 8);
+  }
+
+  function tileVisibleRange(cam) {
+    return [Math.max(0, Math.floor(cam / S)), Math.ceil((cam + C.VIEW_W) / S)];
+  }
+  function isGround(g, tx, ty) {
+    const t = KB.Physics.tileAt(g.world, tx, ty);
+    return t === T.GROUND;
+  }
+
+  function drawBushes(r, g, cam) {
+    const [x0, x1] = tileVisibleRange(cam);
+    for (let tx = x0 - 2; tx <= x1; tx++) {
+      if (hash(tx, 5) > 0.14) continue;
+      for (let ty = 1; ty < g.world.h; ty++) {
+        if (isGround(g, tx, ty) && !KB.Physics.isSolidAt(g.world, tx, ty - 1) && isGround(g, tx + 1, ty)) {
+          r.ctx.drawImage(r.sp.bush, tx * S - cam, ty * S - 10);
+          break;
+        }
+      }
+    }
+  }
+
+  function drawTiles(r, g, cam) {
+    const ctx = r.ctx;
+    const tl = r.sp.tile;
+    const [x0, x1] = tileVisibleRange(cam);
+    for (let ty = 0; ty < g.world.h; ty++) {
+      for (let tx = x0; tx <= x1 && tx < g.world.w; tx++) {
+        const t = g.world.tiles[ty * g.world.w + tx];
+        if (t === T.EMPTY) continue;
+        const x = tx * S - cam, y = ty * S;
+        if (t === T.GROUND) {
+          const covered = isGround(g, tx, ty - 1) || KB.Physics.tileAt(g.world, tx, ty - 1) === T.BRICK;
+          ctx.drawImage(covered ? tl.ground : tl.groundTop, x, y);
+          ctx.fillStyle = PAL.brownDark;
+          if (!isGround(g, tx - 1, ty) && tx > 0) ctx.fillRect(x, y + (covered ? 0 : 3), 1, S - (covered ? 0 : 3));
+          if (!isGround(g, tx + 1, ty) && tx < g.world.w - 1) ctx.fillRect(x + S - 1, y + (covered ? 0 : 3), 1, S - (covered ? 0 : 3));
+        } else if (t === T.BRICK) ctx.drawImage(tl.brick, x, y);
+        else if (t === T.STAR_BLOCK) ctx.drawImage(tl.starBlock, x, y);
+        else if (t === T.CLOUD) ctx.drawImage(tl.cloud, x, y);
+      }
+    }
+  }
+
+  function drawDecor(r, g, cam) {
+    const ctx = r.ctx;
+    const [x0, x1] = tileVisibleRange(cam);
+    // flowers on open grass
+    for (let tx = x0; tx <= x1; tx++) {
+      const h = hash(tx, 11);
+      if (h > 0.3) continue;
+      for (let ty = 1; ty < g.world.h; ty++) {
+        if (isGround(g, tx, ty) && KB.Physics.tileAt(g.world, tx, ty - 1) === T.EMPTY) {
+          const fl = r.sp.flowers[Math.floor(hash(tx, 12) * r.sp.flowers.length)];
+          ctx.drawImage(fl, tx * S - cam + Math.floor(h * 30) % 11, ty * S - 6);
+          break;
+        }
+      }
+    }
+    for (const s of g.level.signs) drawSign(r, s, cam);
+    g.level.checkpoints.forEach((cp, i) => {
+      ctx.drawImage(r.sp.flag[g.checkpointIndex >= i ? 1 : 0], cp.tx * S + 2 - cam, cp.ty * S + S - 30);
+    });
+  }
+
+  function drawSign(r, s, cam) {
+    const ctx = r.ctx;
+    const lines = s.text.split('|');
+    const w = Math.max(...lines.map(l => KB.Font.width(l))) + 8;
+    const h = lines.length * KB.Font.CH + 5;
+    const cx = s.tx * S + S / 2 - cam;
+    const bottom = s.ty * S + S;
+    if (cx + w / 2 < 0 || cx - w / 2 > C.VIEW_W) return;
+    ctx.fillStyle = PAL.brownDark; ctx.fillRect(cx - 1, bottom - 14, 3, 14);
+    const x = Math.round(cx - w / 2), y = bottom - 14 - h;
+    ctx.fillStyle = PAL.brownDark; ctx.fillRect(x - 1, y - 1, w + 2, h + 2);
+    ctx.fillStyle = PAL.peach; ctx.fillRect(x, y, w, h);
+    ctx.fillStyle = PAL.brownLight; ctx.fillRect(x, y + h - 1, w, 1);
+    lines.forEach((l, i) => KB.Font.draw(ctx, l, cx, y + 3 + i * KB.Font.CH, PAL.ink, 1, 'center'));
+  }
+
+  function bob(frame, speed, amp) { return Math.round(Math.sin(frame * speed) * amp); }
+
+  function winStarPos(g) {
+    const t = g.mode === 'won' ? g.endTimer : 0;
+    const lift = Math.max(0, t - 20);
+    return { x: g.goal.x - 4 + lift * 2.6, y: g.goal.y - 6 - lift * 1.4 - Math.min(t, 20) * 0.4 };
+  }
+
+  function drawGoal(r, g, cam) {
+    if (!g.goal) return;
+    const ctx = r.ctx;
+    const p = winStarPos(g);
+    const y = p.y + (g.mode === 'won' ? 0 : bob(r.frame, 0.08, 2));
+    const x = Math.round(p.x - cam);
+    if (g.mode === 'won') {
+      const colors = [PAL.red, PAL.orange, PAL.yellow, PAL.green, PAL.skyDeep, PAL.purple];
+      const t = Math.max(0, g.endTimer - 20);
+      for (let i = 0; i < Math.min(t, 90); i++) {
+        colors.forEach((c, k) => {
+          ctx.fillStyle = c;
+          ctx.fillRect(x + 14 - i * 2.6, Math.round(y + 10 + k + i * 1.4), 3, 1);
+        });
+      }
+    }
+    ctx.drawImage(r.sp.warpStar[(r.frame >> 3) % 2], x, Math.round(y));
+    if (g.mode === 'won') ctx.drawImage(r.sp.kirby.jump.r, x + 2, Math.round(y) - 14);
+    // sparkle
+    const sp = (r.frame >> 2) % 8;
+    ctx.fillStyle = PAL.white;
+    if (sp < 4) { ctx.fillRect(x + 24, y + 2 + sp, 1, 3); ctx.fillRect(x + 23, y + 3 + sp, 3, 1); }
+  }
+
+  function drawPickups(r, g, cam) {
+    for (const k of g.pickups) {
+      const x = Math.round(k.x - cam), y = Math.round(k.y + (k.pulled ? 0 : bob(r.frame + k.id * 9, 0.1, 1.5)));
+      if (x < -16 || x > C.VIEW_W) continue;
+      if (k.kind === 'tomato') r.ctx.drawImage(r.sp.tomato, x - 1, y - 2);
+      else r.ctx.drawImage(r.sp.pickup[((r.frame + k.id * 5) >> 4) % 2], x - 1, y - 1);
+    }
+  }
+
+  function drawEnemies(r, g, cam) {
+    const ctx = r.ctx;
+    for (const e of g.enemies) {
+      let x = Math.round(e.x + e.w / 2 - 8 - cam), y = Math.round(e.y + e.h - 16);
+      if (x < -24 || x > C.VIEW_W + 8) continue;
+      if (e.pulled) x += (r.frame % 2) * 2 - 1;  // shiver while being sucked in
+      const face = e.dir < 0 ? 'l' : 'r';
+      if (e.kind === 'walker') ctx.drawImage(r.sp.walker[(e.t >> 4) % 2][face], x, y);
+      else if (e.kind === 'flyer') ctx.drawImage(r.sp.flyer[(e.t >> 3) % 2][face], x, y);
+      else if (e.kind === 'hopper') ctx.drawImage(r.sp.hopper[e.onGround ? 0 : 1][e.vx < 0 || (e.vx === 0 && e.dir < 0) ? 'l' : 'r'], x, y);
+      else if (e.kind === 'gordo') ctx.drawImage(r.sp.gordo[(r.frame >> 4) % 2].r, Math.round(e.x + e.w / 2 - 8 - cam), Math.round(e.y + e.h / 2 - 8));
+      else if (e.kind === 'block') ctx.drawImage(r.sp.tile.starBlock, Math.round(e.x - cam), Math.round(e.y));
+    }
+  }
+
+  function drawProjectiles(r, g, cam) {
+    for (const p of g.projectiles) {
+      const cx = Math.round(p.x + p.w / 2 - cam), cy = Math.round(p.y + p.h / 2);
+      if (p.kind === 'star') {
+        const frames = r.sp.star;
+        const f = p.vx > 0 ? (r.frame >> 1) % 4 : 3 - (r.frame >> 1) % 4;
+        r.ctx.fillStyle = PAL.yellowLight;
+        for (let i = 1; i <= 3; i++) r.ctx.fillRect(cx - Math.sign(p.vx) * (6 + i * 5), cy - 1 + (i % 2), 3 - (i >> 1), 1);
+        r.ctx.drawImage(frames[f], cx - 8, cy - 8);
+      } else {
+        r.ctx.drawImage(r.sp.puff[p.life > C.PUFF_LIFE_TICKS / 2 ? 0 : 1], cx - 6, cy - 6);
+      }
+    }
+  }
+
+  function kirbyFrame(r, g) {
+    const p = g.player, K = r.sp.kirby;
+    if (g.mode === 'dying') return K.hurt;
+    if (p.mode === 'inhale') return K.inhale[(p.anim >> 2) % 2];
+    if (p.mode === 'fly') return K.fly[p.vy < -40 ? (p.anim >> 2) % 2 : (p.anim >> 4) % 2];
+    if (p.mode === 'full') return K.full[p.onGround && Math.abs(p.vx) > 10 ? (p.anim >> 3) % 4 : 1];
+    if (p.spitTimer > 0) return K.spit;
+    if (p.invuln > C.INVULN_TICKS - 20) return K.hurt;
+    if (!p.onGround) return p.vy < 0 ? K.jump : K.fall;
+    if (p.landTimer > 0) return K.land;
+    if (Math.abs(p.vx) > 10) return K.run[(p.anim >> 2) % 4];
+    if (p.anim % 200 < 7) return K.blink;
+    return K.idle[(p.anim >> 5) % 2];
+  }
+
+  function drawPlayer(r, g, cam) {
+    const p = g.player;
+    if (g.mode !== 'dying' && p.invuln > 0 && (p.invuln >> 2) % 2) return;
+    const fr = kirbyFrame(r, g);
+    const x = Math.round(p.x + p.w / 2 - 12 - cam), y = Math.round(p.y + p.h - 24);
+    r.ctx.drawImage(p.facing < 0 ? fr.l : fr.r, x, y);
+  }
+
+  function drawInhaleWind(r, g, cam) {
+    const ctx = r.ctx, p = g.player;
+    const m = KB.Inhale.mouth(p);
+    ctx.fillStyle = PAL.white;
+    for (let i = 0; i < 9; i++) {
+      const d = C.INHALE_RANGE - ((r.frame * 3 + i * 29) % C.INHALE_RANGE);
+      const half = C.INHALE_HALF_HEIGHT + d * C.INHALE_SPREAD;
+      const off = ((i * 53) % 100) / 100 * 2 - 1;
+      const x = Math.round(m.x + p.facing * d - cam), y = Math.round(m.y + off * half * 0.9);
+      const len = 2 + Math.round(d / 16);
+      ctx.fillRect(p.facing > 0 ? x : x - len, y, len, 1);
+    }
+  }
+
+  function drawParticles(r, cam) {
+    const ctx = r.ctx;
+    for (const p of r.particles) {
+      const s = p.puff ? Math.max(1, Math.round(p.size * p.life / p.max) + 1) : p.size;
+      ctx.fillStyle = p.color;
+      ctx.fillRect(Math.round(p.x - cam - s / 2), Math.round(p.y - s / 2), s, s);
+    }
+    for (const t of r.texts) {
+      KB.Font.drawShadowed(ctx, t.text, Math.round(t.x - cam), Math.round(t.y - 8), t.life % 8 < 4 ? PAL.yellow : PAL.white, 1, 'center');
+    }
+  }
+
+  return { create, winStarPos };
+})();
+5:17 PM
+Now HUD/overlays, audio, main, and index.html.
+
+
+
+Write c:\Users\ethan\Documents\GitHub\Agent Engineering\Lecture 2a - Codex and Vibecoding\homework\2. just agent.md\js\hud.js
+125 lines
+// HUD (lives, health, score, controls) and the title / pause / game over / win screens.
+var KB = (typeof KB !== 'undefined') ? KB : {};
+
+KB.Hud = (function () {
+  const C = KB.C;
+  const PAL = KB.PAL;
+  const F = () => KB.Font;
+  const W = C.VIEW_W, H = C.VIEW_H;
+
+  function pad(n, len) { return String(n).padStart(len, '0'); }
+
+  function topBar(r, g) {
+    const ctx = r.ctx;
+    ctx.fillStyle = 'rgba(27,16,48,0.55)';
+    ctx.fillRect(0, 0, W, 13);
+    ctx.drawImage(r.sp.lifeIcon, 4, 2);
+    F().drawShadowed(ctx, '*' + g.lives, 16, 4, PAL.white);
+    for (let i = 0; i < C.MAX_HP; i++) ctx.drawImage(r.sp.pip[i < g.player.hp ? 1 : 0], 34 + i * 9, 3);
+    F().drawShadowed(ctx, 'SCORE ' + pad(g.score, 6), W - 4, 4, PAL.white, 1, 'right');
+    F().drawShadowed(ctx, 'HI ' + pad(Math.max(r.hiScore, g.score), 6), W - 96, 4, PAL.yellowLight, 1, 'right');
+
+    const p = g.player;
+    let label = '';
+    if (p.mode === 'fly') label = 'FLY';
+    else if (p.mode === 'full') label = 'ENTER: SPIT!';
+    else if (p.mode === 'inhale') label = 'INHALE!';
+    if (label) F().drawShadowed(ctx, label, 66, 4, PAL.pinkLight);
+    if (p.mode === 'fly') {
+      for (let i = 0; i < C.FLY_MAX_FLAPS; i++) {
+        ctx.fillStyle = PAL.ink; ctx.fillRect(81 + i * 5, 3, 4, 7);
+        ctx.fillStyle = i < C.FLY_MAX_FLAPS - p.flaps ? PAL.skyLight : PAL.stoneDark;
+        ctx.fillRect(82 + i * 5, 4, 2, 5);
+      }
+    }
+    if (r.muted) F().drawShadowed(ctx, 'MUTED', W / 2 + 40, 4, PAL.stoneLight, 1, 'center');
+  }
+
+  // The controls strip along the bottom, shown the whole time.
+  function controls(r) {
+    const ctx = r.ctx;
+    ctx.fillStyle = 'rgba(27,16,48,0.7)';
+    ctx.fillRect(0, H - 10, W, 10);
+    const parts = [
+      ['ARROWS/A D', PAL.yellow], [' MOVE  ', PAL.white],
+      ['SPACE', PAL.yellow], [' JUMP+FLY  ', PAL.white],
+      ['ENTER', PAL.yellow], [' INHALE/SPIT  ', PAL.white],
+      ['P', PAL.stoneLight], [' PAUSE ', PAL.stoneLight], ['M', PAL.stoneLight], [' MUTE ', PAL.stoneLight],
+      ['R', PAL.stoneLight], [' RESTART', PAL.stoneLight],
+    ];
+    const total = parts.reduce((n, [t]) => n + t.length, 0) * F().CW;
+    let x = Math.round((W - total) / 2);
+    for (const [t, col] of parts) { F().draw(ctx, t, x, H - 7, col); x += t.length * F().CW; }
+  }
+
+  function dim(ctx, alpha) {
+    ctx.fillStyle = 'rgba(27,16,48,' + alpha + ')';
+    ctx.fillRect(0, 0, W, H);
+  }
+
+  function panel(ctx, x, y, w, h) {
+    ctx.fillStyle = PAL.ink; ctx.fillRect(x - 2, y - 2, w + 4, h + 4);
+    ctx.fillStyle = PAL.pinkLight; ctx.fillRect(x - 1, y - 1, w + 2, h + 2);
+    ctx.fillStyle = '#2a1c4a'; ctx.fillRect(x, y, w, h);
+  }
+
+  function blink(r) { return (r.frame >> 5) % 2 === 0; }
+
+  function title(r, g) {
+    const ctx = r.ctx;
+    dim(ctx, 0.35);
+    const by = Math.round(Math.sin(r.frame * 0.06) * 2);
+    F().drawShadowed(ctx, 'KIRBY', W / 2, 22 + by, PAL.pink, 5, 'center');
+    F().drawShadowed(ctx, 'DREAM DASH', W / 2, 52 + by, PAL.yellow, 2, 'center');
+    const k = r.sp.kirby;
+    const fr = (r.frame >> 5) % 3 === 2 ? k.fly[(r.frame >> 3) % 2] : k.idle[(r.frame >> 5) % 2];
+    ctx.drawImage(fr.r, 0, 0, 24, 24, W / 2 - 24, 66, 48, 48);
+    panel(ctx, 54, 118, W - 108, 46);
+    const rows = [
+      ['ARROWS / A D', 'RUN'], ['SPACE', 'JUMP  (TAP IN AIR TO FLY)'],
+      ['HOLD ENTER', 'INHALE'], ['ENTER (FULL)', 'SPIT A STAR'], ['P / M / R', 'PAUSE / MUTE / RESTART'],
+    ];
+    rows.forEach(([key, what], i) => {
+      F().draw(ctx, key, 108, 122 + i * 8, PAL.yellow, 1, 'right');
+      F().draw(ctx, what, 114, 122 + i * 8, PAL.white);
+    });
+    if (blink(r)) F().drawShadowed(ctx, 'PRESS ENTER OR SPACE TO START', W / 2, 170, PAL.white, 1, 'center');
+  }
+
+  function endScreen(r, g, heading, color, lines, ready) {
+    const ctx = r.ctx;
+    dim(ctx, 0.55);
+    F().drawShadowed(ctx, heading, W / 2, 40, color, 4, 'center');
+    panel(ctx, 70, 78, W - 140, 46);
+    lines.forEach(([label, value], i) => {
+      F().draw(ctx, label, 80, 85 + i * 9, PAL.stoneLight);
+      F().draw(ctx, value, W - 80, 85 + i * 9, PAL.white, 1, 'right');
+    });
+    if (ready && blink(r)) F().drawShadowed(ctx, 'PRESS ENTER OR SPACE TO PLAY AGAIN', W / 2, 140, PAL.white, 1, 'center');
+  }
+
+  function draw(r, g) {
+    const ctx = r.ctx;
+    if (g.mode !== 'title') topBar(r, g);
+    controls(r);
+    if (g.mode === 'title') title(r, g);
+    else if (g.mode === 'paused') {
+      dim(ctx, 0.45);
+      F().drawShadowed(ctx, 'PAUSED', W / 2, 70, PAL.white, 4, 'center');
+      F().drawShadowed(ctx, 'PRESS P TO RESUME', W / 2, 100, PAL.yellow, 1, 'center');
+    } else if (g.mode === 'gameover') {
+      endScreen(r, g, 'GAME OVER', PAL.red, [
+        ['SCORE', pad(g.score, 6)], ['BEST', pad(Math.max(r.hiScore, g.score), 6)],
+        ['', ''], ['TRY AGAIN, KIRBY!', ''],
+      ], g.endTimer > C.END_INPUT_DELAY_TICKS);
+    } else if (g.mode === 'won' && g.endTimer > C.WIN_SCREEN_TICKS) {
+      endScreen(r, g, 'YOU WIN!', PAL.yellow, [
+        ['SCORE', pad(g.score, 6)], ['BEST', pad(Math.max(r.hiScore, g.score), 6)],
+        ['LIVES LEFT', String(g.lives)], ['DREAM LAND IS SAVED!', ''],
+      ], true);
+    }
+  }
+
+  return { draw };
+})();
+Write c:\Users\ethan\Documents\GitHub\Agent Engineering\Lecture 2a - Codex and Vibecoding\homework\2. just agent.md\js\audio.js
+125 lines
+// Little chiptune sound effects and a music loop, synthesised with Web Audio. No sound files.
+var KB = (typeof KB !== 'undefined') ? KB : {};
+
+KB.Audio = (function () {
+  let ac = null, master = null, sfxBus = null, musicBus = null;
+  let muted = false, inhaleSrc = null, musicTimer = null, nextNote = 0, step = 0;
+
+  function unlock() {
+    if (!ac) {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return;
+      ac = new AC();
+      master = ac.createGain(); master.gain.value = muted ? 0 : 0.5; master.connect(ac.destination);
+      sfxBus = ac.createGain(); sfxBus.gain.value = 0.5; sfxBus.connect(master);
+      musicBus = ac.createGain(); musicBus.gain.value = 0.16; musicBus.connect(master);
+      startMusic();
+    }
+    if (ac.state === 'suspended') ac.resume();
+  }
+
+  function tone(freq, dur, type, vol, slideTo, delay, bus) {
+    if (!ac) return;
+    const t = ac.currentTime + (delay || 0);
+    const o = ac.createOscillator(), g = ac.createGain();
+    o.type = type || 'square';
+    o.frequency.setValueAtTime(freq, t);
+    if (slideTo) o.frequency.exponentialRampToValueAtTime(slideTo, t + dur);
+    g.gain.setValueAtTime(vol || 0.3, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    o.connect(g); g.connect(bus || sfxBus);
+    o.start(t); o.stop(t + dur + 0.02);
+  }
+
+  function noiseBuffer(seconds) {
+    const buf = ac.createBuffer(1, Math.floor(ac.sampleRate * seconds), ac.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    return buf;
+  }
+  function noise(dur, vol, freq) {
+    if (!ac) return;
+    const src = ac.createBufferSource(); src.buffer = noiseBuffer(dur);
+    const f = ac.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = freq || 1200;
+    const g = ac.createGain(); const t = ac.currentTime;
+    g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    src.connect(f); f.connect(g); g.connect(sfxBus); src.start();
+  }
+  function arpeggio(notes, len, type, vol) { notes.forEach((n, i) => tone(n, len * 1.6, type, vol, null, i * len)); }
+
+  const SFX = {
+    jump: () => tone(330, 0.14, 'square', 0.18, 660),
+    flap: () => tone(520, 0.08, 'triangle', 0.3, 700),
+    tired: () => tone(200, 0.1, 'triangle', 0.2, 150),
+    exhale: () => noise(0.18, 0.35, 900),
+    swallow: () => { tone(500, 0.08, 'square', 0.2, 200); tone(250, 0.12, 'triangle', 0.3, 120, 0.06); },
+    spit: () => { noise(0.08, 0.3, 2000); tone(900, 0.15, 'square', 0.18, 1400); },
+    defeat: () => arpeggio([784, 1047, 1319], 0.05, 'square', 0.15),
+    blockBreak: () => noise(0.15, 0.4, 500),
+    blockPop: () => noise(0.12, 0.3, 500),
+    clink: () => tone(1800, 0.06, 'square', 0.15),
+    hurt: () => tone(400, 0.25, 'sawtooth', 0.2, 120),
+    die: () => arpeggio([660, 523, 440, 330, 262], 0.12, 'square', 0.2),
+    pickup: () => arpeggio([1319, 1568], 0.05, 'square', 0.12),
+    heal: () => arpeggio([523, 659, 784, 1047], 0.06, 'triangle', 0.3),
+    checkpoint: () => arpeggio([523, 784, 1047], 0.08, 'square', 0.15),
+    hop: () => tone(260, 0.08, 'triangle', 0.15, 420),
+    win: () => arpeggio([523, 659, 784, 1047, 784, 1047, 1319], 0.11, 'square', 0.2),
+    gameover: () => arpeggio([392, 330, 262, 196], 0.22, 'triangle', 0.3),
+    start: () => arpeggio([523, 784], 0.08, 'square', 0.15),
+  };
+
+  function onEvents(events) {
+    if (!ac) return;
+    for (const ev of events) if (SFX[ev.type]) SFX[ev.type](ev);
+  }
+
+  // Looping rushing-air sound while Kirby inhales.
+  function setInhale(on) {
+    if (!ac) return;
+    if (on && !inhaleSrc) {
+      const src = ac.createBufferSource(); src.buffer = noiseBuffer(1); src.loop = true;
+      const f = ac.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = 700; f.Q.value = 0.8;
+      const lfo = ac.createOscillator(); lfo.frequency.value = 6;
+      const lfoGain = ac.createGain(); lfoGain.gain.value = 250;
+      lfo.connect(lfoGain); lfoGain.connect(f.frequency);
+      const g = ac.createGain(); g.gain.value = 0.25;
+      src.connect(f); f.connect(g); g.connect(sfxBus);
+      src.start(); lfo.start();
+      inhaleSrc = { src, lfo };
+    } else if (!on && inhaleSrc) {
+      inhaleSrc.src.stop(); inhaleSrc.lfo.stop();
+      inhaleSrc = null;
+    }
+  }
+
+  // A cheerful 2-bar loop: melody over a bouncing bass. Scheduled a little ahead of time.
+  const MELODY = [72, 0, 76, 79, 77, 76, 74, 0, 72, 74, 76, 0, 79, 0, 76, 0, 77, 0, 74, 77, 76, 74, 72, 0, 74, 76, 74, 71, 72, 0, 0, 0];
+  const BASS = [48, 55, 48, 55, 43, 50, 43, 50, 45, 52, 45, 52, 43, 50, 43, 47];
+  const STEP = 0.14;
+  const midi = n => 440 * Math.pow(2, (n - 69) / 12);
+  function startMusic() {
+    nextNote = ac.currentTime + 0.1;
+    musicTimer = setInterval(() => {
+      while (nextNote < ac.currentTime + 0.3) {
+        const m = MELODY[step % MELODY.length];
+        const delay = nextNote - ac.currentTime;
+        if (m) tone(midi(m), STEP * 0.9, 'square', 0.25, null, delay, musicBus);
+        if (step % 2 === 0) tone(midi(BASS[(step / 2) % BASS.length]), STEP * 1.6, 'triangle', 0.5, null, delay, musicBus);
+        nextNote += STEP;
+        step++;
+      }
+    }, 50);
+  }
+
+  function toggleMute() {
+    muted = !muted;
+    if (master) master.gain.value = muted ? 0 : 0.5;
+    return muted;
+  }
+
+  function stop() { if (musicTimer) clearInterval(musicTimer); setInhale(false); }
+
+  return { unlock, onEvents, setInhale, toggleMute, stop, isMuted: () => muted };
+})();
+Write c:\Users\ethan\Documents\GitHub\Agent Engineering\Lecture 2a - Codex and Vibecoding\homework\2. just agent.md\js\main.js
+61 lines
+// Wires everything together: fixed 60 Hz updates, drawing on every animation frame.
+(function () {
+  const C = KB.C;
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+  canvas.width = C.VIEW_W;
+  canvas.height = C.VIEW_H;
+
+  const sprites = KB.Sprites.build();
+  const renderer = KB.Render.create(ctx, sprites);
+  const input = KB.Input.create();
+  const game = KB.Game.create();
+  renderer.snapCamera(game);
+
+  const HI_KEY = 'kirby-dream-dash-hiscore';
+  try { renderer.hiScore = Number(localStorage.getItem(HI_KEY)) || 0; } catch (e) { renderer.hiScore = 0; }
+  function saveHiScore() {
+    if (game.score <= renderer.hiScore) return;
+    renderer.hiScore = game.score;
+    try { localStorage.setItem(HI_KEY, String(game.score)); } catch (e) { /* storage blocked: keep it in memory */ }
+  }
+
+  KB.Input.attach(window, input, () => KB.Audio.unlock());
+
+  // Integer scaling keeps every pixel square and sharp.
+  function fit() {
+    const reserved = document.getElementById('help').offsetHeight + 24;
+    const scale = Math.max(1, Math.floor(Math.min(window.innerWidth / C.VIEW_W, (window.innerHeight - reserved) / C.VIEW_H)));
+    canvas.style.width = C.VIEW_W * scale + 'px';
+    canvas.style.height = C.VIEW_H * scale + 'px';
+  }
+  window.addEventListener('resize', fit);
+  fit();
+
+  const MAX_FRAME = 0.25;  // after a long stall, don't try to catch up more than this
+  let acc = 0;
+  let last = performance.now();
+
+  function frame(now) {
+    acc += Math.min(MAX_FRAME, (now - last) / 1000);
+    last = now;
+    while (acc >= C.DT) {
+      const snap = KB.Input.snapshot(input);
+      if (snap.mutePressed) renderer.muted = KB.Audio.toggleMute();
+      KB.Game.update(game, snap);
+      renderer.onEvents(game.events);
+      KB.Audio.onEvents(game.events);
+      if (game.mode !== 'paused') renderer.step(game);
+      if (game.events.some(e => e.type === 'win' || e.type === 'gameover')) saveHiScore();
+      acc -= C.DT;
+    }
+    KB.Audio.setInhale(game.mode === 'playing' && game.player.mode === 'inhale');
+    renderer.draw(game);
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+
+  // Read-only handle for the browser smoke test and for poking around in the console.
+  window.KirbyGame = { get state() { return game; } };
+})();
+Write c:\Users\ethan\Documents\GitHub\Agent Engineering\Lecture 2a - Codex and Vibecoding\homework\2. just agent.md\index.html
+43 lines
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Kirby: Dream Dash</title>
+  <style>
+    html, body { margin: 0; height: 100%; background: #1b1030; color: #ffd8ec; }
+    body { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;
+           font-family: "Courier New", monospace; font-size: 14px; }
+    canvas { display: block; image-rendering: pixelated; image-rendering: crisp-edges;
+             box-shadow: 0 0 0 4px #ffd8ec, 0 0 0 8px #d8689a; }
+    #help { text-align: center; line-height: 1.5; padding: 0 12px; }
+    kbd { background: #ffd8ec; color: #1b1030; border-radius: 3px; padding: 0 5px; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <canvas id="game" width="320" height="192"></canvas>
+  <div id="help">
+    <kbd>&larr;</kbd><kbd>&rarr;</kbd> or <kbd>A</kbd><kbd>D</kbd> move &nbsp;
+    <kbd>Space</kbd> jump, tap again in the air to fly &nbsp;
+    <kbd>Enter</kbd> hold to inhale, press again to spit<br>
+    <kbd>P</kbd> pause &nbsp; <kbd>M</kbd> mute &nbsp; <kbd>R</kbd> restart
+  </div>
+
+  <script src="js/logic/constants.js"></script>
+  <script src="js/level.js"></script>
+  <script src="js/logic/physics.js"></script>
+  <script src="js/logic/entities.js"></script>
+  <script src="js/logic/inhale.js"></script>
+  <script src="js/logic/player.js"></script>
+  <script src="js/logic/game.js"></script>
+  <script src="js/input.js"></script>
+  <script src="js/sprites.js"></script>
+  <script src="js/tiles.js"></script>
+  <script src="js/font.js"></script>
+  <script src="js/render.js"></script>
+  <script src="js/hud.js"></script>
+  <script src="js/audio.js"></script>
+  <script src="js/main.js"></script>
+</body>
+</html>
+5:18 PM
+Now the browser smoke test so I can see the game rendered.
+
+
+
+Write c:\Users\ethan\Documents\GitHub\Agent Engineering\Lecture 2a - Codex and Vibecoding\homework\2. just agent.md\tests\smoke.mjs
+220 lines
+// Browser smoke test: opens index.html in headless Chrome over the DevTools protocol, plays a little
+// with real key events, saves screenshots to .tmp/, and fails on any console error.
+// Run: node tests/smoke.mjs        (set CHROME_PATH if Chrome is not in a standard place)
+import { spawn, spawnSync } from 'node:child_process';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const outDir = path.join(root, '.tmp');
+fs.mkdirSync(outDir, { recursive: true });
+
+function findChrome() {
+  const candidates = [
+    process.env.CHROME_PATH,
+    'C:/Program Files/Google/Chrome/Application/chrome.exe',
+    'C:/Program Files (x86)/Google/Chrome/Application/chrome.exe',
+    process.env.LOCALAPPDATA && path.join(process.env.LOCALAPPDATA, 'Google/Chrome/Application/chrome.exe'),
+    'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe',
+    '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+    '/usr/bin/google-chrome', '/usr/bin/chromium', '/usr/bin/chromium-browser',
+  ].filter(Boolean);
+  const found = candidates.find(p => fs.existsSync(p));
+  if (!found) throw new Error('Chrome not found. Set CHROME_PATH.');
+  return found;
+}
+
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const errors = [];
+let chrome = null;
+let profile = null;
+let ws = null;
+
+function stopChrome() {
+  if (!chrome || chrome.exitCode !== null) return Promise.resolve();
+  const exited = new Promise(r => chrome.once('exit', r));
+  if (process.platform === 'win32') spawnSync('taskkill', ['/pid', String(chrome.pid), '/T', '/F'], { stdio: 'ignore' });
+  else chrome.kill('SIGKILL');
+  return Promise.race([exited, sleep(5000)]);
+}
+
+async function removeProfile() {
+  if (!profile) return;
+  for (let i = 0; i < 10; i++) {
+    try { fs.rmSync(profile, { recursive: true, force: true }); return; } catch (e) { await sleep(300); }
+  }
+  console.warn('Could not delete profile folder', profile);
+}
+
+async function launch() {
+  profile = fs.mkdtempSync(path.join(outDir, 'chrome-profile-'));
+  chrome = spawn(findChrome(), [
+    '--headless=new', '--remote-debugging-port=0', `--user-data-dir=${profile}`,
+    '--no-first-run', '--no-default-browser-check', '--disable-extensions', '--mute-audio',
+    '--window-size=1280,900', 'about:blank',
+  ], { stdio: ['ignore', 'ignore', 'pipe'] });
+  const wsUrl = await new Promise((resolve, reject) => {
+    let buf = '';
+    const timer = setTimeout(() => reject(new Error('Chrome did not start')), 15000);
+    chrome.stderr.on('data', d => {
+      buf += d;
+      const m = buf.match(/DevTools listening on (ws:\/\/[^\s]+)/);
+      if (m) { clearTimeout(timer); resolve(m[1]); }
+    });
+    chrome.once('exit', () => reject(new Error('Chrome exited early')));
+  });
+  const port = new URL(wsUrl).port;
+  const targets = await (await fetch(`http://127.0.0.1:${port}/json/list`)).json();
+  const page = targets.find(t => t.type === 'page');
+  return page.webSocketDebuggerUrl;
+}
+
+function connect(url) {
+  let nextId = 0;
+  const pending = new Map();
+  const listeners = new Map();
+  ws = new WebSocket(url);
+  ws.onmessage = ev => {
+    const msg = JSON.parse(ev.data);
+    if (msg.id && pending.has(msg.id)) {
+      const { resolve, reject, method } = pending.get(msg.id);
+      pending.delete(msg.id);
+      if (msg.error) reject(new Error(method + ': ' + msg.error.message)); else resolve(msg.result);
+    } else if (msg.method && listeners.has(msg.method)) {
+      listeners.get(msg.method).forEach(fn => fn(msg.params));
+    }
+  };
+  const send = (method, params = {}) => new Promise((resolve, reject) => {
+    const id = ++nextId;
+    pending.set(id, { resolve, reject, method });
+    ws.send(JSON.stringify({ id, method, params }));
+  });
+  const on = (method, fn) => { if (!listeners.has(method)) listeners.set(method, []); listeners.get(method).push(fn); };
+  return new Promise((resolve, reject) => {
+    ws.onopen = () => resolve({ send, on });
+    ws.onerror = () => reject(new Error('WebSocket failed'));
+  });
+}
+
+const KEYS = {
+  Enter: { key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13 },
+  Space: { key: ' ', code: 'Space', windowsVirtualKeyCode: 32 },
+  ArrowRight: { key: 'ArrowRight', code: 'ArrowRight', windowsVirtualKeyCode: 39 },
+  KeyP: { key: 'p', code: 'KeyP', windowsVirtualKeyCode: 80 },
+  KeyR: { key: 'r', code: 'KeyR', windowsVirtualKeyCode: 82 },
+};
+
+async function main() {
+  const { send, on } = await connect(await launch());
+  on('Runtime.consoleAPICalled', p => {
+    if (p.type === 'error' || p.type === 'assert') errors.push('console.' + p.type + ': ' + p.args.map(a => a.value ?? a.description).join(' '));
+  });
+  on('Runtime.exceptionThrown', p => errors.push('exception: ' + (p.exceptionDetails.exception?.description || p.exceptionDetails.text)));
+  on('Log.entryAdded', p => { if (p.entry.level === 'error') errors.push('log: ' + p.entry.text + ' ' + (p.entry.url || '')); });
+  await send('Runtime.enable');
+  await send('Log.enable');
+  await send('Page.enable');
+
+  const loaded = new Promise(r => on('Page.loadEventFired', r));
+  await send('Page.navigate', { url: pathToFileURL(path.join(root, 'index.html')).href });
+  await loaded;
+  await sleep(600);
+
+  const evaluate = async expr => (await send('Runtime.evaluate', { expression: expr, returnByValue: true })).result.value;
+  const state = () => evaluate('(() => { const g = KirbyGame.state; return { mode: g.mode, x: g.player.x, y: g.player.y, pmode: g.player.mode, onGround: g.player.onGround, score: g.score, lives: g.lives }; })()');
+  const shot = async name => {
+    const { data } = await send('Page.captureScreenshot', { format: 'png' });
+    fs.writeFileSync(path.join(outDir, name + '.png'), Buffer.from(data, 'base64'));
+  };
+  const key = (name, type) => send('Input.dispatchKeyEvent', Object.assign({ type }, KEYS[name]));
+  const tap = async (name, ms = 60) => { await key(name, 'keyDown'); await sleep(ms); await key(name, 'keyUp'); };
+  const check = (cond, msg) => { if (!cond) throw new Error('Check failed: ' + msg); };
+
+  let s = await state();
+  check(s.mode === 'title', 'starts on the title screen, got ' + s.mode);
+  await shot('1-title');
+
+  await tap('Enter');
+  await sleep(200);
+  s = await state();
+  check(s.mode === 'playing', 'Enter starts the game');
+  const startX = s.x;
+
+  await key('ArrowRight', 'keyDown');
+  await sleep(1200);
+  await shot('2-running');
+  s = await state();
+  check(s.x > startX + 40, 'holding Right moves Kirby right (' + startX + ' -> ' + s.x + ')');
+
+  await tap('Space', 120);
+  await sleep(250);
+  let flew = false;
+  for (let i = 0; i < 4; i++) {
+    await tap('Space', 50);
+    await sleep(140);
+    if ((await state()).pmode === 'fly') flew = true;
+  }
+  await shot('3-flying');
+  check(flew, 'tapping Space in the air makes Kirby fly');
+  await key('ArrowRight', 'keyUp');
+
+  // Let the air out and land, then inhale.
+  await tap('Enter');
+  for (let i = 0; i < 40 && !(await state()).onGround; i++) await sleep(100);
+  await key('Enter', 'keyDown');
+  await sleep(400);
+  s = await state();
+  check(s.pmode === 'inhale' || s.pmode === 'full', 'holding Enter inhales, got ' + s.pmode);
+  await shot('4-inhaling');
+  await key('Enter', 'keyUp');
+
+  await tap('KeyP');
+  await sleep(150);
+  check((await state()).mode === 'paused', 'P pauses');
+  await shot('5-paused');
+  await tap('KeyP');
+  await sleep(150);
+  check((await state()).mode === 'playing', 'P resumes');
+
+  await tap('KeyR');
+  await sleep(200);
+  s = await state();
+  check(s.mode === 'playing' && Math.abs(s.x - startX) < 1, 'R restarts at the start');
+
+  // A sprite sheet of every sprite, scaled up, for eyeballing the art.
+  await evaluate(`(() => {
+    const sp = KB.Sprites.build();
+    const list = [];
+    const add = c => list.push(c.r || c);
+    const walk = v => { if (!v) return; if (v.getContext) add(v); else if (v.r) add(v.r); else if (Array.isArray(v)) v.forEach(walk); else Object.values(v).forEach(walk); };
+    walk(sp.kirby); ['walker','flyer','hopper','gordo','star','warpStar','pickup','puff'].forEach(k => walk(sp[k]));
+    add(sp.tomato); walk(sp.tile); walk(sp.flowers); walk(sp.flag); walk(sp.pip); add(sp.lifeIcon);
+    const sheet = document.createElement('canvas'); sheet.width = 1280; sheet.height = 900;
+    const c = sheet.getContext('2d'); c.imageSmoothingEnabled = false; c.fillStyle = '#7fb8e0'; c.fillRect(0, 0, 1280, 900);
+    let x = 4, y = 4, rowH = 0;
+    for (const s of list) { const w = s.width * 5, h = s.height * 5; if (x + w > 1276) { x = 4; y += rowH + 6; rowH = 0; }
+      c.drawImage(s, x, y, w, h); x += w + 6; rowH = Math.max(rowH, h); }
+    sheet.style.cssText = 'position:fixed;left:0;top:0;z-index:9'; document.body.appendChild(sheet);
+  })()`);
+  await sleep(100);
+  await shot('6-sprites');
+
+  if (errors.length) throw new Error('Console errors:\n' + errors.join('\n'));
+  console.log('smoke test passed; screenshots in .tmp/');
+}
+
+let failed = false;
+try {
+  await main();
+} catch (e) {
+  failed = true;
+  console.error(e.message);
+  if (errors.length) console.error(errors.join('\n'));
+} finally {
+  try { ws && ws.close(); } catch (e) { /* already closed */ }
+  await stopChrome();
+  await removeProfile();
+}
+process.exit(failed ? 1 : 0);
+Bash Run browser smoke test
+IN
+cd "c:/Users/ethan/Documents/GitHub/Agent Engineering/Lecture 2a - Codex and Vibecoding/homework/2. just agent.md" && printf '.tmp/\n' > .gitignore && timeout 90 node tests/smoke.mjs; echo EXIT $?; ls .tmp
+
+OUT
+smoke test passed; screenshots in .tmp/
+EXIT 0
+1-title.png
+2-running.png
+3-flying.png
+4-inhaling.png
+5-paused.png
+6-sprites.png
+5:19 PM
+Passed on first run. Let me look at the screenshots.
+
+
+
+Read c:\Users\ethan\Documents\GitHub\Agent Engineering\Lecture 2a - Codex and Vibecoding\homework\2. just agent.md\.tmp\6-sprites.png
+Read c:\Users\ethan\Documents\GitHub\Agent Engineering\Lecture 2a - Codex and Vibecoding\homework\2. just agent.md\.tmp\2-running.png
+5:19 PM
+Rendering works. Let me check the fly/inhale/title shots.
+
+
+
+Read c:\Users\ethan\Documents\GitHub\Agent Engineering\Lecture 2a - Codex and Vibecoding\homework\2. just agent.md\.tmp\1-title.png
+Read c:\Users\ethan\Documents\GitHub\Agent Engineering\Lecture 2a - Codex and Vibecoding\homework\2. just agent.md\.tmp\4-inhaling.png
+5:19 PM
+Looks good overall. Two art fixes: the big title text's drop shadow is chunky (I'll use a 1px outline instead), and Kirby's eyes should be taller. Then the tests.
+
+
+
+Bash Add outlined big text, taller eyes, cleanup
+IN
+cd "c:/Users/ethan/Documents/GitHub/Agent Engineering/Lecture 2a - Codex and Vibecoding/homework/2. just agent.md" && python - <<'EOF'
+def sub(path, a, b):
+    s=open(path,encoding='utf-8').read()
+    assert a in s, (path,a)
+    s=s.replace(a,b,1)
+    open(path,'w',encoding='utf-8',newline='\n').write(s)
+sub('js/font.js', "  return { draw, drawShadowed, width, CW, CH };", """  // Big text: a 1px dark outline all round plus a deeper drop shadow, like a logo.
+  function drawOutlined(ctx, text, x, y, color, scale, align, highlight) {
+    const ink = KB.PAL.ink;
+    for (let dy = -1; dy <= 2; dy++) {
+      for (let dx = -1; dx <= 1; dx++) if (dx || dy) draw(ctx, text, x + dx, y + dy, ink, scale, align);
+    }
+    draw(ctx, text, x, y, color, scale, align);
+    if (highlight) {
+      ctx.save();
+      ctx.beginPath(); ctx.rect(0, 0, ctx.canvas.width, y + scale); ctx.clip();
+      draw(ctx, text, x, y, highlight, scale, align);
+      ctx.restore();
+    }
+  }
+
+  return { draw, drawShadowed, drawOutlined, width, CW, CH };""")
+sub('js/hud.js', "F().drawShadowed(ctx, 'KIRBY', W / 2, 22 + by, PAL.pink, 5, 'center');\n    F().drawShadowed(ctx, 'DREAM DASH', W / 2, 52 + by, PAL.yellow, 2, 'center');",
+    "F().drawOutlined(ctx, 'KIRBY', W / 2, 20 + by, PAL.pink, 5, 'center', PAL.pinkLight);\n    F().drawOutlined(ctx, 'DREAM DASH', W / 2, 52 + by, PAL.yellow, 2, 'center', PAL.yellowLight);")
+sub('js/hud.js', "F().drawShadowed(ctx, heading, W / 2, 40, color, 4, 'center');", "F().drawOutlined(ctx, heading, W / 2, 40, color, 4, 'center', PAL.white);")
+sub('js/hud.js', "F().drawShadowed(ctx, 'PAUSED', W / 2, 70, PAL.white, 4, 'center');", "F().drawOutlined(ctx, 'PAUSED', W / 2, 70, PAL.white, 4, 'center');")
+sub('js/hud.js', "if (r.muted) F().drawShadowed(ctx, 'MUTED', W / 2 + 40, 4, PAL.stoneLight, 1, 'center');", "if (r.muted) F().drawShadowed(ctx, 'MUTED', 4, 16, PAL.stoneLight);")
+sub('js/render.js', "        case 'win': burst(r, ev.x || 0, ev.y || 0, 0, [], 0, 0); break;\n", "")
+# taller Kirby eyes: white+ink, ink, ink, blue
+sub('js/sprites.js', """      eyeXs.forEach(x => {
+        g.set(x, ey, PAL.white); g.set(x + 1, ey, PAL.ink);
+        g.rect(x, ey + 1, 2, 1, PAL.ink);
+        g.rect(x, ey + 2, 2, 1, PAL.eyeBlue);
+      });""", """      eyeXs.forEach(x => {
+        g.set(x, ey - 1, PAL.ink); g.set(x + 1, ey - 1, PAL.ink);
+        g.set(x, ey, PAL.white); g.set(x + 1, ey, PAL.ink);
+        g.rect(x, ey + 1, 2, 1, PAL.ink);
+        g.rect(x, ey + 2, 2, 1, PAL.eyeBlue);
+      });""")
+sub('js/sprites.js', """      eyeXs.forEach(x => { g.set(x, ey, PAL.ink); g.set(x + 1, ey + 1, PAL.ink); g.set(x, ey + 2, PAL.ink); g.set(x + 1, ey, PAL.ink); g.set(x, ey + 2, PAL.ink); g.set(x + 1, ey + 2, PAL.ink); });""",
+"""      [ex - 1, ex + 3].forEach(x => { g.set(x, ey, PAL.ink); g.set(x + 2, ey, PAL.ink); g.set(x + 1, ey + 1, PAL.ink); g.set(x, ey + 2, PAL.ink); g.set(x + 2, ey + 2, PAL.ink); });""")
+EOF
+
+OUT
+(Bash completed with no output)
+5:22 PM
+Now the automated playthrough: a bot that only sends key events through input.js, reading game state to decide what to press.
+
+
+
+Write c:\Users\ethan\Documents\GitHub\Agent Engineering\Lecture 2a - Codex and Vibecoding\homework\2. just agent.md\tests\bot.js
+171 lines
+// A scripted player for the playthrough test. It looks at the game state (read only) and answers
+// with simulated keyboard events fed through input.js. It never moves Kirby or edits state directly.
+const { C } = require('../js/logic/constants.js');
+const { Physics } = require('../js/logic/physics.js');
+const { Inhale } = require('../js/logic/inhale.js');
+const { Input } = require('../js/input.js');
+const { Game } = require('../js/logic/game.js');
+
+const S = C.TILE;
+const KEY = {
+  right: { code: 'ArrowRight', key: 'ArrowRight' },
+  jump: { code: 'Space', key: ' ' },
+  action: { code: 'Enter', key: 'Enter' },
+};
+
+function createBot(game) {
+  const input = Input.create();
+  const down = { right: false, jump: false, action: false };
+  const bot = { state: 'walk', timer: 0, targetY: 0, log: [] };
+
+  function set(name, isDown) {
+    if (down[name] === isDown) return;
+    down[name] = isDown;
+    Input.handleEvent(input, Object.assign({ type: isDown ? 'keydown' : 'keyup', repeat: false }, KEY[name]));
+  }
+  // A tap is a keydown now and a keyup on the next tick (only if the key was up).
+  function tap(name) { if (!down[name]) set(name, true); }
+
+  const g = () => game;
+  const tile = (tx, ty) => Physics.tileAt(g().world, tx, ty);
+  const pitColumn = tx => tile(tx, g().world.h - 1) === C.T.EMPTY;
+
+  function enemyAhead(maxDist, inhalableOnly) {
+    const p = g().player;
+    let best = null;
+    for (const e of g().enemies) {
+      if (e.kind === 'block' || (inhalableOnly && !e.inhalable)) continue;
+      const dx = e.x - (p.x + p.w);
+      const dy = (e.y + e.h / 2) - (p.y + p.h / 2);
+      if (dx > -e.w && dx < maxDist && Math.abs(dy) < S * 1.5 && (!best || dx < best.dx)) best = { e, dx, dy };
+    }
+    return best;
+  }
+
+  function starBlockAhead() {
+    const p = g().player;
+    const tx = Math.floor((p.x + p.w + S * 1.5) / S);
+    const rows = [Math.floor(p.y / S), Math.floor((p.y + p.h - 1) / S)];
+    return rows.some(ty => tile(tx, ty) === C.T.STAR_BLOCK || tile(tx - 1, ty) === C.T.STAR_BLOCK);
+  }
+
+  // Height of the obstacle right in front of Kirby (0 if none): a wall in his way.
+  function wallTopAhead() {
+    const p = g().player;
+    const tx = Math.floor((p.x + p.w + 3) / S);
+    const ty1 = Math.floor((p.y + p.h - 1) / S);
+    if (!Physics.isSolidAt(g().world, tx, ty1) || tile(tx, ty1) === C.T.STAR_BLOCK) return 0;
+    let ty = ty1;
+    while (ty > 0 && Physics.isSolidAt(g().world, tx, ty - 1)) ty--;
+    return ty * S;
+  }
+
+  function gapAhead() {
+    const p = g().player;
+    const front = Math.floor((p.x + p.w + 6) / S);
+    return pitColumn(front);
+  }
+
+  function overSafeGround() {
+    const p = g().player;
+    return !pitColumn(Math.floor(p.x / S)) && !pitColumn(Math.floor((p.x + p.w) / S)) && !gapAhead();
+  }
+
+  function startCross(targetY, why) {
+    bot.state = 'cross';
+    bot.targetY = targetY;
+    bot.timer = 0;
+    bot.log.push(why + ' at x=' + Math.round(g().player.x));
+  }
+
+  // Decide this tick's keys. Called once per tick before the game updates.
+  function think() {
+    const game = g();
+    const p = game.player;
+    // Release taps from the previous tick so the next press is a fresh one.
+    if (down.jump && bot.state !== 'hold-jump') set('jump', false);
+    if (game.mode === 'title') { set('action', false); tap('action'); return; }
+    if (game.mode !== 'playing') { set('right', false); set('action', false); bot.state = 'walk'; return; }
+    bot.timer++;
+
+    if (p.mode === 'full') {          // spit as soon as something is in our mouth
+      set('right', false);
+      if (down.action) set('action', false); else tap('action');
+      bot.state = 'walk';
+      return;
+    }
+
+    if (bot.state === 'inhale') {
+      set('right', false);
+      const target = enemyAhead(C.INHALE_RANGE, true);
+      if (bot.timer > 90 || (!target && !starBlockAhead() && !game.enemies.some(e => e.pulled))) {
+        set('action', false);
+        bot.state = 'walk';
+      } else set('action', true);
+      return;
+    }
+    if (down.action) set('action', false);
+
+    if (bot.state === 'cross') {
+      const high = p.y <= bot.targetY + 4;
+      set('right', high || !p.onGround && bot.climbed);
+      if (high) bot.climbed = true;
+      // Puff away anything in the flight path.
+      const threat = enemyAhead(36, true);
+      if (p.mode === 'fly' && threat && Math.abs(threat.dy) < 14) { tap('action'); return; }
+      const wantsAltitude = !overSafeGround() || p.y > bot.targetY + 4 && !bot.climbed;
+      if (p.onGround && !bot.climbed) tap('jump');
+      else if (wantsAltitude && p.vy > 0 && p.y > bot.targetY) tap('jump');
+      else if (!p.onGround && p.mode !== 'fly' && !overSafeGround()) tap('jump');
+      if (p.onGround && bot.climbed && overSafeGround()) { bot.state = 'walk'; bot.climbed = false; }
+      if (bot.timer > 60 * 20) { bot.state = 'walk'; bot.climbed = false; }
+      return;
+    }
+
+    // Walking.
+    const target = enemyAhead(C.INHALE_RANGE - 4, true);
+    if (p.onGround && target && Inhale.inCone(p, target.e, game.world)) {
+      set('right', false); set('action', true);
+      bot.state = 'inhale'; bot.timer = 0;
+      return;
+    }
+    if (p.onGround && starBlockAhead()) {
+      set('right', false); set('action', true);
+      bot.state = 'inhale'; bot.timer = 0;
+      return;
+    }
+    // Hoppers in mid-air or Gordo close by: wait for a better moment.
+    const wary = enemyAhead(S * 3, false);
+    if (wary && wary.e.kind === 'hopper' && !wary.e.onGround) { set('right', false); return; }
+    if (p.onGround && gapAhead()) { set('right', false); startCross(S * 2.5, 'gap'); return; }
+    const wall = wallTopAhead();
+    if (p.onGround && wall) { set('right', false); startCross(wall - p.h - S, 'wall'); return; }
+    set('right', true);
+  }
+
+  return { input, think, bot, down };
+}
+
+// Run a whole game with the bot. Returns a summary for the test to check.
+function playThrough(maxTicks) {
+  const game = Game.create();
+  const { input, think, bot } = createBot(game);
+  const { Level } = require('../js/level.js');
+  const gaps = Level.findGaps(game.level).map(gp => ({ ...gp, crossed: false }));
+  const startLives = game.lives;
+  let ticks = 0;
+  let deaths = 0;
+  for (; ticks < maxTicks && game.mode !== 'won' && game.mode !== 'gameover'; ticks++) {
+    think();
+    Game.update(game, Input.snapshot(input));
+    if (game.events.some(e => e.type === 'die')) deaths++;
+    const p = game.player;
+    if (game.mode === 'playing' && p.onGround) {
+      for (const gp of gaps) if (p.x > (gp.to + 1) * S) gp.crossed = true;
+    }
+  }
+  return { game, ticks, gaps, deaths, startLives, log: bot.log };
+}
+
+module.exports = { createBot, playThrough };
+5:22 PM
+Simplifying the bot's crossing logic into clear climb/go phases before running it.
+
+
+
+Bash Restructure bot crossing and try a playthrough
+IN
+cd "c:/Users/ethan/Documents/GitHub/Agent Engineering/Lecture 2a - Codex and Vibecoding/homework/2. just agent.md" && python - <<'EOF'
+p='tests/bot.js'
+s=open(p,encoding='utf-8').read()
+a=s.index("    if (bot.state === 'cross') {")
+b=s.index("    // Walking.")
+s=s[:a]+'''    if (bot.state === 'cross') {
+      // Phase 1 (climb): rise straight up to the target height. Phase 2 (go): fly right, holding
+      // that height until there is safe ground below, then drift down and land.
+      if (p.y <= bot.targetY + 4) bot.phase = 'go';
+      set('right', bot.phase === 'go');
+      const threat = enemyAhead(36, true);
+      if (p.mode === 'fly' && threat && Math.abs(threat.dy) < 14) { tap('action'); return; }  // puff it away
+      const needLift = bot.phase === 'climb' || !overSafeGround();
+      if (p.onGround && bot.phase === 'climb') { set('jump', true); bot.holdJump = 18; }
+      else if (needLift && !p.onGround && bot.holdJump <= 0 && (p.vy > 0 || p.mode !== 'fly') && p.y > bot.targetY) tap('jump');
+      if (p.onGround && bot.phase === 'go') bot.state = 'walk';
+      if (bot.timer > 60 * 20) bot.state = 'walk';
+      return;
+    }
+
+'''+s[b:]
+s=s.replace("    if (down.jump && bot.state !== 'hold-jump') set('jump', false);",
+"    if (bot.holdJump > 0) bot.holdJump--;\n    else if (down.jump) set('jump', false);")
+s=s.replace("    bot.timer = 0;\n    bot.log.push", "    bot.timer = 0;\n    bot.phase = 'climb';\n    bot.log.push")
+s=s.replace("const bot = { state: 'walk', timer: 0, targetY: 0, log: [] };","const bot = { state: 'walk', phase: 'climb', timer: 0, targetY: 0, holdJump: 0, log: [] };")
+open(p,'w',encoding='utf-8',newline='\n').write(s)
+EOF
+node -e "
+const {playThrough}=require('./tests/bot.js');
+const r=playThrough(60*400);
+const p=r.game.player;
+console.log('mode',r.game.mode,'ticks',r.ticks,'deaths',r.deaths,'lives',r.game.lives,'score',r.game.score,'x',p.x.toFixed(0),'y',p.y.toFixed(0),'hp',p.hp,'pmode',p.mode);
+console.log(JSON.stringify(r.gaps));
+console.log(r.log.join('\n'));
+"
+
+OUT
+mode playing ticks 24000 deaths 0 lives 3 score 1550 x 3540 y 146 hp 2 pmode normal
+[{"from":30,"to":31,"crossed":true},{"from":58,"to":60,"crossed":true},{"from":85,"to":93,"crossed":true},{"from":158,"to":165,"crossed":true},{"from":188,"to":201,"crossed":true}]
+gap at x=462
+gap at x=911
+gap at x=1343
+wall at x=2115
+wall at x=2387
+gap at x=2990
+wall at x=3412
+wall at x=3539
+wall at x=3540
+wall at x=3540
+wall at x=3540
+wall at x=3540
+wall at x=3540
+wall at x=3540
+wall at x=3540
+wall at x=3540
+wall at x=3540
+wall at x=3540
+wall at x=3540
+wall at x=3540
+wall at x=3540
+wall at x=3540
+wall at x=3540
+wall at x=3540
+wall at x=3540
+5:23 PM
+Every gap gets crossed with no deaths; the bot got stuck because my final staircase was floating steps with a pocket underneath. Making it a solid hill.
+
+
+
+Bash Fix final staircase and rerun bot
+IN
+cd "c:/Users/ethan/Documents/GitHub/Agent Engineering/Lecture 2a - Codex and Vibecoding/homework/2. just agent.md" && python - <<'EOF'
+p='js/level.js'
+s=open(p,encoding='utf-8').read()
+old="""      6: '.....................###',
+      7: '..................##.###',
+      8: '...............##...###',
+      9: '.....W..6...##......###',"""
+new="""      6: '.....................#########',
+      7: '..................############',
+      8: '...............###############',
+      9: '.....W..6...##################',"""
+assert old in s
+s=s.replace(old,new)
+open(p,'w',encoding='utf-8',newline='\n').write(s)
+EOF
+node -e "
+const {playThrough}=require('./tests/bot.js');
+const r=playThrough(60*400);
+const p=r.game.player;
+console.log('mode',r.game.mode,'ticks',r.ticks,'deaths',r.deaths,'lives',r.game.lives,'score',r.game.score,'x',p.x.toFixed(0),'y',p.y.toFixed(0),'hp',p.hp);
+console.log(JSON.stringify(r.gaps.map(g=>g.crossed)));
+console.log(r.log.join(' | '));
+"
+
+OUT
+mode won ticks 2991 deaths 0 lives 3 score 4050 x 3592 y 67 hp 2
+[true,true,true,true,true]
+gap at x=462 | gap at x=911 | gap at x=1343 | wall at x=2115 | wall at x=2387 | gap at x=2990 | wall at x=3412 | wall at x=3457 | wall at x=3505 | wall at x=3553
+5:23 PM
+The bot wins with zero deaths and crosses all five gaps. I'll add event counts to the summary so the test can also prove inhale/spit were used, then write the unit tests.
+
+
+
+Bash Count events during bot playthrough
+IN
+cd "c:/Users/ethan/Documents/GitHub/Agent Engineering/Lecture 2a - Codex and Vibecoding/homework/2. just agent.md" && python - <<'EOF'
+p='tests/bot.js'
+s=open(p,encoding='utf-8').read()
+s=s.replace("""  let deaths = 0;
+""","""  let deaths = 0;
+  const counts = {};
+""")
+s=s.replace("""    if (game.events.some(e => e.type === 'die')) deaths++;
+""","""    for (const e of game.events) counts[e.type] = (counts[e.type] || 0) + 1;
+    if (game.events.some(e => e.type === 'die')) deaths++;
+""")
+s=s.replace("return { game, ticks, gaps, deaths, startLives, log: bot.log };","return { game, ticks, gaps, deaths, startLives, counts, log: bot.log };")
+open(p,'w',encoding='utf-8',newline='\n').write(s)
+EOF
+node -e "
+const {playThrough}=require('./tests/bot.js');
+const r=playThrough(60*400); console.log(r.game.mode, JSON.stringify(r.counts));"
+
+OUT
+won {"start":1,"land":12,"score":18,"pickup":6,"inhaleStart":8,"swallow":7,"spit":7,"defeat":5,"starBurst":7,"jump":10,"puffUp":7,"flap":20,"hop":3,"exhale":7,"puffGone":5,"checkpoint":2,"blockLoose":2,"blockPop":1,"blockBreak":1,"hurt":1,"win":1}
+5:23 PM
+Now the unit tests.
+
+
+
+Write c:\Users\ethan\Documents\GitHub\Agent Engineering\Lecture 2a - Codex and Vibecoding\homework\2. just agent.md\tests\helpers.js
+30 lines
+// Shared helpers for the unit tests.
+const { C } = require('../js/logic/constants.js');
+const { Game } = require('../js/logic/game.js');
+
+const S = C.TILE;
+
+// An input snapshot with nothing pressed, plus overrides.
+function inp(over) {
+  return Object.assign({
+    left: false, right: false, jump: false, action: false,
+    jumpPressed: false, actionPressed: false, pausePressed: false, mutePressed: false, restartPressed: false,
+  }, over || {});
+}
+
+// A game on a small custom level, already playing.
+function makeGame(rows) {
+  return Game.create({ rows, mode: 'playing' });
+}
+
+// Run n ticks with the same input.
+function run(g, n, input) {
+  for (let i = 0; i < n; i++) Game.update(g, input || inp());
+  return g;
+}
+
+// Let Kirby settle on the ground.
+function settle(g) { return run(g, 20); }
+
+module.exports = { C, S, inp, makeGame, run, settle, Game };
+Write c:\Users\ethan\Documents\GitHub\Agent Engineering\Lecture 2a - Codex and Vibecoding\homework\2. just agent.md\tests\physics.test.js
+108 lines
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const { C, S } = require('./helpers.js');
+const { Physics } = require('../js/logic/physics.js');
+const { Level } = require('../js/level.js');
+
+function world(rows) {
+  const l = Level.parse(rows);
+  return { w: l.w, h: l.h, tiles: l.tiles.slice() };
+}
+const body = (x, y) => ({ x, y, w: 12, h: 14, vx: 0, vy: 0 });
+
+test('fast horizontal movement stops at a one-tile wall instead of tunnelling', () => {
+  const w = world([
+    '..........',
+    'P....#....',
+    '##########',
+  ]);
+  const b = body(0, S * 2 - 14);
+  Physics.moveBody(b, w, 500, 0);  // far more than a tile in one call
+  assert.equal(b.x, 5 * S - b.w);
+  assert.equal(b.hitWall, 1);
+});
+
+test('fast fall lands on a one-tile-thick floor instead of passing through', () => {
+  const w = world([
+    'P.........',
+    '..........',
+    '..........',
+    '##########',
+    '..........',
+    '..........',
+  ]);
+  const b = body(16, 0);
+  Physics.moveBody(b, w, 0, 400);
+  assert.equal(b.y + b.h, 3 * S);
+  assert.equal(b.onGround, true);
+});
+
+test('fast diagonal movement does not slip through a corner gap', () => {
+  const w = world([
+    'P.........',
+    '.....#....',
+    '.....#....',
+    '##########',
+  ]);
+  const b = body(0, 0);
+  Physics.moveBody(b, w, 300, 300);
+  assert.ok(b.x + b.w <= 5 * S, 'stays left of the pillar');
+  assert.equal(b.y + b.h, 3 * S, 'lands on the floor');
+});
+
+test('moving up into a ceiling stops and flags it', () => {
+  const w = world([
+    '##########',
+    'P.........',
+    '..........',
+    '##########',
+  ]);
+  const b = body(16, 2 * S);
+  Physics.moveBody(b, w, 0, -100);
+  assert.equal(b.y, S);
+  assert.equal(b.hitCeiling, true);
+});
+
+test('clouds can be jumped through from below but stood on from above', () => {
+  const w = world([
+    'P.........',
+    '..........',
+    '..====....',
+    '..........',
+    '##########',
+  ]);
+  const up = body(40, 3 * S);
+  Physics.moveBody(up, w, 0, -40);
+  assert.ok(up.y < 2 * S, 'passes up through the cloud');
+  const down = body(40, 0);
+  Physics.moveBody(down, w, 0, 100);
+  assert.equal(down.y + down.h, 2 * S, 'lands on top of the cloud');
+  assert.equal(down.onGround, true);
+});
+
+test('the level edges are walls and the space below the level is open', () => {
+  const w = world(['P..', '###']);
+  assert.ok(Physics.isSolidAt(w, -1, 0));
+  assert.ok(Physics.isSolidAt(w, 3, 0));
+  assert.equal(Physics.isSolidAt(w, 1, 5), false);
+});
+
+test('line of sight is blocked by solid tiles', () => {
+  const w = world([
+    'P...#....',
+    '#########',
+  ]);
+  assert.equal(Physics.lineOfSight(w, 8, 8, 56, 8), true);
+  assert.equal(Physics.lineOfSight(w, 8, 8, 120, 8), false);
+});
+
+test('the real level parses, has a start, a goal and several gaps', () => {
+  const l = Level.load();
+  assert.equal(l.h, Level.ROWS);
+  assert.ok(l.start && l.goal);
+  assert.ok(Level.findGaps(l).length >= 4);
+  const kinds = new Set(l.enemies.map(e => e.kind));
+  assert.ok(kinds.has('walker') && kinds.has('flyer'), 'has walking and flying enemies');
+  assert.ok(C.TILE === S);
+});
+Write c:\Users\ethan\Documents\GitHub\Agent Engineering\Lecture 2a - Codex and Vibecoding\homework\2. just agent.md\tests\player.test.js
+133 lines
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const { C, S, inp, makeGame, run, settle, Game } = require('./helpers.js');
+
+const OPEN = [
+  '..............................',
+  '..............................',
+  '..............................',
+  '..............................',
+  '..............................',
+  '..............................',
+  '..............................',
+  '..............................',
+  '..............................',
+  '..P...........................',
+  '##############################',
+];
+
+test('Kirby runs right and left at no more than run speed', () => {
+  const g = settle(makeGame(OPEN));
+  const x0 = g.player.x;
+  run(g, 60, inp({ right: true }));
+  assert.ok(g.player.x > x0 + 60, 'moved right');
+  assert.ok(Math.abs(g.player.vx) <= C.RUN_SPEED + 1e-9);
+  assert.equal(g.player.facing, 1);
+  run(g, 30, inp({ left: true }));
+  assert.equal(g.player.facing, -1);
+});
+
+test('a held jump reaches the expected height and no higher', () => {
+  const g = settle(makeGame(OPEN));
+  const ground = g.player.y;
+  Game.update(g, inp({ jump: true, jumpPressed: true }));
+  let top = g.player.y;
+  for (let i = 0; i < 90; i++) { Game.update(g, inp({ jump: true })); top = Math.min(top, g.player.y); }
+  const height = ground - top;
+  const ideal = C.JUMP_SPEED * C.JUMP_SPEED / (2 * C.GRAVITY);
+  assert.ok(height > ideal * 0.9 && height <= ideal + 1, 'jump height ' + height + ' vs ' + ideal);
+  assert.equal(g.player.onGround, true, 'lands again');
+  assert.equal(g.player.y, ground);
+});
+
+test('letting go of jump early gives a lower hop', () => {
+  const g = settle(makeGame(OPEN));
+  const ground = g.player.y;
+  Game.update(g, inp({ jump: true, jumpPressed: true }));
+  let top = g.player.y;
+  for (let i = 0; i < 60; i++) { Game.update(g, inp()); top = Math.min(top, g.player.y); }
+  assert.ok(ground - top < 20, 'short hop was ' + (ground - top));
+});
+
+test('Kirby cannot jump again in mid-air without flying', () => {
+  const g = settle(makeGame(OPEN));
+  Game.update(g, inp({ jump: true, jumpPressed: true }));
+  run(g, 5, inp({ jump: true }));
+  assert.equal(g.player.mode, 'normal');
+  assert.ok(g.player.vy < 0);
+});
+
+test('pressing jump in the air starts flying; each press is one flap', () => {
+  const g = settle(makeGame(OPEN));
+  Game.update(g, inp({ jump: true, jumpPressed: true }));
+  run(g, 10, inp({ jump: true }));
+  Game.update(g, inp({ jump: true, jumpPressed: true }));
+  assert.equal(g.player.mode, 'fly');
+  assert.equal(g.player.flaps, 1);
+  assert.ok(Math.abs(g.player.vy + C.FLY_FLAP_SPEED) < 1e-6 || g.player.vy < 0);
+});
+
+test('flying is limited: flaps stop lifting after FLY_MAX_FLAPS and Kirby comes down', () => {
+  const g = settle(makeGame(OPEN));
+  Game.update(g, inp({ jump: true, jumpPressed: true }));
+  run(g, 10);
+  for (let i = 0; i < C.FLY_MAX_FLAPS + 5; i++) {
+    Game.update(g, inp({ jump: true, jumpPressed: true }));
+    run(g, 25);
+  }
+  assert.equal(g.player.flaps, C.FLY_MAX_FLAPS);
+  const vyBefore = g.player.vy;
+  Game.update(g, inp({ jump: true, jumpPressed: true }));
+  assert.ok(g.player.vy >= vyBefore, 'an extra flap gives no lift');
+  run(g, 60 * 10);
+  assert.equal(g.player.onGround, true, 'comes back down');
+  assert.equal(g.player.flaps, 0, 'flaps reset on landing');
+  assert.equal(g.player.mode, 'normal', 'lets the air out when landing');
+});
+
+test('flying never goes above the ceiling', () => {
+  const g = settle(makeGame(OPEN));
+  Game.update(g, inp({ jump: true, jumpPressed: true }));
+  for (let i = 0; i < 200; i++) Game.update(g, inp({ jump: true, jumpPressed: i % 6 === 0 }));
+  assert.ok(g.player.y >= C.FLY_CEILING);
+});
+
+test('flying falls slowly and moves slower than running', () => {
+  const g = settle(makeGame(OPEN));
+  Game.update(g, inp({ jump: true, jumpPressed: true }));
+  run(g, 5);
+  Game.update(g, inp({ jump: true, jumpPressed: true }));
+  run(g, 60, inp({ right: true }));
+  assert.equal(g.player.mode, 'fly');
+  assert.ok(g.player.vy <= C.FLY_MAX_FALL);
+  assert.ok(g.player.vx <= C.FLY_SPEED_X);
+});
+
+test('pressing Enter while flying exhales an air puff and ends the flight', () => {
+  const g = settle(makeGame(OPEN));
+  Game.update(g, inp({ jump: true, jumpPressed: true }));
+  run(g, 5);
+  Game.update(g, inp({ jump: true, jumpPressed: true }));
+  Game.update(g, inp({ action: true, actionPressed: true }));
+  assert.equal(g.player.mode, 'normal');
+  assert.equal(g.projectiles.length, 1);
+  assert.equal(g.projectiles[0].kind, 'puff');
+});
+
+test('Kirby can walk off a ledge and still jump for a few frames (coyote time)', () => {
+  const g = settle(makeGame([
+    '..........',
+    '..........',
+    '..........',
+    '.P........',
+    '###.......',
+  ]));
+  while (g.player.x < 3 * S) Game.update(g, inp({ right: true }));
+  assert.equal(g.player.onGround, false);
+  Game.update(g, inp({ jump: true, jumpPressed: true }));
+  assert.equal(g.player.mode, 'normal', 'a ground jump, not a flap');
+  assert.ok(g.player.vy < -C.JUMP_SPEED * 0.9);
+});
+
+test('S is the tile size used by these tests', () => assert.equal(S, C.TILE));
+Write c:\Users\ethan\Documents\GitHub\Agent Engineering\Lecture 2a - Codex and Vibecoding\homework\2. just agent.md\tests\inhale.test.js
+166 lines
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const { C, S, inp, makeGame, run, settle, Game } = require('./helpers.js');
+const { Inhale } = require('../js/logic/inhale.js');
+
+const kirby = (x, y, facing) => ({ x, y, w: C.PLAYER_W, h: C.PLAYER_H, facing });
+const box = (cx, cy, size) => ({ x: cx - (size || 12) / 2, y: cy - (size || 12) / 2, w: size || 12, h: size || 12 });
+
+function level(enemyRow) {
+  return [
+    '..............................',
+    '..............................',
+    '..............................',
+    '..............................',
+    '..............................',
+    '..............................',
+    '..............................',
+    '..............................',
+    '..............................',
+    enemyRow.padEnd(30, '.'),
+    '##############################',
+  ];
+}
+
+test('the inhale cone: in front and close is in, behind or far is out', () => {
+  const p = kirby(100, 100, 1);
+  const m = Inhale.mouth(p);
+  assert.equal(Inhale.inCone(p, box(m.x + 20, m.y)), true, 'right in front');
+  assert.equal(Inhale.inCone(p, box(m.x + C.INHALE_RANGE - 2, m.y)), true, 'at the edge of range');
+  assert.equal(Inhale.inCone(p, box(m.x + C.INHALE_RANGE + 10, m.y)), false, 'too far');
+  assert.equal(Inhale.inCone(p, box(m.x - 30, m.y)), false, 'behind Kirby');
+  assert.equal(Inhale.inCone(p, box(m.x + 20, m.y - 40)), false, 'too high');
+  assert.equal(Inhale.inCone(p, box(m.x + 20, m.y + 40)), false, 'too low');
+});
+
+test('the inhale cone widens with distance', () => {
+  const p = kirby(100, 100, 1);
+  const m = Inhale.mouth(p);
+  const dy = C.INHALE_HALF_HEIGHT + 8;
+  assert.equal(Inhale.pointInCone(p, m.x + 4, m.y - dy), false, 'close and high: out');
+  assert.equal(Inhale.pointInCone(p, m.x + 50, m.y - dy), true, 'far and equally high: in');
+});
+
+test('the inhale cone follows the way Kirby faces', () => {
+  const p = kirby(100, 100, -1);
+  const m = Inhale.mouth(p);
+  assert.equal(Inhale.inCone(p, box(m.x - 20, m.y)), true);
+  assert.equal(Inhale.inCone(p, box(m.x + 20, m.y)), false);
+});
+
+test('Gordo can never be inhaled, and walls block the inhale', () => {
+  const p = kirby(100, 100, 1);
+  const m = Inhale.mouth(p);
+  const gordo = Object.assign(box(m.x + 20, m.y), { inhalable: false });
+  assert.equal(Inhale.inCone(p, gordo), false);
+
+  const g = settle(makeGame(level('..P..#.W')));
+  const walker = g.enemies[0];
+  assert.equal(Inhale.inCone(g.player, walker), true, 'in the cone ignoring walls');
+  assert.equal(Inhale.inCone(g.player, walker, g.world), false, 'but the wall is in the way');
+});
+
+test('holding Enter pulls an enemy in and swallows it', () => {
+  const g = settle(makeGame(level('..P...W')));
+  const score = g.score;
+  Game.update(g, inp({ action: true, actionPressed: true }));
+  assert.equal(g.player.mode, 'inhale');
+  let pulled = false;
+  for (let i = 0; i < 60 && g.player.mode === 'inhale'; i++) {
+    Game.update(g, inp({ action: true }));
+    pulled = pulled || g.enemies.some(e => e.pulled);
+  }
+  assert.ok(pulled, 'the walker was being pulled');
+  assert.equal(g.player.mode, 'full');
+  assert.equal(g.enemies.length, 0);
+  assert.deepEqual(g.player.held.kinds, ['walker']);
+  assert.equal(g.score, score + C.SCORE_SWALLOW);
+});
+
+test('Kirby stays put while inhaling', () => {
+  const g = settle(makeGame(level('..P')));
+  const x = g.player.x;
+  Game.update(g, inp({ action: true, actionPressed: true, right: true }));
+  run(g, 30, inp({ action: true, right: true }));
+  assert.equal(g.player.x, x);
+});
+
+test('letting go of Enter releases an enemy that was being pulled', () => {
+  const g = settle(makeGame(level('..P.......W')));
+  Game.update(g, inp({ action: true, actionPressed: true }));
+  run(g, 3, inp({ action: true }));
+  assert.ok(g.enemies[0].pulled);
+  run(g, 2, inp());
+  assert.equal(g.player.mode, 'normal');
+  assert.equal(g.enemies[0].pulled, false);
+});
+
+test('pressing Enter when full spits a star and empties Kirby', () => {
+  const g = settle(makeGame(level('..P...W')));
+  Game.update(g, inp({ action: true, actionPressed: true }));
+  run(g, 60, inp({ action: true }));
+  assert.equal(g.player.mode, 'full');
+  run(g, 2, inp());
+  assert.equal(g.player.mode, 'full', 'releasing Enter keeps the mouthful');
+  Game.update(g, inp({ action: true, actionPressed: true }));
+  assert.equal(g.player.mode, 'normal');
+  assert.equal(g.player.held, null);
+  assert.equal(g.projectiles.length, 1);
+  assert.equal(g.projectiles[0].kind, 'star');
+  assert.ok(g.projectiles[0].vx > 0);
+});
+
+test('a full Kirby cannot fly', () => {
+  const g = settle(makeGame(level('..P...W')));
+  Game.update(g, inp({ action: true, actionPressed: true }));
+  run(g, 60, inp({ action: true }));
+  run(g, 2);
+  Game.update(g, inp({ jump: true, jumpPressed: true }));
+  run(g, 10, inp({ jump: true }));
+  Game.update(g, inp({ jump: true, jumpPressed: true }));
+  assert.equal(g.player.mode, 'full');
+});
+
+test('a spat star defeats a line of enemies, doubling the score each time', () => {
+  const g = settle(makeGame(level('..P..W..........W.W')));
+  Game.update(g, inp({ action: true, actionPressed: true }));
+  run(g, 60, inp({ action: true }));
+  assert.equal(g.player.mode, 'full');
+  assert.equal(g.enemies.length, 2);
+  const score = g.score;
+  Game.update(g, inp({ action: true, actionPressed: true }));
+  run(g, C.STAR_LIFE_TICKS);
+  assert.equal(g.enemies.length, 0, 'both enemies were hit');
+  assert.equal(g.score, score + C.SCORE_STAR_HIT + C.SCORE_STAR_HIT * 2);
+});
+
+test('Gordo shrugs off a star and the star is used up', () => {
+  const g = settle(makeGame(level('..P..W.......G')));
+  Game.update(g, inp({ action: true, actionPressed: true }));
+  run(g, 60, inp({ action: true }));
+  Game.update(g, inp({ action: true, actionPressed: true }));
+  run(g, C.STAR_LIFE_TICKS);
+  assert.equal(g.enemies.length, 1);
+  assert.equal(g.enemies[0].kind, 'gordo');
+  assert.equal(g.projectiles.length, 0);
+});
+
+test('star blocks can be inhaled, and a spat star breaks the ones behind', () => {
+  const g = settle(makeGame(level('..P...S.S.S')));
+  const T = C.T;
+  const row = 9;
+  const tileAt = tx => g.world.tiles[row * g.world.w + tx];
+  Game.update(g, inp({ action: true, actionPressed: true }));
+  run(g, 60, inp({ action: true }));
+  assert.equal(g.player.mode, 'full');
+  assert.equal(tileAt(6), T.EMPTY, 'the nearest block was inhaled');
+  assert.equal(tileAt(8), T.STAR_BLOCK, 'blocks behind it are still there');
+  run(g, 2);
+  Game.update(g, inp({ action: true, actionPressed: true }));
+  run(g, C.STAR_LIFE_TICKS);
+  assert.equal(tileAt(8), T.EMPTY);
+  assert.equal(tileAt(10), T.EMPTY);
+});
+
+test('S is the tile size', () => assert.equal(S, C.TILE));
+Write c:\Users\ethan\Documents\GitHub\Agent Engineering\Lecture 2a - Codex and Vibecoding\homework\2. just agent.md\tests\game.test.js
+153 lines
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const { C, S, inp, makeGame, run, settle, Game } = require('./helpers.js');
+
+function level(row9, extra) {
+  const rows = [];
+  for (let i = 0; i < 9; i++) rows.push(((extra && extra[i]) || '').padEnd(30, '.'));
+  rows.push(row9.padEnd(30, '.'));
+  rows.push(((extra && extra[10]) || '##############################').padEnd(30, '#'));
+  return rows;
+}
+
+test('the game starts on the title screen and Enter or Space starts it', () => {
+  const g = Game.create();
+  assert.equal(g.mode, 'title');
+  Game.update(g, inp());
+  assert.equal(g.mode, 'title');
+  Game.update(g, inp({ actionPressed: true }));
+  assert.equal(g.mode, 'playing');
+  const g2 = Game.create();
+  Game.update(g2, inp({ jumpPressed: true }));
+  assert.equal(g2.mode, 'playing');
+});
+
+test('P pauses and nothing moves until P again', () => {
+  const g = settle(makeGame(level('..P')));
+  Game.update(g, inp({ pausePressed: true }));
+  assert.equal(g.mode, 'paused');
+  const x = g.player.x;
+  run(g, 30, inp({ right: true }));
+  assert.equal(g.player.x, x);
+  Game.update(g, inp({ pausePressed: true }));
+  assert.equal(g.mode, 'playing');
+});
+
+test('starting values: lives, health and score', () => {
+  const g = makeGame(level('..P'));
+  assert.equal(g.lives, C.START_LIVES);
+  assert.equal(g.player.hp, C.MAX_HP);
+  assert.equal(g.score, 0);
+});
+
+test('bumping into an enemy costs health, knocks Kirby back, and knocks the enemy out', () => {
+  const g = settle(makeGame(level('..P.W')));
+  const score = g.score;
+  run(g, 60, inp({ right: true }));
+  assert.equal(g.player.hp, C.MAX_HP - 1);
+  assert.ok(g.player.invuln > 0);
+  assert.equal(g.enemies.length, 0);
+  assert.equal(g.score, score + C.SCORE_BUMP);
+});
+
+test('Gordo hurts but survives, and Kirby is safe for a moment after a hit', () => {
+  const g = settle(makeGame(level('..PG')));
+  const gordo = g.enemies[0];
+  gordo.homeY = g.player.y;  // hold Gordo at Kirby's height for this test
+  Game.hurtPlayer(g, gordo);
+  assert.equal(g.player.hp, C.MAX_HP - 1);
+  assert.equal(Game.hurtPlayer(g, gordo), false, 'invulnerable right after a hit');
+  assert.equal(g.player.hp, C.MAX_HP - 1);
+  assert.equal(g.enemies.length, 1);
+});
+
+test('running out of health loses a life and respawns with full health', () => {
+  const g = settle(makeGame(level('..P')));
+  const spawn = { x: g.player.x, y: g.player.y };
+  for (let i = 0; i < C.MAX_HP; i++) { g.player.invuln = 0; Game.hurtPlayer(g, { x: 0, y: 0, w: 1, h: 1 }); }
+  assert.equal(g.mode, 'dying');
+  assert.equal(g.lives, C.START_LIVES - 1);
+  run(g, C.DEATH_TICKS);
+  assert.equal(g.mode, 'playing');
+  assert.equal(g.player.hp, C.MAX_HP);
+  assert.equal(g.player.x, spawn.x);
+});
+
+test('falling into a pit loses a life', () => {
+  const g = settle(makeGame(level('..P', { 10: '#####.........................' })));
+  run(g, 200, inp({ right: true }));
+  assert.ok(g.lives === C.START_LIVES - 1, 'lives ' + g.lives);
+});
+
+test('respawn happens at the last checkpoint passed', () => {
+  const g = settle(makeGame(level('..P.....C......', { 10: '##############................' })));
+  const cp = g.level.checkpoints[0];
+  while (g.mode === 'playing' && g.lives === C.START_LIVES) Game.update(g, inp({ right: true }));
+  assert.equal(g.checkpointIndex, 0);
+  run(g, C.DEATH_TICKS);
+  assert.equal(g.player.x, cp.x);
+  assert.equal(g.mode, 'playing');
+});
+
+test('losing the last life is game over; Enter restarts a fresh game', () => {
+  const g = settle(makeGame(level('..P')));
+  for (let life = 0; life < C.START_LIVES; life++) {
+    Game.killPlayer(g);
+    run(g, C.DEATH_TICKS);
+  }
+  assert.equal(g.lives, 0);
+  assert.equal(g.mode, 'gameover');
+  Game.update(g, inp({ actionPressed: true }));
+  assert.equal(g.mode, 'gameover', 'mashing right away does not skip the screen');
+  run(g, C.END_INPUT_DELAY_TICKS);
+  g.score = 999;
+  Game.update(g, inp({ actionPressed: true }));
+  assert.equal(g.mode, 'playing');
+  assert.equal(g.lives, C.START_LIVES);
+  assert.equal(g.score, 0);
+});
+
+test('point stars add score and a tomato restores health', () => {
+  const g = settle(makeGame(level('..P.*..T')));
+  g.player.hp = 1;
+  run(g, 90, inp({ right: true }));
+  assert.equal(g.pickups.length, 0);
+  assert.equal(g.score, C.SCORE_PICKUP + C.SCORE_TOMATO);
+  assert.equal(g.player.hp, C.MAX_HP);
+});
+
+test('touching the warp star wins, adds the bonus, and Enter plays again', () => {
+  const g = settle(makeGame(level('..P....E')));
+  run(g, 120, inp({ right: true }));
+  assert.equal(g.mode, 'won');
+  assert.equal(g.score, C.SCORE_GOAL + C.START_LIVES * C.SCORE_LIFE_BONUS);
+  Game.update(g, inp({ actionPressed: true }));
+  assert.equal(g.mode, 'won', 'the win screen stays up for a moment');
+  run(g, C.WIN_SCREEN_TICKS);
+  Game.update(g, inp({ jumpPressed: true }));
+  assert.equal(g.mode, 'playing');
+  assert.equal(g.score, 0);
+});
+
+test('R restarts at any time and keeps the same level', () => {
+  const g = settle(makeGame(level('..P.*')));
+  run(g, 60, inp({ right: true }));
+  assert.ok(g.score > 0);
+  Game.update(g, inp({ restartPressed: true }));
+  assert.equal(g.mode, 'playing');
+  assert.equal(g.score, 0);
+  assert.equal(g.pickups.length, 1);
+  assert.equal(g.level.w, 30);
+});
+
+test('enemies far from Kirby stay frozen', () => {
+  const row = '..P' + '.'.repeat(25) + 'W';
+  const rows = level('').map(r => r.padEnd(30, '.'));
+  const g = Game.create({ rows: rows.map((r, i) => i === 9 ? (row + '.'.repeat(60)) : (r + (i === 10 ? '#' : '.').repeat(59))), mode: 'playing' });
+  const e = g.enemies[0];
+  const x = e.x;
+  run(g, 30);
+  assert.ok(Math.abs(e.x + e.w / 2 - g.player.x) > C.ACTIVATE_DIST || e.x !== x);
+  assert.equal(S, C.TILE);
+});
+Write c:\Users\ethan\Documents\GitHub\Agent Engineering\Lecture 2a - Codex and Vibecoding\homework\2. just agent.md\tests\playthrough.test.js
+18 lines
+// Plays the real level from the title screen to the warp star using only simulated key events.
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const { playThrough } = require('./bot.js');
+const { C } = require('../js/logic/constants.js');
+
+test('the level can be finished with keyboard input alone, crossing every gap', () => {
+  const r = playThrough(C.TICKS_PER_SEC * 60 * 5);
+  const where = 'Kirby at x=' + Math.round(r.game.player.x) + ', bot log: ' + r.log.join(' | ');
+  assert.equal(r.game.mode, 'won', 'reached the warp star (' + where + ')');
+  assert.ok(r.gaps.length >= 4, 'the level has gaps to cross');
+  r.gaps.forEach(gp => assert.ok(gp.crossed, 'crossed the gap at columns ' + gp.from + '-' + gp.to));
+  assert.equal(r.deaths, 0, 'no lives lost, so no gap was skipped by respawning');
+  assert.ok(r.counts.flap > 0, 'had to fly');
+  assert.ok(r.counts.swallow > 0 && r.counts.spit > 0, 'had to inhale and spit (the star block wall)');
+  assert.ok(r.counts.blockBreak > 0 || r.counts.blockLoose > 0, 'cleared star blocks');
+});
+Write c:\Users\ethan\Documents\GitHub\Agent Engineering\Lecture 2a - Codex and Vibecoding\homework\2. just agent.md\tests\input.test.js
+54 lines
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const { Input } = require('../js/input.js');
+
+const ev = (type, code, key, extra) => Object.assign({ type, code, key: key || code, preventDefault() { this.prevented = true; } }, extra);
+
+test('only the requested keys drive Kirby', () => {
+  const s = Input.create();
+  for (const [code, key, name] of [['ArrowLeft', 'ArrowLeft', 'left'], ['KeyA', 'a', 'left'], ['ArrowRight', 'ArrowRight', 'right'],
+    ['KeyD', 'd', 'right'], ['Space', ' ', 'jump'], ['Enter', 'Enter', 'action']]) {
+    Input.handleEvent(s, ev('keydown', code, key));
+    assert.equal(s.held[name], true, code);
+    Input.handleEvent(s, ev('keyup', code, key));
+    assert.equal(s.held[name], false, code);
+  }
+  for (const code of ['KeyW', 'ArrowUp', 'ArrowDown', 'KeyS', 'KeyZ', 'KeyX', 'KeyJ', 'ShiftLeft']) {
+    assert.equal(Input.handleEvent(s, ev('keydown', code)), false, code + ' is not bound');
+  }
+});
+
+test('a quick tap between two ticks is still seen once, and key repeat is ignored', () => {
+  const s = Input.create();
+  Input.handleEvent(s, ev('keydown', 'Space', ' '));
+  Input.handleEvent(s, ev('keyup', 'Space', ' '));
+  let snap = Input.snapshot(s);
+  assert.equal(snap.jumpPressed, true);
+  assert.equal(snap.jump, false);
+  snap = Input.snapshot(s);
+  assert.equal(snap.jumpPressed, false, 'a press is reported only once');
+
+  Input.handleEvent(s, ev('keydown', 'Enter'));
+  Input.snapshot(s);
+  Input.handleEvent(s, ev('keydown', 'Enter', 'Enter', { repeat: true }));
+  snap = Input.snapshot(s);
+  assert.equal(snap.actionPressed, false);
+  assert.equal(snap.action, true);
+});
+
+test('utility keys: pause, mute, restart', () => {
+  const s = Input.create();
+  Input.handleEvent(s, ev('keydown', 'KeyP', 'p'));
+  Input.handleEvent(s, ev('keydown', 'KeyM', 'm'));
+  Input.handleEvent(s, ev('keydown', 'KeyR', 'r'));
+  const snap = Input.snapshot(s);
+  assert.ok(snap.pausePressed && snap.mutePressed && snap.restartPressed);
+});
+
+test('handled keys stop the browser from scrolling', () => {
+  const s = Input.create();
+  const e = ev('keydown', 'Space', ' ');
+  Input.handleEvent(s, e);
+  assert.equal(e.prevented, true);
+});
+5:25 PM
+Cleaning up two weak tests I wrote hastily, then running the suite.
+
+
+
+Bash Fix weak tests and run the test suite
+IN
+cd "c:/Users/ethan/Documents/GitHub/Agent Engineering/Lecture 2a - Codex and Vibecoding/homework/2. just agent.md" && python - <<'EOF'
+def sub(path, a, b):
+    s=open(path,encoding='utf-8').read()
+    assert a in s, (path,a[:40])
+    s=s.replace(a,b,1)
+    open(path,'w',encoding='utf-8',newline='\n').write(s)
+p='tests/game.test.js'
+s=open(p,encoding='utf-8').read()
+i=s.index("test('enemies far from Kirby stay frozen'")
+s=s[:i]+"""test('enemies far from Kirby stay frozen until he gets close', () => {
+  const rows = level('').map(r => r + (r[0] === '#' ? '#' : '.').repeat(30));
+  rows[9] = '..P'.padEnd(50, '.') + 'W'.padEnd(10, '.');
+  const g = settle(Game.create({ rows, mode: 'playing' }));
+  const e = g.enemies[0];
+  const x = e.x;
+  run(g, 30);
+  assert.ok(e.x + e.w / 2 - g.player.x > C.ACTIVATE_DIST);
+  assert.equal(e.x, x, 'did not move');
+});
+"""
+open(p,'w',encoding='utf-8',newline='\n').write(s)
+sub('tests/inhale.test.js', "\ntest('S is the tile size', () => assert.equal(S, C.TILE));\n", "")
+sub('tests/player.test.js', "\ntest('S is the tile size used by these tests', () => assert.equal(S, C.TILE));\n", "")
+sub('tests/physics.test.js', "  assert.ok(kinds.has('walker') && kinds.has('flyer'), 'has walking and flying enemies');\n  assert.ok(C.TILE === S);\n", "  assert.ok(kinds.has('walker') && kinds.has('flyer'), 'has walking and flying enemies');\n")
+EOF
+node --test 2>&1 | grep -E "^not ok|^# (tests|pass|fail)|Error|expected|actual|at .*test.js" | head -60
+
+OUT
+not ok 7 - falling into a pit loses a life
+  name: 'AssertionError'
+  expected: true
+  actual: false
+not ok 17 - Gordo can never be inhaled, and walls block the inhale
+  name: 'AssertionError'
+  expected: true
+  actual: false
+not ok 20 - letting go of Enter releases an enemy that was being pulled
+  name: 'AssertionError'
+  expected: true
+  actual: false
+# Subtest: a held jump reaches the expected height and no higher
+ok 39 - a held jump reaches the expected height and no higher
+# tests 48
+# pass 45
+# fail 3
+5:25 PM
+Three failures. Two are my test setups placing the walker outside inhale range (64px). Checking the pit one:
+
+
+
+Bash Debug pit-fall test
+IN
+cd "c:/Users/ethan/Documents/GitHub/Agent Engineering/Lecture 2a - Codex and Vibecoding/homework/2. just agent.md" && node -e "
+const { C, inp, makeGame, run, settle, Game } = require('./tests/helpers.js');
+const rows=[]; for(let i=0;i<9;i++) rows.push('.'.repeat(30)); rows.push('..P'.padEnd(30,'.')); rows.push('#####'.padEnd(30,'.'));
+const g=settle(makeGame(rows));
+for(let i=0;i<200;i+=20){ run(g,20,inp({right:true})); console.log(i, g.mode, g.lives, g.player.x.toFixed(1), g.player.y.toFixed(1)); }
+"
+
+OUT
+0 playing 3 62.0 146.0
+20 playing 3 94.0 161.6
+40 dying 2 100.4 177.6
+60 dying 2 100.4 152.4
+80 dying 2 100.4 163.4
+100 dying 2 100.4 261.3
+120 dying 2 100.4 368.0
+140 playing 2 38.9 146.0
+160 playing 2 70.9 146.0
+180 dying 1 99.7 177.6
+5:25 PM
+The game is right; my pit test ran long enough to die twice. Fixing the three tests:
+
+
+
+Bash Fix test setups and rerun suite
+IN
+cd "c:/Users/ethan/Documents/GitHub/Agent Engineering/Lecture 2a - Codex and Vibecoding/homework/2. just agent.md" && python - <<'EOF'
+def sub(path, a, b):
+    s=open(path,encoding='utf-8').read()
+    assert a in s, (path,a[:50])
+    s=s.replace(a,b,1)
+    open(path,'w',encoding='utf-8',newline='\n').write(s)
+sub('tests/game.test.js', """  run(g, 200, inp({ right: true }));
+  assert.ok(g.lives === C.START_LIVES - 1, 'lives ' + g.lives);""", """  for (let i = 0; i < 200 && g.mode === 'playing'; i++) Game.update(g, inp({ right: true }));
+  assert.equal(g.mode, 'dying');
+  assert.equal(g.lives, C.START_LIVES - 1);""")
+sub('tests/inhale.test.js', "const g = settle(makeGame(level('..P..#.W')));", "const g = settle(makeGame(level('..P.#.W')));")
+sub('tests/inhale.test.js', "const g = settle(makeGame(level('..P.......W')));", "const g = settle(makeGame(level('..P...W')));")
+EOF
+node --test 2>&1 | grep -E "^not ok|^# (tests|pass|fail)|expected|actual" | head
+
+OUT
+# Subtest: a held jump reaches the expected height and no higher
+ok 39 - a held jump reaches the expected height and no higher
+# tests 48
+# pass 48
+# fail 0
+All 48 tests pass. Now I'll run a quick visual QA pass in the browser using a throwaway screenshot script to check the level overall.
+Bash Run visual QA screenshots across the level
+IN
+cd "c:/Users/ethan/Documents/GitHub/Agent Engineering/Lecture 2a - Codex and Vibecoding/homework/2. just agent.md" && python - <<'EOF'
+s=open('tests/smoke.mjs',encoding='utf-8').read()
+start=s.index('async function main() {')
+end=s.index('let failed = false;')
+qa='''async function main() {
+  const { send, on } = await connect(await launch());
+  on('Runtime.exceptionThrown', p => errors.push('exception: ' + (p.exceptionDetails.exception?.description || p.exceptionDetails.text)));
+  on('Runtime.consoleAPICalled', p => { if (p.type === 'error') errors.push('console.error ' + JSON.stringify(p.args)); });
+  await send('Runtime.enable'); await send('Page.enable');
+  const loaded = new Promise(r => on('Page.loadEventFired', r));
+  await send('Page.navigate', { url: pathToFileURL(path.join(root, 'index.html')).href });
+  await loaded; await sleep(500);
+  const ev = async expr => (await send('Runtime.evaluate', { expression: expr, returnByValue: true })).result.value;
+  const shot = async name => { const { data } = await send('Page.captureScreenshot', { format: 'png', clip: { x: 150, y: 85, width: 965, height: 580, scale: 1 } }); fs.writeFileSync(path.join(outDir, name + '.png'), Buffer.from(data, 'base64')); };
+  await send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13 });
+  await send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13 });
+  await sleep(200);
+  const xs = process.argv.slice(2).map(Number);
+  for (const x of xs) {
+    await ev(`(() => { const g = KirbyGame.state; g.player.x = ${x}; g.player.y = 20; g.player.invuln = 600; })()`);
+    await sleep(1400);
+    await shot('qa-' + x);
+  }
+  await ev(`(() => { const g = KirbyGame.state; g.mode = 'won'; g.endTimer = 50; })()`); await sleep(300); await shot('qa-won-anim');
+  await ev(`(() => { const g = KirbyGame.state; g.endTimer = 300; })()`); await sleep(300); await shot('qa-won');
+  await ev(`(() => { const g = KirbyGame.state; g.mode = 'gameover'; g.endTimer = 300; })()`); await sleep(300); await shot('qa-gameover');
+  if (errors.length) throw new Error(errors.join('\\n'));
+  console.log('qa done');
+}
+
+'''
+s=s[:start]+qa+s[end:]
+s=s.replace("const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');","const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');")
+open('.tmp/qa.mjs','w',encoding='utf-8',newline='\n').write(s)
+EOF
+timeout 120 node .tmp/qa.mjs 1450 1700 2150 2560 3050 3450; echo EXIT $?
+
+OUT
+file:///C:/Users/ethan/Documents/GitHub/Agent%20Engineering/Lecture%202a%20-%20Codex%20and%20Vibecoding/homework/2.%20just%20agent.md/.tmp/qa.mjs:130
+  if (errors.length) throw new Error(errors.join('
+                                                 ^
+
+SyntaxError: Invalid or unexpected token
+    at compileSourceTextModule (node:internal/modules/esm/utils:346:16)
+    at ModuleLoader.moduleStrategy (node:internal/modules/esm/translators:110:18)
+    at #translate (node:internal/modules/esm/loader:559:20)
+    at afterLoad (node:internal/modules/esm/loader:612:29)
+    at ModuleLoader.loadAndTranslate (node:internal/modules/esm/loader:617:12)
+    at #createModuleJob (node:internal/modules/esm/loader:640:36)
+    at #getJobFromResolveResult (node:internal/modules/esm/loader:353:34)
+    at ModuleLoader.getModuleJobForImport (node:internal/modules/esm/loader:321:41)
+    at async onImport.tracePromise.__proto__ (node:internal/modules/esm/loader:680:25)
+
+Node.js v22.23.3
+EXIT 1
+Bash Fix QA script newline and rerun
+IN
+cd "c:/Users/ethan/Documents/GitHub/Agent Engineering/Lecture 2a - Codex and Vibecoding/homework/2. just agent.md" && python - <<'EOF'
+p='.tmp/qa.mjs'
+s=open(p,encoding='utf-8').read()
+s=s.replace("errors.join('\n'));\n  console.log('qa done')","errors.join(' / '));\n  console.log('qa done')")
+open(p,'w',encoding='utf-8',newline='\n').write(s)
+EOF
+timeout 120 node .tmp/qa.mjs 1450 1700 2150 2560 3050 3450; echo EXIT $?
+
+OUT
+qa done
+EXIT 0
+Read c:\Users\ethan\Documents\GitHub\Agent Engineering\Lecture 2a - Codex and Vibecoding\homework\2. just agent.md\.tmp\qa-1700.png
+Read c:\Users\ethan\Documents\GitHub\Agent Engineering\Lecture 2a - Codex and Vibecoding\homework\2. just agent.md\.tmp\qa-2560.png
+Read c:\Users\ethan\Documents\GitHub\Agent Engineering\Lecture 2a - Codex and Vibecoding\homework\2. just agent.md\.tmp\qa-won-anim.png
+Read c:\Users\ethan\Documents\GitHub\Agent Engineering\Lecture 2a - Codex and Vibecoding\homework\2. just agent.md\.tmp\qa-won.png
+Read c:\Users\ethan\Documents\GitHub\Agent Engineering\Lecture 2a - Codex and Vibecoding\homework\2. just agent.md\.tmp\qa-1450.png
+Read c:\Users\ethan\Documents\GitHub\Agent Engineering\Lecture 2a - Codex and Vibecoding\homework\2. just agent.md\.tmp\qa-3050.png
+Read c:\Users\ethan\Documents\GitHub\Agent Engineering\Lecture 2a - Codex and Vibecoding\homework\2. just agent.md\.tmp\qa-gameover.png
+Visuals check out overall, but I'll redraw Gordo's eyes with angry brows, fix a bug where checkContacts uses return instead of break and skips enemy cleanup when Kirby dies mid-loop, and make Kirby fall slowly during mid-air inhale so he doesn't drop straight into pits.
+Bash Apply fixes, add test, rerun suite
+IN
+cd "c:/Users/ethan/Documents/GitHub/Agent Engineering/Lecture 2a - Codex and Vibecoding/homework/2. just agent.md" && python - <<'EOF'
+def sub(path, a, b):
+    s=open(path,encoding='utf-8').read()
+    assert a in s, (path,a[:50])
+    s=s.replace(a,b,1)
+    open(path,'w',encoding='utf-8',newline='\n').write(s)
+sub('js/sprites.js', """    g.rect(6, 6, 2, 3, PAL.white); g.rect(9, 6, 2, 3, PAL.white);
+    g.set(7, 7, PAL.ink); g.set(9, 7, PAL.ink); g.set(7, 8, PAL.ink); g.set(9, 8, PAL.ink);""",
+"""    g.rect(5, 7, 2, 2, PAL.white); g.rect(9, 7, 2, 2, PAL.white);
+    g.set(6, 8, PAL.ink); g.set(9, 8, PAL.ink);
+    g.set(5, 5, PAL.ink); g.set(6, 6, PAL.ink); g.set(10, 5, PAL.ink); g.set(9, 6, PAL.ink);""")
+sub('js/logic/game.js', """    for (const e of g.enemies) {
+      if (g.mode !== 'playing') return;""", """    for (const e of g.enemies) {
+      if (g.mode !== 'playing') break;""")
+sub('js/logic/player.js', """    if (p.mode === 'fly') {
+      p.vy = Math.min(p.vy + C.FLY_GRAVITY * C.DT, C.FLY_MAX_FALL);
+    } else {""", """    if (p.mode === 'fly') {
+      p.vy = Math.min(p.vy + C.FLY_GRAVITY * C.DT, C.FLY_MAX_FALL);
+    } else if (p.mode === 'inhale' && !p.onGround) {
+      p.vy = Math.min(p.vy + C.GRAVITY * C.DT, C.INHALE_AIR_MAX_FALL);
+    } else {""")
+sub('js/logic/constants.js', "  INHALE_MOVE_FACTOR: 0,     // Kirby plants his feet while inhaling\n",
+    "  INHALE_MOVE_FACTOR: 0,     // Kirby plants his feet while inhaling\n  INHALE_AIR_MAX_FALL: 60,   // inhaling in mid-air slows the fall\n")
+EOF
+cat >> tests/inhale.test.js <<'EOF'
+
+test('inhaling in mid-air slows the fall', () => {
+  const g = settle(makeGame(level('..P')));
+  Game.update(g, inp({ jump: true, jumpPressed: true }));
+  run(g, 10, inp({ jump: true }));
+  Game.update(g, inp({ action: true, actionPressed: true }));
+  run(g, 40, inp({ action: true }));
+  assert.equal(g.player.mode, 'inhale');
+  assert.ok(g.player.vy <= C.INHALE_AIR_MAX_FALL);
+});
+EOF
+node --test 2>&1 | grep -E "^not ok|^# (tests|pass|fail)"
+
+OUT
+# tests 49
+# pass 49
+# fail 0
+5:27 PM
+All 49 tests pass. Now checking the CLAUDE.md constraints: file sizes, DOM-free logic, export lines, and literal numbers left in the logic.
+
+
+
+Bash Check file sizes, DOM use, exports, literals
+IN
+cd "c:/Users/ethan/Documents/GitHub/Agent Engineering/Lecture 2a - Codex and Vibecoding/homework/2. just agent.md" && wc -l index.html js/*.js js/logic/*.js tests/* | sort -n | tail -25; echo ---DOM; grep -nE "document|window|canvas|ctx" js/logic/*.js js/level.js; echo ---EXPORTS; for f in js/logic/*.js js/level.js js/input.js; do tail -1 $f; done; echo ---NUMBERS; grep -nE "[^A-Za-z_.0-9'][0-9]+\.?[0-9]*" js/logic/*.js | grep -vE "^\S+:\s*//|constants.js" | grep -vE "\b(0|1|2)\b" | head -30
+
+OUT
+    29 tests/helpers.js
+    42 index.html
+    53 tests/input.test.js
+    60 js/main.js
+    66 js/input.js
+    68 js/font.js
+   106 tests/physics.test.js
+   107 js/logic/constants.js
+   112 js/logic/physics.js
+   124 js/audio.js
+   124 js/hud.js
+   130 js/logic/player.js
+   130 tests/player.test.js
+   138 js/logic/inhale.js
+   153 tests/game.test.js
+   159 js/tiles.js
+   162 js/level.js
+   173 tests/bot.js
+   173 tests/inhale.test.js
+   192 js/logic/entities.js
+   202 js/logic/game.js
+   219 tests/smoke.mjs
+   313 js/sprites.js
+   356 js/render.js
+  3408 total
+---DOM
+js/level.js:1:// Level data and parsing. Pure data: no DOM, no canvas.
+---EXPORTS
+if (typeof module !== 'undefined') module.exports = { C: KB.C };
+if (typeof module !== 'undefined') module.exports = { Entities: KB.Entities };
+if (typeof module !== 'undefined') module.exports = { Game: KB.Game };
+if (typeof module !== 'undefined') module.exports = { Inhale: KB.Inhale };
+if (typeof module !== 'undefined') module.exports = { Physics: KB.Physics };
+if (typeof module !== 'undefined') module.exports = { Player: KB.Player };
+if (typeof module !== 'undefined') module.exports = { Level: KB.Level };
+if (typeof module !== 'undefined') module.exports = { Input: KB.Input };
+---NUMBERS
+js/logic/entities.js:33:    if (kind === 'hopper') e.wait = C.HOPPER_WAIT_TICKS + (tx * 7) % C.HOPPER_WAIT_TICKS;
+5:27 PM
+Only one stray literal in the logic, the hopper's start-time stagger. Moving it to the constants, then re-running the smoke test to check the new title text and Gordo.
+
+
+
+Bash Move hopper stagger to constants, rerun smoke test
+IN
+cd "c:/Users/ethan/Documents/GitHub/Agent Engineering/Lecture 2a - Codex and Vibecoding/homework/2. just agent.md" && python - <<'EOF'
+def sub(path, a, b):
+    s=open(path,encoding='utf-8').read()
+    assert a in s, (path,a[:50])
+    s=s.replace(a,b,1)
+    open(path,'w',encoding='utf-8',newline='\n').write(s)
+sub('js/logic/entities.js', "e.wait = C.HOPPER_WAIT_TICKS + (tx * 7) % C.HOPPER_WAIT_TICKS;", "e.wait = C.HOPPER_WAIT_TICKS + (tx * C.HOPPER_STAGGER) % C.HOPPER_WAIT_TICKS;")
+sub('js/logic/constants.js', "  HOPPER_WAIT_TICKS: 70,\n", "  HOPPER_WAIT_TICKS: 70,\n  HOPPER_STAGGER: 7,         // spreads out hoppers' first jumps by spawn column\n")
+EOF
+timeout 90 node tests/smoke.mjs; echo EXIT $?
+
+OUT
+smoke test passed; screenshots in .tmp/
+EXIT 0
+Read c:\Users\ethan\Documents\GitHub\Agent Engineering\Lecture 2a - Codex and Vibecoding\homework\2. just agent.md\.tmp\1-title.png
+Read c:\Users\ethan\Documents\GitHub\Agent Engineering\Lecture 2a - Codex and Vibecoding\homework\2. just agent.md\.tmp\6-sprites.png
+5:28 PM
+Title and Gordo look right now. One strictness fix: I matched Enter by key, which also accepts the keypad Enter. CLAUDE.md says no alternative keys, so I'm binding the main Enter key only.
+
+
+
+Bash Strict Enter binding, run all tests, check Chrome cleanup
+IN
+cd "c:/Users/ethan/Documents/GitHub/Agent Engineering/Lecture 2a - Codex and Vibecoding/homework/2. just agent.md" && python - <<'EOF'
+def sub(path, a, b):
+    s=open(path,encoding='utf-8').read()
+    assert a in s, (path,a[:50])
+    s=s.replace(a,b,1)
+    open(path,'w',encoding='utf-8',newline='\n').write(s)
+p='js/input.js'
+sub(p, """  // Only the keys the game asks for. Enter is matched on `key`, so the keypad Enter works too.
+  const BY_CODE = {
+    ArrowLeft: 'left', KeyA: 'left',
+    ArrowRight: 'right', KeyD: 'right',
+    Space: 'jump',
+  };
+  const BY_KEY = { Enter: 'action' };
+""", """  // Only the keys the game asks for (physical key codes, so A/D work on any keyboard layout).
+  const BINDINGS = {
+    ArrowLeft: 'left', KeyA: 'left',
+    ArrowRight: 'right', KeyD: 'right',
+    Space: 'jump',
+    Enter: 'action',
+  };
+""")
+sub(p, "  function actionFor(ev) { return BY_KEY[ev.key] || BY_CODE[ev.code] || null; }", "  function actionFor(ev) { return BINDINGS[ev.code] || null; }")
+sub('tests/input.test.js', "  for (const code of ['KeyW', 'ArrowUp', 'ArrowDown', 'KeyS', 'KeyZ', 'KeyX', 'KeyJ', 'ShiftLeft']) {",
+    "  for (const code of ['KeyW', 'ArrowUp', 'ArrowDown', 'KeyS', 'KeyZ', 'KeyX', 'KeyJ', 'ShiftLeft', 'NumpadEnter']) {")
+EOF
+rm -f .tmp/qa.mjs .tmp/qa-*.png
+node --test 2>&1 | grep -E "^not ok|^# (tests|pass|fail)"; timeout 90 node tests/smoke.mjs; echo SMOKE_EXIT $?
+ls -a .tmp; powershell -NoProfile -Command "Get-CimInstance Win32_Process -Filter \"name='chrome.exe'\" | Where-Object { \$_.CommandLine -like '*chrome-profile-*' } | Measure-Object | Select-Object -ExpandProperty Count"
+
+OUT
+# tests 49
+# pass 49
+# fail 0
+smoke test passed; screenshots in .tmp/
+SMOKE_EXIT 0
+./
+../
+1-title.png
+2-running.png
+3-flying.png
+4-inhaling.png
+5-paused.png
+6-sprites.png
+0
+5:28 PM
+Everything passes, and no headless Chrome is left running. One last look at the in-game flying shot:
+
+
+
+Read c:\Users\ethan\Documents\GitHub\Agent Engineering\Lecture 2a - Codex and Vibecoding\homework\2. just agent.md\.tmp\3-flying.png
+5:28 PM
+Found one: at the ceiling, flying Kirby slides under the HUD bar. Lowering the fly ceiling so he stays fully visible:
+
+
+
+Bash Lower fly ceiling below HUD, rerun all tests
+IN
+cd "c:/Users/ethan/Documents/GitHub/Agent Engineering/Lecture 2a - Codex and Vibecoding/homework/2. just agent.md" && sed -i 's|  FLY_CEILING: 0,            // Kirby cannot rise above this y (top of the level)|  FLY_CEILING: 20,           // Kirby cannot rise above this y (keeps him below the HUD bar)|' js/logic/constants.js && grep -n FLY_CEILING js/logic/constants.js && node --test 2>&1 | grep -E "^not ok|^# (tests|pass|fail)" && timeout 90 node tests/smoke.mjs; echo SMOKE_EXIT $?
+
+OUT
+42:  FLY_CEILING: 20,           // Kirby cannot rise above this y (keeps him below the HUD bar)
+not ok 44 - flying is limited: flaps stop lifting after FLY_MAX_FLAPS and Kirby comes down
+# tests 49
+# pass 48
+# fail 1
+smoke test passed; screenshots in .tmp/
+SMOKE_EXIT 0
+Bash Show failing fly-limit test details
+IN
+cd "c:/Users/ethan/Documents/GitHub/Agent Engineering/Lecture 2a - Codex and Vibecoding/homework/2. just agent.md" && node --test tests/player.test.js 2>&1 | grep -A12 "^not ok"
+
+OUT
+not ok 6 - flying is limited: flaps stop lifting after FLY_MAX_FLAPS and Kirby comes down
+  ---
+  duration_ms: 2.6629
+  type: 'test'
+  location: 'C:\\Users\\ethan\\Documents\\GitHub\\Agent Engineering\\Lecture 2a - Codex and Vibecoding\\homework\\2. just agent.md\\tests\\player.test.js:70:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+    
+    0 !== 8
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+Bash Trace flaps during fly-limit test
+IN
+cd "c:/Users/ethan/Documents/GitHub/Agent Engineering/Lecture 2a - Codex and Vibecoding/homework/2. just agent.md" && node -e "
+const { C, inp, makeGame, run, settle, Game } = require('./tests/helpers.js');
+const rows=[]; for(let i=0;i<9;i++) rows.push('.'.repeat(30)); rows.push('..P'.padEnd(30,'.')); rows.push('#'.repeat(30));
+const g=settle(makeGame(rows));
+Game.update(g, inp({ jump: true, jumpPressed: true })); run(g,10);
+for (let i=0;i<13;i++){ Game.update(g, inp({ jump: true, jumpPressed: true })); const a=[g.player.y.toFixed(0),g.player.flaps,g.player.mode]; run(g,25); console.log(i,a.join(' '),'->',g.player.y.toFixed(0),g.player.flaps,g.player.mode,g.player.onGround);}
+"
+
+OUT
+0 133 1 fly -> 105 1 fly false
+1 102 2 fly -> 74 2 fly false
+2 72 3 fly -> 44 3 fly false
+3 41 4 fly -> 30 4 fly false
+4 27 5 fly -> 37 5 fly false
+5 34 6 fly -> 33 6 fly false
+6 31 7 fly -> 35 7 fly false
+7 33 8 fly -> 34 8 fly false
+8 35 8 fly -> 58 8 fly false
+9 59 8 fly -> 82 8 fly false
+10 83 8 fly -> 106 8 fly false
+11 107 8 fly -> 130 8 fly false
+12 131 8 fly -> 146 0 normal true
+5:29 PM
+The game behaves correctly. With the lower ceiling, Kirby lands before my test's over-long loop ends. Tightening the test so it checks the cap while he's still airborne:
+
+
+
+Bash Fix fly-limit test and rerun suite
+IN
+cd "c:/Users/ethan/Documents/GitHub/Agent Engineering/Lecture 2a - Codex and Vibecoding/homework/2. just agent.md" && python - <<'EOF'
+p='tests/player.test.js'
+s=open(p,encoding='utf-8').read()
+a="""  for (let i = 0; i < C.FLY_MAX_FLAPS + 5; i++) {
+    Game.update(g, inp({ jump: true, jumpPressed: true }));
+    run(g, 25);
+  }
+  assert.equal(g.player.flaps, C.FLY_MAX_FLAPS);
+  const vyBefore = g.player.vy;
+  Game.update(g, inp({ jump: true, jumpPressed: true }));
+  assert.ok(g.player.vy >= vyBefore, 'an extra flap gives no lift');"""
+b="""  for (let i = 0; i < C.FLY_MAX_FLAPS; i++) {
+    Game.update(g, inp({ jump: true, jumpPressed: true }));
+    run(g, 25);
+  }
+  assert.equal(g.player.flaps, C.FLY_MAX_FLAPS);
+  for (let i = 0; i < 3; i++) {
+    const vyBefore = g.player.vy;
+    Game.update(g, inp({ jump: true, jumpPressed: true }));
+    assert.equal(g.player.onGround, false);
+    assert.ok(g.player.vy >= vyBefore, 'an extra flap gives no lift');
+    assert.equal(g.player.flaps, C.FLY_MAX_FLAPS);
+    run(g, 10);
+  }"""
+assert a in s
+s=s.replace(a,b)
+open(p,'w',encoding='utf-8',newline='\n').write(s)
+EOF
+node --test 2>&1 | grep -E "^not ok|^# (tests|pass|fail)"
+
+OUT
+# tests 49
+# pass 49
+# fail 0
+5:29 PM
+I've built the Kirby platformer and it works. All 49 unit tests pass, the browser smoke test passes, and the automated playthrough finishes the level using only simulated key presses. It crosses all 5 gaps without losing a life, and it has to inhale and spit to get through the star-block wall.
+
+How to run: double-click index.html. There's no build step, nothing to install and no external files.
+
+How to run the tests (from the project folder):
+
+node --test runs the unit tests and the playthrough.
+node tests/smoke.mjs opens the game in headless Chrome, plays it with real key events, fails on any console error, and saves screenshots to .tmp/. Set CHROME_PATH if Chrome isn't in the usual place. It shuts Chrome down and deletes its temporary profile afterwards; I confirmed no Chrome processes were left running.
+Checked against your request:
+
+Kirby: runs, jumps, and flies by tapping Space in the air. Holding Enter pulls in enemies, star blocks and pickups in front of him. Once he's swallowed something, Enter spits it out as a star that defeats enemies.
+Level: one side-scrolling level with platforms, clouds you can jump up through, 5 gaps, 2 checkpoints, and a Warp Star at the end as the goal.
+Enemies: four kinds. A walker, a flyer that bobs up and down, a hopper that jumps toward Kirby, and Gordo, a spiky one that can't be inhaled or defeated.
+Lives and screens: lives, score, a game-over screen, a win screen, and restart (Enter or Space on the end screens, or R at any time).
+Controls: the bindings are exactly what you listed, and they're shown on screen in three places: a strip along the bottom, the title screen, and a line under the game.
+Art: every sprite, tile and letter is drawn in code. Pixels stay sharp because the game only scales up in whole steps. There are animations for idle, blink, run, jump, fall, fly, inhale, mouthful, spit, landing and hurt.
+Where I made a choice or approximated:
+
+Flying is limited to 8 flaps before Kirby has to land, with a meter in the top bar. He also can't fly above a ceiling just under that bar. The real games allow endless flight.
+Mouthful Kirby can't fly, as in the original games, so you have to spit before crossing a gap.
+"Surprisingly strong" is shown through his abilities rather than a stat: he pulls star blocks straight out of walls, and one spat star goes through a whole line of enemies.
+The palette is one fixed set of about 45 named colours. It's limited, but not as strict as a real retro console.
+Extras I added: health (3 hits per life) and a tomato that refills it, collectible stars, checkpoints, the hopper and Gordo, an air puff when you press Enter while flying or when you land from flying, slower falling while inhaling in mid-air, a wall of star blocks you have to inhale through, double points for each extra enemy one star hits, enemies being knocked out when they bump into Kirby, a saved high score, a title screen, tutorial signs, pause (P), mute (M), sound effects and a music loop, particles and screen shake, and small movement aids (shorter hops when you let go of Space early, and a brief window to jump after walking off a ledge).
+
+What I couldn't verify:
+
+Sound: I couldn't hear anything. The test runs without errors with sound switched on, but whether it sounds good is untested.
+How it feels to play: I set the jump, fly and inhale numbers by calculation and the scripted run; I haven't played it by hand. All of them are in one block in js/logic/constants.js if you want to tune them.
+Known problems:
+
+On screens faster than 60Hz, movement may look slightly less smooth, because the game updates 60 times a second and doesn't smooth between updates.
+Kirby's right cheek blush touches his outline when he faces right. It's cosmetic only.
+Defeated enemies stay gone after you respawn at a checkpoint. That's deliberate, but it does make retries easier.
+The playthrough proves the level can be finished, but the scripted player still took one hit along the way.

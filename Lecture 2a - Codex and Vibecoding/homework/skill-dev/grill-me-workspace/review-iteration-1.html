@@ -1,0 +1,1325 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Eval Review</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@500;600&family=Lora:wght@400;500&display=swap" rel="stylesheet">
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js" integrity="sha384-EnyY0/GSHQGSxSgMwaIPzSESbqoOLSexfnSMN2AP+39Ckmn92stwABZynq1JyzdT" crossorigin="anonymous"></script>
+  <style>
+    :root {
+      --bg: #faf9f5;
+      --surface: #ffffff;
+      --border: #e8e6dc;
+      --text: #141413;
+      --text-muted: #b0aea5;
+      --accent: #d97757;
+      --accent-hover: #c4613f;
+      --green: #788c5d;
+      --green-bg: #eef2e8;
+      --red: #c44;
+      --red-bg: #fceaea;
+      --header-bg: #141413;
+      --header-text: #faf9f5;
+      --radius: 6px;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Lora', Georgia, serif;
+      background: var(--bg);
+      color: var(--text);
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ---- Header ---- */
+    .header {
+      background: var(--header-bg);
+      color: var(--header-text);
+      padding: 1rem 2rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-shrink: 0;
+    }
+    .header h1 {
+      font-family: 'Poppins', sans-serif;
+      font-size: 1.25rem;
+      font-weight: 600;
+    }
+    .header .instructions {
+      font-size: 0.8rem;
+      opacity: 0.7;
+      margin-top: 0.25rem;
+    }
+    .header .progress {
+      font-size: 0.875rem;
+      opacity: 0.8;
+      text-align: right;
+    }
+
+    /* ---- Main content ---- */
+    .main {
+      flex: 1;
+      overflow-y: auto;
+      padding: 1.5rem 2rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1.25rem;
+    }
+
+    /* ---- Sections ---- */
+    .section {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      flex-shrink: 0;
+    }
+    .section-header {
+      font-family: 'Poppins', sans-serif;
+      padding: 0.75rem 1rem;
+      font-size: 0.75rem;
+      font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-muted);
+      border-bottom: 1px solid var(--border);
+      background: var(--bg);
+    }
+    .section-body {
+      padding: 1rem;
+    }
+
+    /* ---- Config badge ---- */
+    .config-badge {
+      display: inline-block;
+      padding: 0.2rem 0.625rem;
+      border-radius: 9999px;
+      font-family: 'Poppins', sans-serif;
+      font-size: 0.6875rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+      margin-left: 0.75rem;
+      vertical-align: middle;
+    }
+    .config-badge.config-primary {
+      background: rgba(33, 150, 243, 0.12);
+      color: #1976d2;
+    }
+    .config-badge.config-baseline {
+      background: rgba(255, 193, 7, 0.15);
+      color: #f57f17;
+    }
+
+    /* ---- Prompt ---- */
+    .prompt-text {
+      white-space: pre-wrap;
+      font-size: 0.9375rem;
+      line-height: 1.6;
+    }
+
+    /* ---- Outputs ---- */
+    .output-file {
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+    .output-file + .output-file {
+      margin-top: 1rem;
+    }
+    .output-file-header {
+      padding: 0.5rem 0.75rem;
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      background: var(--bg);
+      border-bottom: 1px solid var(--border);
+      font-family: 'SF Mono', SFMono-Regular, Consolas, 'Liberation Mono', Menlo, monospace;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .output-file-header .dl-btn {
+      font-size: 0.7rem;
+      color: var(--accent);
+      text-decoration: none;
+      cursor: pointer;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-weight: 500;
+      opacity: 0.8;
+    }
+    .output-file-header .dl-btn:hover {
+      opacity: 1;
+      text-decoration: underline;
+    }
+    .output-file-content {
+      padding: 0.75rem;
+      overflow-x: auto;
+    }
+    .output-file-content pre {
+      font-size: 0.8125rem;
+      line-height: 1.5;
+      white-space: pre-wrap;
+      word-break: break-word;
+      font-family: 'SF Mono', SFMono-Regular, Consolas, 'Liberation Mono', Menlo, monospace;
+    }
+    .output-file-content img {
+      max-width: 100%;
+      height: auto;
+      border-radius: 4px;
+    }
+    .output-file-content iframe {
+      width: 100%;
+      height: 600px;
+      border: none;
+    }
+    .output-file-content table {
+      border-collapse: collapse;
+      font-size: 0.8125rem;
+      width: 100%;
+    }
+    .output-file-content table td,
+    .output-file-content table th {
+      border: 1px solid var(--border);
+      padding: 0.375rem 0.5rem;
+      text-align: left;
+    }
+    .output-file-content table th {
+      background: var(--bg);
+      font-weight: 600;
+    }
+    .output-file-content .download-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.5rem 1rem;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      color: var(--accent);
+      text-decoration: none;
+      font-size: 0.875rem;
+      cursor: pointer;
+    }
+    .output-file-content .download-link:hover {
+      background: var(--border);
+    }
+    .empty-state {
+      color: var(--text-muted);
+      font-style: italic;
+      padding: 2rem;
+      text-align: center;
+    }
+
+    /* ---- Feedback ---- */
+    .prev-feedback {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 0.625rem 0.75rem;
+      margin-top: 0.75rem;
+      font-size: 0.8125rem;
+      color: var(--text-muted);
+      line-height: 1.5;
+    }
+    .prev-feedback-label {
+      font-size: 0.7rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      margin-bottom: 0.25rem;
+      color: var(--text-muted);
+    }
+    .feedback-textarea {
+      width: 100%;
+      min-height: 100px;
+      padding: 0.75rem;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      font-family: inherit;
+      font-size: 0.9375rem;
+      line-height: 1.5;
+      resize: vertical;
+      color: var(--text);
+    }
+    .feedback-textarea:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+    }
+    .feedback-status {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      margin-top: 0.5rem;
+      min-height: 1.1em;
+    }
+
+    /* ---- Grades (collapsible) ---- */
+    .grades-toggle {
+      display: flex;
+      align-items: center;
+      cursor: pointer;
+      user-select: none;
+    }
+    .grades-toggle:hover {
+      color: var(--accent);
+    }
+    .grades-toggle .arrow {
+      margin-right: 0.5rem;
+      transition: transform 0.15s;
+      font-size: 0.75rem;
+    }
+    .grades-toggle .arrow.open {
+      transform: rotate(90deg);
+    }
+    .grades-content {
+      display: none;
+      margin-top: 0.75rem;
+    }
+    .grades-content.open {
+      display: block;
+    }
+    .grades-summary {
+      font-size: 0.875rem;
+      margin-bottom: 0.75rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .grade-badge {
+      display: inline-block;
+      padding: 0.125rem 0.5rem;
+      border-radius: 9999px;
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+    .grade-pass { background: var(--green-bg); color: var(--green); }
+    .grade-fail { background: var(--red-bg); color: var(--red); }
+    .assertion-list {
+      list-style: none;
+    }
+    .assertion-item {
+      padding: 0.625rem 0;
+      border-bottom: 1px solid var(--border);
+      font-size: 0.8125rem;
+    }
+    .assertion-item:last-child { border-bottom: none; }
+    .assertion-status {
+      font-weight: 600;
+      margin-right: 0.5rem;
+    }
+    .assertion-status.pass { color: var(--green); }
+    .assertion-status.fail { color: var(--red); }
+    .assertion-evidence {
+      color: var(--text-muted);
+      font-size: 0.75rem;
+      margin-top: 0.25rem;
+      padding-left: 1.5rem;
+    }
+
+    /* ---- View tabs ---- */
+    .view-tabs {
+      display: flex;
+      gap: 0;
+      padding: 0 2rem;
+      background: var(--bg);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    .view-tab {
+      font-family: 'Poppins', sans-serif;
+      padding: 0.625rem 1.25rem;
+      font-size: 0.8125rem;
+      font-weight: 500;
+      cursor: pointer;
+      border: none;
+      background: none;
+      color: var(--text-muted);
+      border-bottom: 2px solid transparent;
+      transition: all 0.15s;
+    }
+    .view-tab:hover { color: var(--text); }
+    .view-tab.active {
+      color: var(--accent);
+      border-bottom-color: var(--accent);
+    }
+    .view-panel { display: none; }
+    .view-panel.active { display: flex; flex-direction: column; flex: 1; overflow: hidden; }
+
+    /* ---- Benchmark view ---- */
+    .benchmark-view {
+      padding: 1.5rem 2rem;
+      overflow-y: auto;
+      flex: 1;
+    }
+    .benchmark-table {
+      border-collapse: collapse;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      font-size: 0.8125rem;
+      width: 100%;
+      margin-bottom: 1.5rem;
+    }
+    .benchmark-table th, .benchmark-table td {
+      padding: 0.625rem 0.75rem;
+      text-align: left;
+      border: 1px solid var(--border);
+    }
+    .benchmark-table th {
+      font-family: 'Poppins', sans-serif;
+      background: var(--header-bg);
+      color: var(--header-text);
+      font-weight: 500;
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .benchmark-table tr:hover { background: var(--bg); }
+    .benchmark-table tr.benchmark-row-with { background: rgba(33, 150, 243, 0.06); }
+    .benchmark-table tr.benchmark-row-without { background: rgba(255, 193, 7, 0.06); }
+    .benchmark-table tr.benchmark-row-with:hover { background: rgba(33, 150, 243, 0.12); }
+    .benchmark-table tr.benchmark-row-without:hover { background: rgba(255, 193, 7, 0.12); }
+    .benchmark-table tr.benchmark-row-avg { font-weight: 600; border-top: 2px solid var(--border); }
+    .benchmark-table tr.benchmark-row-avg.benchmark-row-with { background: rgba(33, 150, 243, 0.12); }
+    .benchmark-table tr.benchmark-row-avg.benchmark-row-without { background: rgba(255, 193, 7, 0.12); }
+    .benchmark-delta-positive { color: var(--green); font-weight: 600; }
+    .benchmark-delta-negative { color: var(--red); font-weight: 600; }
+    .benchmark-notes {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1rem;
+    }
+    .benchmark-notes h3 {
+      font-family: 'Poppins', sans-serif;
+      font-size: 0.875rem;
+      margin-bottom: 0.75rem;
+    }
+    .benchmark-notes ul {
+      list-style: disc;
+      padding-left: 1.25rem;
+    }
+    .benchmark-notes li {
+      font-size: 0.8125rem;
+      line-height: 1.6;
+      margin-bottom: 0.375rem;
+    }
+    .benchmark-empty {
+      color: var(--text-muted);
+      font-style: italic;
+      text-align: center;
+      padding: 3rem;
+    }
+
+    /* ---- Navigation ---- */
+    .nav {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 1rem 2rem;
+      border-top: 1px solid var(--border);
+      background: var(--surface);
+      flex-shrink: 0;
+    }
+    .nav-btn {
+      font-family: 'Poppins', sans-serif;
+      padding: 0.5rem 1.25rem;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--surface);
+      cursor: pointer;
+      font-size: 0.875rem;
+      font-weight: 500;
+      color: var(--text);
+      transition: all 0.15s;
+    }
+    .nav-btn:hover:not(:disabled) {
+      background: var(--bg);
+      border-color: var(--text-muted);
+    }
+    .nav-btn:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+    .done-btn {
+      font-family: 'Poppins', sans-serif;
+      padding: 0.5rem 1.5rem;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--surface);
+      color: var(--text);
+      cursor: pointer;
+      font-size: 0.875rem;
+      font-weight: 500;
+      transition: all 0.15s;
+    }
+    .done-btn:hover {
+      background: var(--bg);
+      border-color: var(--text-muted);
+    }
+    .done-btn.ready {
+      border: none;
+      background: var(--accent);
+      color: white;
+      font-weight: 600;
+    }
+    .done-btn.ready:hover {
+      background: var(--accent-hover);
+    }
+    /* ---- Done overlay ---- */
+    .done-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.5);
+      z-index: 100;
+      justify-content: center;
+      align-items: center;
+    }
+    .done-overlay.visible {
+      display: flex;
+    }
+    .done-card {
+      background: var(--surface);
+      border-radius: 12px;
+      padding: 2rem 3rem;
+      text-align: center;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+      max-width: 500px;
+    }
+    .done-card h2 {
+      font-size: 1.5rem;
+      margin-bottom: 0.5rem;
+    }
+    .done-card p {
+      color: var(--text-muted);
+      margin-bottom: 1.5rem;
+      line-height: 1.5;
+    }
+    .done-card .btn-row {
+      display: flex;
+      gap: 0.5rem;
+      justify-content: center;
+    }
+    .done-card button {
+      padding: 0.5rem 1.25rem;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--surface);
+      cursor: pointer;
+      font-size: 0.875rem;
+    }
+    .done-card button:hover {
+      background: var(--bg);
+    }
+    /* ---- Toast ---- */
+    .toast {
+      position: fixed;
+      bottom: 5rem;
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--header-bg);
+      color: var(--header-text);
+      padding: 0.625rem 1.25rem;
+      border-radius: var(--radius);
+      font-size: 0.875rem;
+      opacity: 0;
+      transition: opacity 0.3s;
+      pointer-events: none;
+      z-index: 200;
+    }
+    .toast.visible {
+      opacity: 1;
+    }
+  </style>
+</head>
+<body>
+  <div id="app" style="height:100vh; display:flex; flex-direction:column;">
+    <div class="header">
+      <div>
+        <h1>Eval Review: <span id="skill-name"></span></h1>
+        <div class="instructions">Review each output and leave feedback below. Navigate with arrow keys or buttons. When done, copy feedback and paste into Claude Code.</div>
+      </div>
+      <div class="progress" id="progress"></div>
+    </div>
+
+    <!-- View tabs (only shown when benchmark data exists) -->
+    <div class="view-tabs" id="view-tabs" style="display:none;">
+      <button class="view-tab active" onclick="switchView('outputs')">Outputs</button>
+      <button class="view-tab" onclick="switchView('benchmark')">Benchmark</button>
+    </div>
+
+    <!-- Outputs panel (qualitative review) -->
+    <div class="view-panel active" id="panel-outputs">
+    <div class="main">
+      <!-- Prompt -->
+      <div class="section">
+        <div class="section-header">Prompt <span class="config-badge" id="config-badge" style="display:none;"></span></div>
+        <div class="section-body">
+          <div class="prompt-text" id="prompt-text"></div>
+        </div>
+      </div>
+
+      <!-- Outputs -->
+      <div class="section">
+        <div class="section-header">Output</div>
+        <div class="section-body" id="outputs-body">
+          <div class="empty-state">No output files found</div>
+        </div>
+      </div>
+
+      <!-- Previous Output (collapsible) -->
+      <div class="section" id="prev-outputs-section" style="display:none;">
+        <div class="section-header">
+          <div class="grades-toggle" onclick="togglePrevOutputs()">
+            <span class="arrow" id="prev-outputs-arrow">&#9654;</span>
+            Previous Output
+          </div>
+        </div>
+        <div class="grades-content" id="prev-outputs-content"></div>
+      </div>
+
+      <!-- Grades (collapsible) -->
+      <div class="section" id="grades-section" style="display:none;">
+        <div class="section-header">
+          <div class="grades-toggle" onclick="toggleGrades()">
+            <span class="arrow" id="grades-arrow">&#9654;</span>
+            Formal Grades
+          </div>
+        </div>
+        <div class="grades-content" id="grades-content"></div>
+      </div>
+
+      <!-- Feedback -->
+      <div class="section">
+        <div class="section-header">Your Feedback</div>
+        <div class="section-body">
+          <textarea
+            class="feedback-textarea"
+            id="feedback"
+            placeholder="What do you think of this output? Any issues, suggestions, or things that look great?"
+          ></textarea>
+          <div class="feedback-status" id="feedback-status"></div>
+          <div class="prev-feedback" id="prev-feedback" style="display:none;">
+            <div class="prev-feedback-label">Previous feedback</div>
+            <div id="prev-feedback-text"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="nav" id="outputs-nav">
+      <button class="nav-btn" id="prev-btn" onclick="navigate(-1)">&#8592; Previous</button>
+      <button class="done-btn" id="done-btn" onclick="showDoneDialog()">Submit All Reviews</button>
+      <button class="nav-btn" id="next-btn" onclick="navigate(1)">Next &#8594;</button>
+    </div>
+    </div><!-- end panel-outputs -->
+
+    <!-- Benchmark panel (quantitative stats) -->
+    <div class="view-panel" id="panel-benchmark">
+      <div class="benchmark-view" id="benchmark-content">
+        <div class="benchmark-empty">No benchmark data available. Run a benchmark to see quantitative results here.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Done overlay -->
+  <div class="done-overlay" id="done-overlay">
+    <div class="done-card">
+      <h2>Review Complete</h2>
+      <p>Your feedback has been saved. Go back to your Claude Code session and tell Claude you're done reviewing.</p>
+      <div class="btn-row">
+        <button onclick="closeDoneDialog()">OK</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div class="toast" id="toast"></div>
+
+  <script>
+    // ---- Embedded data (injected by generate_review.py) ----
+    const EMBEDDED_DATA = {"skill_name": "grill-me", "runs": [{"id": "eval-boss-fight-with_skill-run-1", "prompt": "(No prompt found)", "eval_id": null, "outputs": [{"name": "response.md", "type": "text", "content": "Before I write any code, I want to pin down a few decisions. A boss fight is mostly design choices, and I'd rather ask now than build the wrong one. I'll ask one question at a time, then write the answers into a short `DESIGN.md` for you to approve.\n\nWhat I found in the project:\n- The level is 11 sections joined together in `js/level.js`. It ends with a staircase up to a single warp star (`E`). Touching it calls `win()` in `game.js`, which awards 1000 points plus 500 per life left.\n- There are only four enemy types (walker, flyer, hopper, gordo). They share one update loop in `entities.js`, and every enemy dies in one hit: a star, a puff or a bump. Nothing in the game has hit points yet.\n- `CLAUDE.md` requires every tunable number to live in `constants.js`. It also requires the playthrough test to finish the level using key events only, so that test will have to beat the boss too.\n\n**Q1 of ~8: Should the boss replace the warp star as the goal of the level, or guard it?**\n*Why it matters:* this decides how the level ends, and the other questions depend on it. Today the goal is just \"touch the star\" (`g.goal` overlap in `stepPlaying`). If beating the boss becomes the way to win, `win()`, the level layout after the stairs, the tutorial sign `6` (\"TOUCH IT TO WIN\") and the playthrough test all change.\n*My recommendation:* add a boss arena after the stairs and have the warp star appear only when the boss is defeated. That makes the boss the real finale, and the existing win flow, score bonus and `E` goal can stay as they are. The star would be spawned or revealed on the boss's death instead of existing from the start.\n*Alternatives:* (a) the boss guards the star but is optional, so you can run past it. This is the cheapest option but undercuts the fight. (b) The boss fight replaces the star entirely and a \"boss defeated\" event triggers `win()`. This is simpler code, but you lose the star as a visual payoff.\n\nWhich one do you want?\n\nFILES READ: grill-me/SKILL.md, CLAUDE.md, js/logic/constants.js, js/logic/game.js, js/logic/entities.js, js/level.js, js/logic/inhale.js, tests/playthrough.test.js\n"}], "grading": {"expectations": [{"text": "Source untouched: no files in js/, tests/ or index.html were changed (the agent asked before building)", "passed": true, "evidence": "Directory diff vs original copy shows 0 changed entries."}, {"text": "Asks exactly one design question to the user, not a list or batch of questions", "passed": true, "evidence": "One question: 'Q1 of ~8: Should the boss replace the warp star as the goal of the level, or guard it?'"}, {"text": "The question cites a concrete project detail (a real file name, constant, or existing behavior from the code)", "passed": true, "evidence": "Cites win() in game.js, g.goal overlap in stepPlaying, tutorial sign '6', the playthrough test."}, {"text": "The question comes with an explicit recommended answer plus a reason", "passed": true, "evidence": "'My recommendation: add a boss arena after the stairs and have the warp star appear only when the boss is defeated.' with reasoning."}, {"text": "The response says why the question matters for the build (what depends on the answer)", "passed": true, "evidence": "'Why it matters: this decides how the level ends, and the other questions depend on it.'"}, {"text": "Explored the project first: the FILES READ line lists at least 3 project files", "passed": true, "evidence": "FILES READ lists 7 project files (CLAUDE.md, constants.js, game.js, entities.js, level.js, inhale.js, playthrough.test.js)."}, {"text": "No DESIGN.md written yet (the spec comes after the interview, not at question one)", "passed": true, "evidence": "No DESIGN.md found in the run's game folder."}], "summary": {"passed": 7, "failed": 0, "total": 7, "pass_rate": 1.0}}}, {"id": "eval-boss-fight-without_skill-run-1", "prompt": "(No prompt found)", "eval_id": null, "outputs": [{"name": "response.md", "type": "text", "content": "Glad it's working. I read through the logic, level, render and test files before touching anything. Here is how I would add the boss, and what I'd settle with you first. I haven't changed any code yet.\n\n## What the code looks like today\n\n- The level is a string grid in `js/level.js`, built from sections. The last section is the \"stairs up to the warp star\". The `E` tile is the goal, and touching it calls `win()` in `js/logic/game.js`.\n- Enemies (walker, flyer, hopper, gordo) are plain objects in `g.enemies`. They are created in `entities.js`, and the inhale code in `inhale.js` swallows anything in the cone that is `inhalable`.\n- Kirby has 3 HP. Bumping an enemy hurts Kirby and also defeats the enemy, except Gordo, which only hurts.\n- Stars pierce enemies and one star kills any enemy. A boss would need HP, so that rule has to change for it.\n- `tests/playthrough.test.js` drives a bot with key events only. It requires reaching the warp star with no deaths, crossing every gap, and finishing in 5 minutes. A boss changes what \"finishing the level\" means, so the bot and the test have to learn the fight.\n- `CLAUDE.md` rules: logic files stay free of DOM/canvas, each file stays under about 400 lines (`render.js` is 356 and `game.js` is 202), tunables go in `constants.js`, and no extra movement keys.\n\n## Questions for you (these decide the design)\n\n1. **Which boss?** A Whispy Woods-style tree (stationary, drops apples, blows air) or a mobile boss like King Dedede (walks, jumps, swings a hammer)? A stationary tree is much cheaper and fits the inhale/spit mechanic well. I'd default to the tree.\n2. **How does Kirby hurt it?** My default: spit a star back at the boss, or spit apples and enemies the boss throws. Each hit does 1 damage, and the boss has about 6 HP with a short flash after each hit. Is that what you want, or should plain exhale puffs work too?\n3. **Boss attacks?** My default is two: apples that fall from the canopy (Kirby can inhale them and spit them back for damage), and a horizontal air puff that must be jumped or flown over. A third, harder attack could kick in at half HP.\n4. **Arena shape?** My default is a locked arena. The camera stops scrolling and the left edge is walled once Kirby enters, so the boss fight can't be skipped. Does the arena replace the warp-star stairs, or come after them?\n5. **What happens on win and on death?** My default is that defeating the boss spawns the warp star, and touching it triggers the existing win flow, with a bonus score for the boss. If Kirby dies mid-fight, he respawns at a checkpoint just before the arena with the boss at full HP. Should I add a boss health bar to the HUD? I'd say yes.\n6. **Difficulty?** Kirby only has 3 HP and tomatoes heal. Should I put a tomato in the arena? Should the boss's HP scale, or stay fixed?\n7. **Scope extras (only if cheap):** a boss sprite drawn in code like the others, sound effects through `audio.js`, and screen shake on hits. Say if you'd rather skip any of these.\n\nIf you don't want to answer all of these, say \"go with your defaults\" and I'll use the defaults above.\n\n## What I would do first once you confirm\n\n1. Add boss constants to `js/logic/constants.js`: HP, attack timings, arena width, damage and score values. No magic numbers elsewhere.\n2. Add a new logic file, `js/logic/boss.js`, for boss state, attack patterns and damage rules. It would be about 150 lines and have no DOM access. It hooks into `entities.js` for projectile and inhale checks, and into `game.js` for a new `g.boss`.\n3. Extend the level in `js/level.js` with a boss spawn tile and an arena section before the goal. The goal would be hidden or inactive until the boss is dead. This also needs a small change to the `win` trigger in `game.js`.\n4. Add the camera lock and arena walls in the game state and `render.js`. Since `render.js` is near the 400-line limit, I would put the boss drawing in a new `js/bossRender.js` and the boss sprites in the sprite file or a new one, then add the `<script>` tag to `index.html`. That is the one existing-file edit outside `js/`. `index.html` has to load the new files with classic script tags.\n5. Add the boss health bar to `hud.js`.\n6. Write tests first in `tests/boss.test.js`: boss takes damage from a spit star and from a returned apple, it dies at 0 HP, the goal only activates after the boss dies, death mid-fight resets the boss and respawns Kirby, and the boss attacks hurt Kirby.\n7. Update `tests/bot.js` and the playthrough test so the bot fights the boss using key events only, with no deaths. Then extend `tests/smoke.mjs` to check that the arena renders with no console errors.\n8. Run `node --test` and the smoke test, then report the extras, anything I couldn't verify (feel and difficulty balance, sound), and known problems.\n\nMain risk: balancing the bot's fight so the playthrough test stays deterministic. I'd make the boss attack pattern timer-based with no randomness (or seeded) so the test isn't flaky.\n\nFILES READ: CLAUDE.md, js/logic/game.js, js/level.js, js/logic/entities.js, js/logic/constants.js, js/logic/inhale.js, tests/playthrough.test.js, tests/bot.js, js/render.js, js/hud.js\n"}], "grading": {"expectations": [{"text": "Source untouched: no files in js/, tests/ or index.html were changed (the agent asked before building)", "passed": true, "evidence": "Directory diff vs original copy shows 0 changed entries (but the test harness forbade edits, so this does not discriminate)."}, {"text": "Asks exactly one design question to the user, not a list or batch of questions", "passed": false, "evidence": "Seven numbered questions asked at once (boss type, damage, attacks, arena, win/death, difficulty, extras)."}, {"text": "The question cites a concrete project detail (a real file name, constant, or existing behavior from the code)", "passed": true, "evidence": "Cites win() in game.js, level.js stairs section, playthrough.test.js, render.js at 356 lines."}, {"text": "The question comes with an explicit recommended answer plus a reason", "passed": true, "evidence": "Each question carries a 'My default' with some reasoning, e.g. 'stationary tree is much cheaper and fits the inhale/spit mechanic'."}, {"text": "The response says why the question matters for the build (what depends on the answer)", "passed": false, "evidence": "Questions state defaults but do not say what depends on each answer; no per-question 'why it matters'."}, {"text": "Explored the project first: the FILES READ line lists at least 3 project files", "passed": true, "evidence": "FILES READ lists 10 project files."}, {"text": "No DESIGN.md written yet (the spec comes after the interview, not at question one)", "passed": true, "evidence": "No DESIGN.md found."}], "summary": {"passed": 5, "failed": 2, "total": 7, "pass_rate": 0.71}}}, {"id": "eval-copy-abilities-with_skill-run-1", "prompt": "(No prompt found)", "eval_id": null, "outputs": [{"name": "response.md", "type": "text", "content": "Before I touch any code, I read the project so I only ask what the code can't answer. Here is what I found:\n\n- **Inhale today:** Hold Enter to inhale. Anything swallowed puts Kirby in `'full'` mode (`inhale.js`), and the next Enter press spits it out as a star (`Inhale.spit`). The game never records what he swallowed in a way that matters: `p.held = { kinds, count }` stores the enemy kinds, but nothing reads them.\n- **Enemies:** There are three inhalable kinds (walker, flyer, hopper). Gordo is flagged `inhalable: false`. All of them are plain data in `entities.js`, with no per-kind attacks.\n- **Controls:** `input.js` binds only arrows/AD, Space and Enter, and `CLAUDE.md` says not to add keys for movement, jump/fly or inhale/spit beyond the ones requested. Enter is already overloaded: it inhales, spits when full, and exhales a puff when flying. A power needs to fit into that, or I need your permission for one new key.\n- **Constraints:** Every number goes in `constants.js`. Logic stays free of the DOM. Tests are required (`inhale.test.js` and `player.test.js` cover swallow and spit today). The automated playthrough test uses simulated keys only.\n\nI expect about 8 questions. Here is the first, since the others depend on it.\n\n**Q1 of ~8: After Kirby swallows an enemy, how does he turn it into a power and use it, given that Enter is the only action key?**\n\n*Why it matters:* This sets the control scheme, and every other decision builds on it. Today the mouthful state exists only to be spat back out as a star. Real Kirby gets his power by pressing Down to swallow. Down isn't bound here, and `CLAUDE.md` forbids adding keys for inhale/spit without your say-so.\n\n*My recommendation:* Swallowing a power-giving enemy gives the power immediately, and the spit-a-star step is skipped for those enemies. Enter then uses the power. A second key (say, `S` or `ArrowDown`) drops it. This is the simplest option that fits one action key. It means giving up spit-a-star for those enemies, so keep it for any enemy that has no power.\n\n*Alternatives:*\n- **Keep the mouthful, add a swallow key.** This is closest to the real games, and you choose between spitting the star and swallowing it for the power. It needs one new key (Down). It is the most faithful and costs one new key plus a new state.\n- **Hold-to-choose on the existing Enter key.** Pressing Enter again spits; holding it swallows. It adds no keys, but it is fiddly and easy to get wrong.\n\nWhich one do you want? Or if you'd rather I just pick, say \"you decide\" and I'll take my recommendation. Once we've settled Q1, the next questions are:\n\n- which enemy gives which power (the four enemy types are walker, flyer, hopper and Gordo);\n- how a power is dropped or lost when Kirby gets hurt;\n- how a power is shown in the HUD and the sprites;\n- how we'll check it works.\n\nFILES READ: SKILL.md (grill-me), CLAUDE.md, js/logic/constants.js, js/logic/inhale.js, js/logic/entities.js, js/logic/player.js, js/input.js, js/logic/game.js, js/level.js\n"}], "grading": {"expectations": [{"text": "Source untouched: no files in js/, tests/ or index.html were changed (the agent asked before building)", "passed": true, "evidence": "Directory diff shows 0 changed entries."}, {"text": "Asks exactly one design question to the user, not a list or batch of questions", "passed": true, "evidence": "One question: 'Q1 of ~8: After Kirby swallows an enemy, how does he turn it into a power...?' Lists upcoming topics as bullets but asks only one."}, {"text": "The question cites a concrete project detail (a real file name, constant, or existing behavior from the code)", "passed": true, "evidence": "Cites inhale.js, p.held = {kinds, count}, input.js bindings, CLAUDE.md key rule, Inhale.spit."}, {"text": "The question comes with an explicit recommended answer plus a reason", "passed": true, "evidence": "'My recommendation: swallowing a power-giving enemy gives the power immediately...' with reasoning and alternatives."}, {"text": "The response says why the question matters for the build (what depends on the answer)", "passed": true, "evidence": "'This sets the control scheme, and every other decision builds on it.'"}, {"text": "Explored the project first: the FILES READ line lists at least 3 project files", "passed": true, "evidence": "FILES READ lists 8 project files."}, {"text": "No DESIGN.md written yet (the spec comes after the interview, not at question one)", "passed": true, "evidence": "No DESIGN.md found."}], "summary": {"passed": 7, "failed": 0, "total": 7, "pass_rate": 1.0}}}, {"id": "eval-copy-abilities-without_skill-run-1", "prompt": "(No prompt found)", "eval_id": null, "outputs": [{"name": "response.md", "type": "text", "content": "I haven't changed any code yet. I read the game first, and a few design choices change what I'd build, so I'd like your answers before I start.\n\n## What the code looks like now\n\n- Swallowing sets `p.mode = 'full'` and `p.held = { kinds: [...] }` (`js/logic/inhale.js`).\n- In `full` mode the Enter key can only spit a star (`player.js`, `handleAction`).\n- The game already remembers which enemy kinds Kirby swallowed, and that data is never used. A copy ability can use it.\n- There are three inhalable enemy kinds: `walker`, `flyer` and `hopper`. Gordo can't be inhaled. Star blocks can be inhaled, but they aren't enemies.\n- `CLAUDE.md` says to bind only the keys the request lists and not to add alternative keys for those actions.\n\n## Questions (each has my default)\n\n1. **How does Kirby turn a mouthful into a power?** In the real games he presses Down to swallow, and Enter/spit gives you the star. Enter is already \"spit\", so we need a second action.\n   - Default: add the **Down arrow** as \"swallow\", plus a key to drop the power. I'd treat it as a new action rather than an alternative key for an existing one, but that is a judgment call, so please confirm. If you'd rather not add keys, the fallback is: holding Enter spits, and a quick tap swallows.\n   - How does he lose a power: a key, getting hurt (as in the real games), or both?\n2. **Which enemy gives which power?** Three enemy kinds means three powers at most. My proposal:\n   - Walker gives **Fire**: Enter breathes a short flame that defeats enemies and burns brick blocks.\n   - Flyer gives **Cutter**: Enter throws a boomerang blade that returns to him.\n   - Hopper gives **Spark**: Enter makes a short-range electric burst in all directions.\n   - Do you want other powers, or new enemy types to go with them? New enemies mean new sprites and level edits. I'd keep to three powers for now.\n3. **What does Enter do while Kirby has a power?** In the real games, the attack key uses the power and inhaling is unavailable until you drop it. I'd copy that. It has a side effect: with a power he can't inhale star blocks. Is that fine, or should star blocks be inhalable even with a power?\n4. **Should abilities affect the level?** Right now they would only be a different way to kill enemies. If you want them to matter, I'd add a few things to the level, such as brick walls that only Fire clears or a gap that Cutter reaches across. Otherwise abilities are purely cosmetic, and the level and its tests stay as they are. Which do you want?\n5. **What does the player see?** The default is a color-tinted Kirby sprite per power (red, grey, yellow) and the power's name in the HUD, which fits the existing `sprites.js` and `hud.js`. Do you want a hat or a hand-drawn sprite per power instead? That is more work.\n6. **Does a power carry across death and checkpoints?** I'd say no: respawn clears it, and `killPlayer` already resets `held`. Say if you want it to persist.\n7. **Multiple enemies in one mouthful?** `held.kinds` can hold several. I'd use the first enemy kind in the list. Enemy kinds that give no power would still be spat as a star.\n\n## What I'd do first once you answer\n\n1. Add the new numbers to `js/logic/constants.js` (flame range, cutter speed, spark radius and so on), because `CLAUDE.md` forbids magic numbers.\n2. Add a `p.ability` field to the player, a `KB.Abilities` table that maps enemy kind to power, and swallow and drop functions in `js/logic/inhale.js`.\n3. Put the power behavior in a new `js/logic/abilities.js` that stays under 400 lines and has no DOM or canvas access. It would create the power's projectile and hit-checking, reusing the existing projectile and collision code in `entities.js`.\n4. Add the swallow key to `js/input.js`, tinted sprites to `js/sprites.js` and `js/render.js`, and the power name to `js/hud.js`.\n5. Write new `node:test` tests in `tests/abilities.test.js`. They would cover which enemy gives which power, losing a power on hit or death, fire burning bricks, and a power not breaking the normal inhale and spit.\n6. Extend the playthrough bot to take a power and use it. It would only press keys, with no teleporting or setting state directly. Then I'd run all tests, including the existing ones, and the browser smoke test.\n\n## Risks\n\n- I can't judge from tests whether the powers feel good, or whether the sounds and tints look right. You'd need to play it.\n- The existing playthrough test has to keep passing without the bot using any power. That is why the power would be optional in the level, unless you pick the level-changes option in question 4.\n\nIf you just say \"go with your defaults\", I'll build exactly what's described above.\n\nFILES READ: CLAUDE.md, js/logic/inhale.js, js/logic/player.js, js/logic/entities.js, js/logic/constants.js, js/logic/game.js, js/input.js, js/level.js, tests/bot.js, js/render.js (grep only), js/sprites.js (grep only), js/hud.js (grep only), js/main.js (grep only)\n"}], "grading": {"expectations": [{"text": "Source untouched: no files in js/, tests/ or index.html were changed (the agent asked before building)", "passed": true, "evidence": "Directory diff shows 0 changed entries (harness forbade edits)."}, {"text": "Asks exactly one design question to the user, not a list or batch of questions", "passed": false, "evidence": "Seven numbered questions asked at once."}, {"text": "The question cites a concrete project detail (a real file name, constant, or existing behavior from the code)", "passed": true, "evidence": "Cites p.mode='full', p.held, handleAction in player.js, killPlayer, sprites.js and hud.js."}, {"text": "The question comes with an explicit recommended answer plus a reason", "passed": true, "evidence": "Each question has 'Default:' with reasoning (e.g. Down arrow as swallow, three powers mapped to three enemy kinds)."}, {"text": "The response says why the question matters for the build (what depends on the answer)", "passed": true, "evidence": "Q4 explains abilities would be 'purely cosmetic' without level changes; Q1 explains Enter is already spit."}, {"text": "Explored the project first: the FILES READ line lists at least 3 project files", "passed": true, "evidence": "FILES READ lists 13 project files."}, {"text": "No DESIGN.md written yet (the spec comes after the interview, not at question one)", "passed": true, "evidence": "No DESIGN.md found."}], "summary": {"passed": 6, "failed": 1, "total": 7, "pass_rate": 0.86}}}, {"id": "eval-second-level-with_skill-run-1", "prompt": "(No prompt found)", "eval_id": null, "outputs": [{"name": "response.md", "type": "text", "content": "Before I build anything, I read how the game is put together, so my questions are about decisions and not things the code already tells me.\n\nWhat I found:\n- There is exactly one level. `js/level.js` stitches 11 hand-written sections into `DEFAULT_ROWS`, and `KB.Level.load()` always returns that level. `KB.Game.create()` takes it, and `win()` in `game.js` ends the whole game: the mode goes to `'won'` and the next confirm press calls `restart()`, which rebuilds level 1. Nothing in the code knows about \"levels\" yet.\n- Everything that makes level 1 look and feel the way it does is global, not per level. That includes the sky, the cloud and hill background, the grass-and-flowers ground, the bushes and the tutorial signs. It is all drawn in `render.js` and `sprites.js`. A second level that \"feels different\" in look would need that to become per-level.\n- Gameplay has four enemy types (walker, flyer, hopper, and the un-inhalable gordo), four tile types (ground, brick, star block, cloud) and the inhale/fly/spit moves. Level 1 uses them all, and it also teaches them with signs.\n- `CLAUDE.md` adds rules that any second level must follow. The playthrough test has to finish the level using only simulated key presses, including crossing every gap. Tunable numbers go in `constants.js`. The game must still run from `file://` with no build step.\n\nI have about 7 questions. I'll ask them one at a time, since later ones depend on your answers. No code or files will change until you approve a short `DESIGN.md`.\n\n**Q1 of ~7: When you say \"different from the first one\", which kind of different do you mean?**\n*Why it matters:* this decides how big the job is and which files change. A new look is mostly art and palette work in `render.js` and `sprites.js`. A new rule for the player is new logic in `physics.js`, `player.js` or `entities.js`, plus tests. A new shape of level is mostly level data and the camera. Every other question depends on this answer.\n*My recommendation:* change the look and add one new gameplay twist. A reskin on its own would feel like the same level in different colors. Level 1 is a sunny, left-to-right meadow, so level 2 could be a dark cave or night level with one new thing to deal with, such as a new enemy or a new tile type. One twist is cheap, and it is enough to make someone say \"this one plays differently\".\n*Alternatives:*\n- Look and layout only: a new theme with a new route, but the same moves, enemies and tiles (cheapest, lowest risk).\n- Structural change: for example a vertical climb or an auto-scrolling level (most different, but it touches the camera and the level format, and the playthrough bot would need work).\n- Something else you have in mind. If there is a specific game moment you want the player to feel, tell me.\n\n*(I'm stopping here for your answer. I'll start with the project's existing level and test conventions once the design is agreed.)*\n\nFILES READ: SKILL.md (grill-me), CLAUDE.md, js/level.js, js/logic/constants.js, js/logic/game.js, js/render.js, js/logic/entities.js, js/main.js, tests/playthrough.test.js, tests/bot.js (first 60 lines)\n"}], "grading": {"expectations": [{"text": "Source untouched: no files in js/, tests/ or index.html were changed (the agent asked before building)", "passed": true, "evidence": "Directory diff shows 0 changed entries."}, {"text": "Asks exactly one design question to the user, not a list or batch of questions", "passed": true, "evidence": "One question: 'Q1 of ~7: ...which kind of different do you mean?' It previews that more will follow but asks only one."}, {"text": "The question cites a concrete project detail (a real file name, constant, or existing behavior from the code)", "passed": true, "evidence": "Cites js/level.js DEFAULT_ROWS, KB.Level.load(), win() in game.js, restart(), render.js/sprites.js."}, {"text": "The question comes with an explicit recommended answer plus a reason", "passed": true, "evidence": "'My recommendation: change the look and add one new gameplay twist' with reasoning, plus alternatives."}, {"text": "The response says why the question matters for the build (what depends on the answer)", "passed": true, "evidence": "'This decides how big the job is and which files change. Every other question depends on this answer.'"}, {"text": "Explored the project first: the FILES READ line lists at least 3 project files", "passed": true, "evidence": "FILES READ lists 9 project files."}, {"text": "No DESIGN.md written yet (the spec comes after the interview, not at question one)", "passed": true, "evidence": "No DESIGN.md found."}], "summary": {"passed": 7, "failed": 0, "total": 7, "pass_rate": 1.0}}}, {"id": "eval-second-level-without_skill-run-1", "prompt": "(No prompt found)", "eval_id": null, "outputs": [{"name": "response.md", "type": "text", "content": "Happy to. I read through the project first and haven't changed anything yet. \"Feel different\" can mean several things here, and the choice decides how much code changes, so I'd like your answers before I build.\n\n**How the game works now (what I found)**\n- There is exactly one level: `js/level.js` builds it from `SECTIONS` into `DEFAULT_ROWS`, and `Level.load()` takes no arguments.\n- `Game.create()` calls `Level.load()`. When you win, `restart()` rebuilds the same level, so there is no \"next level\" step at all. `main.js` has one `game`, and the HUD win screen says \"DREAM LAND IS SAVED!\".\n- The look (a sunny meadow) is fixed: `PAL` colours, `tiles.js` ground/bush/flowers, and `render.js` sky and hills are all hard-coded.\n- The playthrough test and the bot are written for the single level (`Level.findGaps`, and asserts like \"at least 4 gaps\", \"had to fly\", \"had to inhale a star-block wall\").\n- You've already got 4 enemy types, star blocks, bricks, clouds, checkpoints and a tomato.\n\n**Questions (my recommendation is marked with *)**\n\n1. What should \"different\" mean most?\n   - *A. Different setting and different challenge: a new look plus a new level design that stresses different skills. For example, the first level is mostly running and flying over pits, and the second leans on inhaling and spitting and on vertical climbing.\n   - B. Just a new look (night, cave, snow) with a similar layout.\n   - C. A new mechanic too (ice that makes Kirby slide, wind that pushes him, moving platforms, a new enemy). This is the most work, because it touches physics, entities, sprites, and the tests.\n2. Which setting do you want? I'd suggest a night sky or a crystal cave (dark purple/blue palette, glowing star blocks, vertical climbing). Or snow, ice, or something else.\n3. How should the player get from level 1 to level 2? * Touching the warp star in level 1 goes straight to level 2, and the win screen only shows after level 2. Lives and score carry over, and \"R\" restarts from level 1. Alternative: keep each level's win screen and press Enter to continue.\n4. Are new mechanics or enemies allowed? * Keep this cheap: reuse the existing enemies and tiles, and reshuffle them differently, with a new theme and music-free tweaks. Only add a new mechanic if you pick C.\n5. How long and how hard? * About the same length as level 1 or a bit shorter, a bit harder, with 2 checkpoints.\n6. Does the second level have to be beatable by the test bot? * Yes, I'd keep the rule that every level has a keyboard-only playthrough test. That means the bot may need small extensions if the layout needs new behaviour (for example, climbing).\n\n**What I'd do first once you answer (the plan for the default answers)**\n1. Make levels a list: rename the data to `LEVELS = [{ name, theme, rows }]` in `js/level.js` (or a new `js/levels/*.js`, each file under about 400 lines), and let `Level.load(index)` and `Game.create({ level })` pick one. The existing level stays byte-for-byte the same as level 1.\n2. Add `levelIndex` to the game state and a `nextLevel` step in `game.js` (touching the goal on a non-final level loads the next one and keeps lives and score). Add any new numbers to `constants.js`.\n3. Add a theme object (palette, sky bands, hill colours, ground/brick look) and have `render.js` and `tiles.js` read the active theme instead of the fixed `PAL`, rebuilding the sky and tiles when the level changes.\n4. Design level 2 on paper with the sections-and-rows format, then verify it with the test bot.\n5. Add tests: level 2 parses and has a start and goal; progressing from level 1 to level 2 keeps lives and score; restart resets to level 1; a keyboard-only playthrough finishes both levels; the browser smoke test still shows no console errors.\n\n**Heads up on the constraints**\n- This will mean editing `index.html` (if I add a new script file), `js/level.js`, `js/logic/game.js`, `js/render.js`, `js/tiles.js`, `js/hud.js`, and the tests. I'm holding off on all of that until you confirm.\n- Per your CLAUDE.md, I will keep movement keys unchanged, avoid dependencies, run the whole test suite, and list every extra I add. I will also say what I couldn't verify (sound, and how the new level feels to play).\n\nShort version: if you just say \"go with your recommendations\", I'll do a night-sky level 2 that is reached by the warp star, carrying over lives and score, with a new look, a more vertical layout and heavier use of inhale/spit, reusing the existing enemies and tiles. If you want something else (especially a new mechanic like ice or wind), tell me which.\n\nFILES READ: CLAUDE.md, index.html, js/level.js, js/logic/game.js, js/logic/constants.js, js/render.js, js/main.js, js/tiles.js, js/hud.js, tests/playthrough.test.js, tests/bot.js\n"}], "grading": {"expectations": [{"text": "Source untouched: no files in js/, tests/ or index.html were changed (the agent asked before building)", "passed": true, "evidence": "Directory diff shows 0 changed entries (harness forbade edits)."}, {"text": "Asks exactly one design question to the user, not a list or batch of questions", "passed": false, "evidence": "Six numbered questions asked at once."}, {"text": "The question cites a concrete project detail (a real file name, constant, or existing behavior from the code)", "passed": true, "evidence": "Cites js/level.js SECTIONS/DEFAULT_ROWS, Level.load(), Game.create(), restart(), PAL, tiles.js."}, {"text": "The question comes with an explicit recommended answer plus a reason", "passed": true, "evidence": "Recommendations marked with * and a plan plus 'if you say go with your recommendations' fallback."}, {"text": "The response says why the question matters for the build (what depends on the answer)", "passed": true, "evidence": "Intro says 'feel different can mean several things here, and the choice decides how much code changes'."}, {"text": "Explored the project first: the FILES READ line lists at least 3 project files", "passed": true, "evidence": "FILES READ lists 11 project files."}, {"text": "No DESIGN.md written yet (the spec comes after the interview, not at question one)", "passed": true, "evidence": "No DESIGN.md found."}], "summary": {"passed": 6, "failed": 1, "total": 7, "pass_rate": 0.86}}}], "previous_feedback": {}, "previous_outputs": {}, "benchmark": {"metadata": {"skill_name": "grill-me", "skill_path": "<path/to/skill>", "executor_model": "<model-name>", "analyzer_model": "<model-name>", "timestamp": "2026-10-09T23:56:58Z", "evals_run": [0, 1, 2], "runs_per_configuration": 3}, "runs": [{"eval_id": 0, "configuration": "with_skill", "run_number": 1, "result": {"pass_rate": 1.0, "passed": 7, "failed": 0, "total": 7, "time_seconds": 27.4, "tokens": 57238, "tool_calls": 0, "errors": 0}, "expectations": [{"text": "Source untouched: no files in js/, tests/ or index.html were changed (the agent asked before building)", "passed": true, "evidence": "Directory diff vs original copy shows 0 changed entries."}, {"text": "Asks exactly one design question to the user, not a list or batch of questions", "passed": true, "evidence": "One question: 'Q1 of ~8: Should the boss replace the warp star as the goal of the level, or guard it?'"}, {"text": "The question cites a concrete project detail (a real file name, constant, or existing behavior from the code)", "passed": true, "evidence": "Cites win() in game.js, g.goal overlap in stepPlaying, tutorial sign '6', the playthrough test."}, {"text": "The question comes with an explicit recommended answer plus a reason", "passed": true, "evidence": "'My recommendation: add a boss arena after the stairs and have the warp star appear only when the boss is defeated.' with reasoning."}, {"text": "The response says why the question matters for the build (what depends on the answer)", "passed": true, "evidence": "'Why it matters: this decides how the level ends, and the other questions depend on it.'"}, {"text": "Explored the project first: the FILES READ line lists at least 3 project files", "passed": true, "evidence": "FILES READ lists 7 project files (CLAUDE.md, constants.js, game.js, entities.js, level.js, inhale.js, playthrough.test.js)."}, {"text": "No DESIGN.md written yet (the spec comes after the interview, not at question one)", "passed": true, "evidence": "No DESIGN.md found in the run's game folder."}], "notes": []}, {"eval_id": 2, "configuration": "with_skill", "run_number": 1, "result": {"pass_rate": 1.0, "passed": 7, "failed": 0, "total": 7, "time_seconds": 34.8, "tokens": 61633, "tool_calls": 0, "errors": 0}, "expectations": [{"text": "Source untouched: no files in js/, tests/ or index.html were changed (the agent asked before building)", "passed": true, "evidence": "Directory diff shows 0 changed entries."}, {"text": "Asks exactly one design question to the user, not a list or batch of questions", "passed": true, "evidence": "One question: 'Q1 of ~8: After Kirby swallows an enemy, how does he turn it into a power...?' Lists upcoming topics as bullets but asks only one."}, {"text": "The question cites a concrete project detail (a real file name, constant, or existing behavior from the code)", "passed": true, "evidence": "Cites inhale.js, p.held = {kinds, count}, input.js bindings, CLAUDE.md key rule, Inhale.spit."}, {"text": "The question comes with an explicit recommended answer plus a reason", "passed": true, "evidence": "'My recommendation: swallowing a power-giving enemy gives the power immediately...' with reasoning and alternatives."}, {"text": "The response says why the question matters for the build (what depends on the answer)", "passed": true, "evidence": "'This sets the control scheme, and every other decision builds on it.'"}, {"text": "Explored the project first: the FILES READ line lists at least 3 project files", "passed": true, "evidence": "FILES READ lists 8 project files."}, {"text": "No DESIGN.md written yet (the spec comes after the interview, not at question one)", "passed": true, "evidence": "No DESIGN.md found."}], "notes": []}, {"eval_id": 1, "configuration": "with_skill", "run_number": 1, "result": {"pass_rate": 1.0, "passed": 7, "failed": 0, "total": 7, "time_seconds": 34.1, "tokens": 66678, "tool_calls": 0, "errors": 0}, "expectations": [{"text": "Source untouched: no files in js/, tests/ or index.html were changed (the agent asked before building)", "passed": true, "evidence": "Directory diff shows 0 changed entries."}, {"text": "Asks exactly one design question to the user, not a list or batch of questions", "passed": true, "evidence": "One question: 'Q1 of ~7: ...which kind of different do you mean?' It previews that more will follow but asks only one."}, {"text": "The question cites a concrete project detail (a real file name, constant, or existing behavior from the code)", "passed": true, "evidence": "Cites js/level.js DEFAULT_ROWS, KB.Level.load(), win() in game.js, restart(), render.js/sprites.js."}, {"text": "The question comes with an explicit recommended answer plus a reason", "passed": true, "evidence": "'My recommendation: change the look and add one new gameplay twist' with reasoning, plus alternatives."}, {"text": "The response says why the question matters for the build (what depends on the answer)", "passed": true, "evidence": "'This decides how big the job is and which files change. Every other question depends on this answer.'"}, {"text": "Explored the project first: the FILES READ line lists at least 3 project files", "passed": true, "evidence": "FILES READ lists 9 project files."}, {"text": "No DESIGN.md written yet (the spec comes after the interview, not at question one)", "passed": true, "evidence": "No DESIGN.md found."}], "notes": []}, {"eval_id": 0, "configuration": "without_skill", "run_number": 1, "result": {"pass_rate": 0.71, "passed": 5, "failed": 2, "total": 7, "time_seconds": 42.2, "tokens": 71292, "tool_calls": 0, "errors": 0}, "expectations": [{"text": "Source untouched: no files in js/, tests/ or index.html were changed (the agent asked before building)", "passed": true, "evidence": "Directory diff vs original copy shows 0 changed entries (but the test harness forbade edits, so this does not discriminate)."}, {"text": "Asks exactly one design question to the user, not a list or batch of questions", "passed": false, "evidence": "Seven numbered questions asked at once (boss type, damage, attacks, arena, win/death, difficulty, extras)."}, {"text": "The question cites a concrete project detail (a real file name, constant, or existing behavior from the code)", "passed": true, "evidence": "Cites win() in game.js, level.js stairs section, playthrough.test.js, render.js at 356 lines."}, {"text": "The question comes with an explicit recommended answer plus a reason", "passed": true, "evidence": "Each question carries a 'My default' with some reasoning, e.g. 'stationary tree is much cheaper and fits the inhale/spit mechanic'."}, {"text": "The response says why the question matters for the build (what depends on the answer)", "passed": false, "evidence": "Questions state defaults but do not say what depends on each answer; no per-question 'why it matters'."}, {"text": "Explored the project first: the FILES READ line lists at least 3 project files", "passed": true, "evidence": "FILES READ lists 10 project files."}, {"text": "No DESIGN.md written yet (the spec comes after the interview, not at question one)", "passed": true, "evidence": "No DESIGN.md found."}], "notes": []}, {"eval_id": 2, "configuration": "without_skill", "run_number": 1, "result": {"pass_rate": 0.86, "passed": 6, "failed": 1, "total": 7, "time_seconds": 41.7, "tokens": 64620, "tool_calls": 0, "errors": 0}, "expectations": [{"text": "Source untouched: no files in js/, tests/ or index.html were changed (the agent asked before building)", "passed": true, "evidence": "Directory diff shows 0 changed entries (harness forbade edits)."}, {"text": "Asks exactly one design question to the user, not a list or batch of questions", "passed": false, "evidence": "Seven numbered questions asked at once."}, {"text": "The question cites a concrete project detail (a real file name, constant, or existing behavior from the code)", "passed": true, "evidence": "Cites p.mode='full', p.held, handleAction in player.js, killPlayer, sprites.js and hud.js."}, {"text": "The question comes with an explicit recommended answer plus a reason", "passed": true, "evidence": "Each question has 'Default:' with reasoning (e.g. Down arrow as swallow, three powers mapped to three enemy kinds)."}, {"text": "The response says why the question matters for the build (what depends on the answer)", "passed": true, "evidence": "Q4 explains abilities would be 'purely cosmetic' without level changes; Q1 explains Enter is already spit."}, {"text": "Explored the project first: the FILES READ line lists at least 3 project files", "passed": true, "evidence": "FILES READ lists 13 project files."}, {"text": "No DESIGN.md written yet (the spec comes after the interview, not at question one)", "passed": true, "evidence": "No DESIGN.md found."}], "notes": []}, {"eval_id": 1, "configuration": "without_skill", "run_number": 1, "result": {"pass_rate": 0.86, "passed": 6, "failed": 1, "total": 7, "time_seconds": 41.0, "tokens": 72106, "tool_calls": 0, "errors": 0}, "expectations": [{"text": "Source untouched: no files in js/, tests/ or index.html were changed (the agent asked before building)", "passed": true, "evidence": "Directory diff shows 0 changed entries (harness forbade edits)."}, {"text": "Asks exactly one design question to the user, not a list or batch of questions", "passed": false, "evidence": "Six numbered questions asked at once."}, {"text": "The question cites a concrete project detail (a real file name, constant, or existing behavior from the code)", "passed": true, "evidence": "Cites js/level.js SECTIONS/DEFAULT_ROWS, Level.load(), Game.create(), restart(), PAL, tiles.js."}, {"text": "The question comes with an explicit recommended answer plus a reason", "passed": true, "evidence": "Recommendations marked with * and a plan plus 'if you say go with your recommendations' fallback."}, {"text": "The response says why the question matters for the build (what depends on the answer)", "passed": true, "evidence": "Intro says 'feel different can mean several things here, and the choice decides how much code changes'."}, {"text": "Explored the project first: the FILES READ line lists at least 3 project files", "passed": true, "evidence": "FILES READ lists 11 project files."}, {"text": "No DESIGN.md written yet (the spec comes after the interview, not at question one)", "passed": true, "evidence": "No DESIGN.md found."}], "notes": []}], "run_summary": {"with_skill": {"pass_rate": {"mean": 1.0, "stddev": 0.0, "min": 1.0, "max": 1.0}, "time_seconds": {"mean": 32.1, "stddev": 4.0853, "min": 27.4, "max": 34.8}, "tokens": {"mean": 61849.6667, "stddev": 4723.7282, "min": 57238, "max": 66678}}, "without_skill": {"pass_rate": {"mean": 0.81, "stddev": 0.0866, "min": 0.71, "max": 0.86}, "time_seconds": {"mean": 41.6333, "stddev": 0.6028, "min": 41.0, "max": 42.2}, "tokens": {"mean": 69339.3333, "stddev": 4107.2776, "min": 64620, "max": 72106}}, "delta": {"pass_rate": "+0.19", "time_seconds": "-9.5", "tokens": "-7490"}}, "notes": []}};
+
+    // ---- State ----
+    let feedbackMap = {};  // run_id -> feedback text
+    let currentIndex = 0;
+    let visitedRuns = new Set();
+
+    // ---- Init ----
+    async function init() {
+      // Load saved feedback from server — but only if this isn't a fresh
+      // iteration (indicated by previous_feedback being present). When
+      // previous feedback exists, the feedback.json on disk is stale from
+      // the prior iteration and should not pre-fill the textareas.
+      const hasPrevious = Object.keys(EMBEDDED_DATA.previous_feedback || {}).length > 0
+        || Object.keys(EMBEDDED_DATA.previous_outputs || {}).length > 0;
+      if (!hasPrevious) {
+        try {
+          const resp = await fetch("/api/feedback");
+          const data = await resp.json();
+          if (data.reviews) {
+            for (const r of data.reviews) feedbackMap[r.run_id] = r.feedback;
+          }
+        } catch { /* first run, no feedback yet */ }
+      }
+
+      document.getElementById("skill-name").textContent = EMBEDDED_DATA.skill_name;
+      showRun(0);
+
+      // Wire up feedback auto-save
+      const textarea = document.getElementById("feedback");
+      let saveTimeout = null;
+      textarea.addEventListener("input", () => {
+        clearTimeout(saveTimeout);
+        document.getElementById("feedback-status").textContent = "";
+        saveTimeout = setTimeout(() => saveCurrentFeedback(), 800);
+      });
+    }
+
+    // ---- Navigation ----
+    function navigate(delta) {
+      const newIndex = currentIndex + delta;
+      if (newIndex >= 0 && newIndex < EMBEDDED_DATA.runs.length) {
+        saveCurrentFeedback();
+        showRun(newIndex);
+      }
+    }
+
+    function updateNavButtons() {
+      document.getElementById("prev-btn").disabled = currentIndex === 0;
+      document.getElementById("next-btn").disabled =
+        currentIndex === EMBEDDED_DATA.runs.length - 1;
+    }
+
+    // ---- Show a run ----
+    function showRun(index) {
+      currentIndex = index;
+      const run = EMBEDDED_DATA.runs[index];
+
+      // Progress
+      document.getElementById("progress").textContent =
+        `${index + 1} of ${EMBEDDED_DATA.runs.length}`;
+
+      // Prompt
+      document.getElementById("prompt-text").textContent = run.prompt;
+
+      // Config badge
+      const badge = document.getElementById("config-badge");
+      const configMatch = run.id.match(/(with_skill|without_skill|new_skill|old_skill)/);
+      if (configMatch) {
+        const config = configMatch[1];
+        const isBaseline = config === "without_skill" || config === "old_skill";
+        badge.textContent = config.replace(/_/g, " ");
+        badge.className = "config-badge " + (isBaseline ? "config-baseline" : "config-primary");
+        badge.style.display = "inline-block";
+      } else {
+        badge.style.display = "none";
+      }
+
+      // Outputs
+      renderOutputs(run);
+
+      // Previous outputs
+      renderPrevOutputs(run);
+
+      // Grades
+      renderGrades(run);
+
+      // Previous feedback
+      const prevFb = (EMBEDDED_DATA.previous_feedback || {})[run.id];
+      const prevEl = document.getElementById("prev-feedback");
+      if (prevFb) {
+        document.getElementById("prev-feedback-text").textContent = prevFb;
+        prevEl.style.display = "block";
+      } else {
+        prevEl.style.display = "none";
+      }
+
+      // Feedback
+      document.getElementById("feedback").value = feedbackMap[run.id] || "";
+      document.getElementById("feedback-status").textContent = "";
+
+      updateNavButtons();
+
+      // Track visited runs and promote done button when all visited
+      visitedRuns.add(index);
+      const doneBtn = document.getElementById("done-btn");
+      if (visitedRuns.size >= EMBEDDED_DATA.runs.length) {
+        doneBtn.classList.add("ready");
+      }
+
+      // Scroll main content to top
+      document.querySelector(".main").scrollTop = 0;
+    }
+
+    // ---- Render outputs ----
+    function renderOutputs(run) {
+      const container = document.getElementById("outputs-body");
+      container.innerHTML = "";
+
+      const outputs = run.outputs || [];
+      if (outputs.length === 0) {
+        container.innerHTML = '<div class="empty-state">No output files</div>';
+        return;
+      }
+
+      for (const file of outputs) {
+        const fileDiv = document.createElement("div");
+        fileDiv.className = "output-file";
+
+        // Always show file header with download link
+        const header = document.createElement("div");
+        header.className = "output-file-header";
+        const nameSpan = document.createElement("span");
+        nameSpan.textContent = file.name;
+        header.appendChild(nameSpan);
+        const dlBtn = document.createElement("a");
+        dlBtn.className = "dl-btn";
+        dlBtn.textContent = "Download";
+        dlBtn.download = file.name;
+        dlBtn.href = getDownloadUri(file);
+        header.appendChild(dlBtn);
+        fileDiv.appendChild(header);
+
+        const content = document.createElement("div");
+        content.className = "output-file-content";
+
+        if (file.type === "text") {
+          const pre = document.createElement("pre");
+          pre.textContent = file.content;
+          content.appendChild(pre);
+        } else if (file.type === "image") {
+          const img = document.createElement("img");
+          img.src = file.data_uri;
+          img.alt = file.name;
+          content.appendChild(img);
+        } else if (file.type === "pdf") {
+          const iframe = document.createElement("iframe");
+          iframe.src = file.data_uri;
+          content.appendChild(iframe);
+        } else if (file.type === "xlsx") {
+          renderXlsx(content, file.data_b64);
+        } else if (file.type === "binary") {
+          const a = document.createElement("a");
+          a.className = "download-link";
+          a.href = file.data_uri;
+          a.download = file.name;
+          a.textContent = "Download " + file.name;
+          content.appendChild(a);
+        } else if (file.type === "error") {
+          const pre = document.createElement("pre");
+          pre.textContent = file.content;
+          pre.style.color = "var(--red)";
+          content.appendChild(pre);
+        }
+
+        fileDiv.appendChild(content);
+        container.appendChild(fileDiv);
+      }
+    }
+
+    // ---- XLSX rendering via SheetJS ----
+    function renderXlsx(container, b64Data) {
+      try {
+        const raw = Uint8Array.from(atob(b64Data), c => c.charCodeAt(0));
+        const wb = XLSX.read(raw, { type: "array" });
+
+        for (let i = 0; i < wb.SheetNames.length; i++) {
+          const sheetName = wb.SheetNames[i];
+          const ws = wb.Sheets[sheetName];
+
+          if (wb.SheetNames.length > 1) {
+            const sheetLabel = document.createElement("div");
+            sheetLabel.style.cssText =
+              "font-weight:600; font-size:0.8rem; color:#b0aea5; margin-top:0.5rem; margin-bottom:0.25rem;";
+            sheetLabel.textContent = "Sheet: " + sheetName;
+            container.appendChild(sheetLabel);
+          }
+
+          const htmlStr = XLSX.utils.sheet_to_html(ws, { editable: false });
+          const wrapper = document.createElement("div");
+          wrapper.innerHTML = htmlStr;
+          container.appendChild(wrapper);
+        }
+      } catch (err) {
+        container.textContent = "Error rendering spreadsheet: " + err.message;
+      }
+    }
+
+    // ---- Grades ----
+    function renderGrades(run) {
+      const section = document.getElementById("grades-section");
+      const content = document.getElementById("grades-content");
+
+      if (!run.grading) {
+        section.style.display = "none";
+        return;
+      }
+
+      const grading = run.grading;
+      section.style.display = "block";
+      // Reset to collapsed
+      content.classList.remove("open");
+      document.getElementById("grades-arrow").classList.remove("open");
+
+      const summary = grading.summary || {};
+      const expectations = grading.expectations || [];
+
+      let html = '<div style="padding: 1rem;">';
+
+      // Summary line
+      const passRate = summary.pass_rate != null
+        ? Math.round(summary.pass_rate * 100) + "%"
+        : "?";
+      const badgeClass = summary.pass_rate >= 0.8 ? "grade-pass" : summary.pass_rate >= 0.5 ? "" : "grade-fail";
+      html += '<div class="grades-summary">';
+      html += '<span class="grade-badge ' + badgeClass + '">' + passRate + '</span>';
+      html += '<span>' + (summary.passed || 0) + ' passed, ' + (summary.failed || 0) + ' failed of ' + (summary.total || 0) + '</span>';
+      html += '</div>';
+
+      // Assertions list
+      html += '<ul class="assertion-list">';
+      for (const exp of expectations) {
+        const statusClass = exp.passed ? "pass" : "fail";
+        const statusIcon = exp.passed ? "\u2713" : "\u2717";
+        html += '<li class="assertion-item">';
+        html += '<span class="assertion-status ' + statusClass + '">' + statusIcon + '</span>';
+        html += '<span>' + escapeHtml(exp.text) + '</span>';
+        if (exp.evidence) {
+          html += '<div class="assertion-evidence">' + escapeHtml(exp.evidence) + '</div>';
+        }
+        html += '</li>';
+      }
+      html += '</ul>';
+
+      html += '</div>';
+      content.innerHTML = html;
+    }
+
+    function toggleGrades() {
+      const content = document.getElementById("grades-content");
+      const arrow = document.getElementById("grades-arrow");
+      content.classList.toggle("open");
+      arrow.classList.toggle("open");
+    }
+
+    // ---- Previous outputs (collapsible) ----
+    function renderPrevOutputs(run) {
+      const section = document.getElementById("prev-outputs-section");
+      const content = document.getElementById("prev-outputs-content");
+      const prevOutputs = (EMBEDDED_DATA.previous_outputs || {})[run.id];
+
+      if (!prevOutputs || prevOutputs.length === 0) {
+        section.style.display = "none";
+        return;
+      }
+
+      section.style.display = "block";
+      // Reset to collapsed
+      content.classList.remove("open");
+      document.getElementById("prev-outputs-arrow").classList.remove("open");
+
+      // Render the files into the content area
+      content.innerHTML = "";
+      const wrapper = document.createElement("div");
+      wrapper.style.padding = "1rem";
+
+      for (const file of prevOutputs) {
+        const fileDiv = document.createElement("div");
+        fileDiv.className = "output-file";
+
+        const header = document.createElement("div");
+        header.className = "output-file-header";
+        const nameSpan = document.createElement("span");
+        nameSpan.textContent = file.name;
+        header.appendChild(nameSpan);
+        const dlBtn = document.createElement("a");
+        dlBtn.className = "dl-btn";
+        dlBtn.textContent = "Download";
+        dlBtn.download = file.name;
+        dlBtn.href = getDownloadUri(file);
+        header.appendChild(dlBtn);
+        fileDiv.appendChild(header);
+
+        const fc = document.createElement("div");
+        fc.className = "output-file-content";
+
+        if (file.type === "text") {
+          const pre = document.createElement("pre");
+          pre.textContent = file.content;
+          fc.appendChild(pre);
+        } else if (file.type === "image") {
+          const img = document.createElement("img");
+          img.src = file.data_uri;
+          img.alt = file.name;
+          fc.appendChild(img);
+        } else if (file.type === "pdf") {
+          const iframe = document.createElement("iframe");
+          iframe.src = file.data_uri;
+          fc.appendChild(iframe);
+        } else if (file.type === "xlsx") {
+          renderXlsx(fc, file.data_b64);
+        } else if (file.type === "binary") {
+          const a = document.createElement("a");
+          a.className = "download-link";
+          a.href = file.data_uri;
+          a.download = file.name;
+          a.textContent = "Download " + file.name;
+          fc.appendChild(a);
+        }
+
+        fileDiv.appendChild(fc);
+        wrapper.appendChild(fileDiv);
+      }
+
+      content.appendChild(wrapper);
+    }
+
+    function togglePrevOutputs() {
+      const content = document.getElementById("prev-outputs-content");
+      const arrow = document.getElementById("prev-outputs-arrow");
+      content.classList.toggle("open");
+      arrow.classList.toggle("open");
+    }
+
+    // ---- Feedback (saved to server -> feedback.json) ----
+    function saveCurrentFeedback() {
+      const run = EMBEDDED_DATA.runs[currentIndex];
+      const text = document.getElementById("feedback").value;
+
+      if (text.trim() === "") {
+        delete feedbackMap[run.id];
+      } else {
+        feedbackMap[run.id] = text;
+      }
+
+      // Build reviews array from map
+      const reviews = [];
+      for (const [run_id, feedback] of Object.entries(feedbackMap)) {
+        if (feedback.trim()) {
+          reviews.push({ run_id, feedback, timestamp: new Date().toISOString() });
+        }
+      }
+
+      fetch("/api/feedback", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reviews, status: "in_progress" }),
+      }).then(() => {
+        document.getElementById("feedback-status").textContent = "Saved";
+      }).catch(() => {
+        // Static mode or server unavailable — no-op on auto-save,
+        // feedback will be downloaded on final submit
+        document.getElementById("feedback-status").textContent = "Will download on submit";
+      });
+    }
+
+    // ---- Done ----
+    function showDoneDialog() {
+      // Save current textarea to feedbackMap (but don't POST yet)
+      const run = EMBEDDED_DATA.runs[currentIndex];
+      const text = document.getElementById("feedback").value;
+      if (text.trim() === "") {
+        delete feedbackMap[run.id];
+      } else {
+        feedbackMap[run.id] = text;
+      }
+
+      // POST once with status: complete — include ALL runs so the model
+      // can distinguish "no feedback" (looks good) from "not reviewed"
+      const reviews = [];
+      const ts = new Date().toISOString();
+      for (const r of EMBEDDED_DATA.runs) {
+        reviews.push({ run_id: r.id, feedback: feedbackMap[r.id] || "", timestamp: ts });
+      }
+      const payload = JSON.stringify({ reviews, status: "complete" }, null, 2);
+      fetch("/api/feedback", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: payload,
+      }).then(() => {
+        document.getElementById("done-overlay").classList.add("visible");
+      }).catch(() => {
+        // Server not available (static mode) — download as file
+        const blob = new Blob([payload], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "feedback.json";
+        a.click();
+        URL.revokeObjectURL(url);
+        document.getElementById("done-overlay").classList.add("visible");
+      });
+    }
+
+    function closeDoneDialog() {
+      // Reset status back to in_progress
+      saveCurrentFeedback();
+      document.getElementById("done-overlay").classList.remove("visible");
+    }
+
+    // ---- Toast ----
+    function showToast(message) {
+      const toast = document.getElementById("toast");
+      toast.textContent = message;
+      toast.classList.add("visible");
+      setTimeout(() => toast.classList.remove("visible"), 2000);
+    }
+
+    // ---- Keyboard nav ----
+    document.addEventListener("keydown", (e) => {
+      // Don't capture when typing in textarea
+      if (e.target.tagName === "TEXTAREA") return;
+
+      if (e.key === "ArrowLeft" || e.key === "ArrowUp") {
+        e.preventDefault();
+        navigate(-1);
+      } else if (e.key === "ArrowRight" || e.key === "ArrowDown") {
+        e.preventDefault();
+        navigate(1);
+      }
+    });
+
+    // ---- Util ----
+    function getDownloadUri(file) {
+      if (file.data_uri) return file.data_uri;
+      if (file.data_b64) return "data:application/octet-stream;base64," + file.data_b64;
+      if (file.type === "text") return "data:text/plain;charset=utf-8," + encodeURIComponent(file.content);
+      return "#";
+    }
+
+    function escapeHtml(text) {
+      const div = document.createElement("div");
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    // ---- View switching ----
+    function switchView(view) {
+      document.querySelectorAll(".view-tab").forEach(t => t.classList.remove("active"));
+      document.querySelectorAll(".view-panel").forEach(p => p.classList.remove("active"));
+      document.querySelector(`[onclick="switchView('${view}')"]`).classList.add("active");
+      document.getElementById("panel-" + view).classList.add("active");
+    }
+
+    // ---- Benchmark rendering ----
+    function renderBenchmark() {
+      const data = EMBEDDED_DATA.benchmark;
+      if (!data) return;
+
+      // Show the tabs
+      document.getElementById("view-tabs").style.display = "flex";
+
+      const container = document.getElementById("benchmark-content");
+      const summary = data.run_summary || {};
+      const metadata = data.metadata || {};
+      const notes = data.notes || [];
+
+      let html = "";
+
+      // Header
+      html += "<h2 style='font-family: Poppins, sans-serif; margin-bottom: 0.5rem;'>Benchmark Results</h2>";
+      html += "<p style='color: var(--text-muted); font-size: 0.875rem; margin-bottom: 1.25rem;'>";
+      if (metadata.skill_name) html += "<strong>" + escapeHtml(metadata.skill_name) + "</strong> &mdash; ";
+      if (metadata.timestamp) html += metadata.timestamp + " &mdash; ";
+      if (metadata.evals_run) html += "Evals: " + metadata.evals_run.join(", ") + " &mdash; ";
+      html += (metadata.runs_per_configuration || "?") + " runs per configuration";
+      html += "</p>";
+
+      // Summary table
+      html += '<table class="benchmark-table">';
+
+      function fmtStat(stat, pct) {
+        if (!stat) return "—";
+        const suffix = pct ? "%" : "";
+        const m = pct ? (stat.mean * 100).toFixed(0) : stat.mean.toFixed(1);
+        const s = pct ? (stat.stddev * 100).toFixed(0) : stat.stddev.toFixed(1);
+        return m + suffix + " ± " + s + suffix;
+      }
+
+      function deltaClass(val) {
+        if (!val) return "";
+        const n = parseFloat(val);
+        if (n > 0) return "benchmark-delta-positive";
+        if (n < 0) return "benchmark-delta-negative";
+        return "";
+      }
+
+      // Discover config names dynamically (everything except "delta")
+      const configs = Object.keys(summary).filter(k => k !== "delta");
+      const configA = configs[0] || "config_a";
+      const configB = configs[1] || "config_b";
+      const labelA = configA.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+      const labelB = configB.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+      const a = summary[configA] || {};
+      const b = summary[configB] || {};
+      const delta = summary.delta || {};
+
+      html += "<thead><tr><th>Metric</th><th>" + escapeHtml(labelA) + "</th><th>" + escapeHtml(labelB) + "</th><th>Delta</th></tr></thead>";
+      html += "<tbody>";
+
+      html += "<tr><td><strong>Pass Rate</strong></td>";
+      html += "<td>" + fmtStat(a.pass_rate, true) + "</td>";
+      html += "<td>" + fmtStat(b.pass_rate, true) + "</td>";
+      html += '<td class="' + deltaClass(delta.pass_rate) + '">' + (delta.pass_rate || "—") + "</td></tr>";
+
+      // Time (only show row if data exists)
+      if (a.time_seconds || b.time_seconds) {
+        html += "<tr><td><strong>Time (s)</strong></td>";
+        html += "<td>" + fmtStat(a.time_seconds, false) + "</td>";
+        html += "<td>" + fmtStat(b.time_seconds, false) + "</td>";
+        html += '<td class="' + deltaClass(delta.time_seconds) + '">' + (delta.time_seconds ? delta.time_seconds + "s" : "—") + "</td></tr>";
+      }
+
+      // Tokens (only show row if data exists)
+      if (a.tokens || b.tokens) {
+        html += "<tr><td><strong>Tokens</strong></td>";
+        html += "<td>" + fmtStat(a.tokens, false) + "</td>";
+        html += "<td>" + fmtStat(b.tokens, false) + "</td>";
+        html += '<td class="' + deltaClass(delta.tokens) + '">' + (delta.tokens || "—") + "</td></tr>";
+      }
+
+      html += "</tbody></table>";
+
+      // Per-eval breakdown (if runs data available)
+      const runs = data.runs || [];
+      if (runs.length > 0) {
+        const evalIds = [...new Set(runs.map(r => r.eval_id))].sort((a, b) => a - b);
+
+        html += "<h3 style='font-family: Poppins, sans-serif; margin-bottom: 0.75rem;'>Per-Eval Breakdown</h3>";
+
+        const hasTime = runs.some(r => r.result && r.result.time_seconds != null);
+        const hasErrors = runs.some(r => r.result && r.result.errors > 0);
+
+        for (const evalId of evalIds) {
+          const evalRuns = runs.filter(r => r.eval_id === evalId);
+          const evalName = evalRuns[0] && evalRuns[0].eval_name ? evalRuns[0].eval_name : "Eval " + evalId;
+
+          html += "<h4 style='font-family: Poppins, sans-serif; margin: 1rem 0 0.5rem; color: var(--text);'>" + escapeHtml(evalName) + "</h4>";
+          html += '<table class="benchmark-table">';
+          html += "<thead><tr><th>Config</th><th>Run</th><th>Pass Rate</th>";
+          if (hasTime) html += "<th>Time (s)</th>";
+          if (hasErrors) html += "<th>Crashes During Execution</th>";
+          html += "</tr></thead>";
+          html += "<tbody>";
+
+          // Group by config and render with average rows
+          const configGroups = [...new Set(evalRuns.map(r => r.configuration))];
+          for (let ci = 0; ci < configGroups.length; ci++) {
+            const config = configGroups[ci];
+            const configRuns = evalRuns.filter(r => r.configuration === config);
+            if (configRuns.length === 0) continue;
+
+            const rowClass = ci === 0 ? "benchmark-row-with" : "benchmark-row-without";
+            const configLabel = config.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+
+            for (const run of configRuns) {
+              const r = run.result || {};
+              const prClass = r.pass_rate >= 0.8 ? "benchmark-delta-positive" : r.pass_rate < 0.5 ? "benchmark-delta-negative" : "";
+              html += '<tr class="' + rowClass + '">';
+              html += "<td>" + configLabel + "</td>";
+              html += "<td>" + run.run_number + "</td>";
+              html += '<td class="' + prClass + '">' + ((r.pass_rate || 0) * 100).toFixed(0) + "% (" + (r.passed || 0) + "/" + (r.total || 0) + ")</td>";
+              if (hasTime) html += "<td>" + (r.time_seconds != null ? r.time_seconds.toFixed(1) : "—") + "</td>";
+              if (hasErrors) html += "<td>" + (r.errors || 0) + "</td>";
+              html += "</tr>";
+            }
+
+            // Average row
+            const rates = configRuns.map(r => (r.result || {}).pass_rate || 0);
+            const avgRate = rates.reduce((a, b) => a + b, 0) / rates.length;
+            const avgPrClass = avgRate >= 0.8 ? "benchmark-delta-positive" : avgRate < 0.5 ? "benchmark-delta-negative" : "";
+            html += '<tr class="benchmark-row-avg ' + rowClass + '">';
+            html += "<td>" + configLabel + "</td>";
+            html += "<td>Avg</td>";
+            html += '<td class="' + avgPrClass + '">' + (avgRate * 100).toFixed(0) + "%</td>";
+            if (hasTime) {
+              const times = configRuns.map(r => (r.result || {}).time_seconds).filter(t => t != null);
+              html += "<td>" + (times.length ? (times.reduce((a, b) => a + b, 0) / times.length).toFixed(1) : "—") + "</td>";
+            }
+            if (hasErrors) html += "<td></td>";
+            html += "</tr>";
+          }
+          html += "</tbody></table>";
+
+          // Per-assertion detail for this eval
+          const runsWithExpectations = {};
+          for (const config of configGroups) {
+            runsWithExpectations[config] = evalRuns.filter(r => r.configuration === config && r.expectations && r.expectations.length > 0);
+          }
+          const hasAnyExpectations = Object.values(runsWithExpectations).some(runs => runs.length > 0);
+          if (hasAnyExpectations) {
+            // Collect all unique assertion texts across all configs
+            const allAssertions = [];
+            const seen = new Set();
+            for (const config of configGroups) {
+              for (const run of runsWithExpectations[config]) {
+                for (const exp of (run.expectations || [])) {
+                  if (!seen.has(exp.text)) {
+                    seen.add(exp.text);
+                    allAssertions.push(exp.text);
+                  }
+                }
+              }
+            }
+
+            html += '<table class="benchmark-table" style="margin-top: 0.5rem;">';
+            html += "<thead><tr><th>Assertion</th>";
+            for (const config of configGroups) {
+              const label = config.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+              html += "<th>" + escapeHtml(label) + "</th>";
+            }
+            html += "</tr></thead><tbody>";
+
+            for (const assertionText of allAssertions) {
+              html += "<tr><td>" + escapeHtml(assertionText) + "</td>";
+
+              for (const config of configGroups) {
+                html += "<td>";
+                for (const run of runsWithExpectations[config]) {
+                  const exp = (run.expectations || []).find(e => e.text === assertionText);
+                  if (exp) {
+                    const cls = exp.passed ? "benchmark-delta-positive" : "benchmark-delta-negative";
+                    const icon = exp.passed ? "\u2713" : "\u2717";
+                    html += '<span class="' + cls + '" title="Run ' + run.run_number + ': ' + escapeHtml(exp.evidence || "") + '">' + icon + "</span> ";
+                  } else {
+                    html += "— ";
+                  }
+                }
+                html += "</td>";
+              }
+              html += "</tr>";
+            }
+            html += "</tbody></table>";
+          }
+        }
+      }
+
+      // Notes
+      if (notes.length > 0) {
+        html += '<div class="benchmark-notes">';
+        html += "<h3>Analysis Notes</h3>";
+        html += "<ul>";
+        for (const note of notes) {
+          html += "<li>" + escapeHtml(note) + "</li>";
+        }
+        html += "</ul></div>";
+      }
+
+      container.innerHTML = html;
+    }
+
+    // ---- Start ----
+    init();
+    renderBenchmark();
+  </script>
+</body>
+</html>

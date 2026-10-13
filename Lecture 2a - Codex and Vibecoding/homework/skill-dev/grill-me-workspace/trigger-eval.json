@@ -1,0 +1,82 @@
+[
+  {
+    "query": "ok the kirby game is good now, i want to add a boss fight at the end of the level before the warp star",
+    "should_trigger": true
+  },
+  {
+    "query": "can we add a second level? i want it to feel different from the first one but idk what that means yet",
+    "should_trigger": true
+  },
+  {
+    "query": "what if kirby could copy powers from enemies he inhales, like the real games? lets add that",
+    "should_trigger": true
+  },
+  {
+    "query": "i have an idea for a little app that tracks my gym lifts and shows progress charts. its a react project in ~/code/lifttrack, can you help me build it",
+    "should_trigger": true
+  },
+  {
+    "query": "grill me about this before we write anything: i want multiplayer on the connect4 game from lecture 1a",
+    "should_trigger": true
+  },
+  {
+    "query": "help me spec out a feature where users can export their notes to PDF. we use express + sqlite, nothing exists for export yet",
+    "should_trigger": true
+  },
+  {
+    "query": "lets make the game harder somehow. maybe more enemies or something? your call but make it good",
+    "should_trigger": true
+  },
+  {
+    "query": "interview me about what the final project for my agent engineering class should be, i have 3 vague ideas and no repo yet",
+    "should_trigger": true
+  },
+  {
+    "query": "I want to add dark mode to the dashboard app. where do we even start?",
+    "should_trigger": true
+  },
+  {
+    "query": "let's plan this out first: a discord bot that posts the daily BYU devotional summary. python, i haven't started",
+    "should_trigger": true
+  },
+  {
+    "query": "kirby falls through the floor when he lands on a brick tile right after flying. can you fix it? the collision code is in js/logic/physics.js",
+    "should_trigger": false
+  },
+  {
+    "query": "how does the inhale cone work in this codebase? walk me through js/logic/inhale.js",
+    "should_trigger": false
+  },
+  {
+    "query": "rename the function getLegalMoves to listLegalMoves everywhere in the hnefatafl project, including the tests",
+    "should_trigger": false
+  },
+  {
+    "query": "add a tomato pickup at tile column 40 row 10 in level.js, heals 3 hp, same sprite style as the 1up. no questions needed, just do it",
+    "should_trigger": false
+  },
+  {
+    "query": "write unit tests for physics.js covering gravity, jump cut, and wall collisions. use node:test like the other test files",
+    "should_trigger": false
+  },
+  {
+    "query": "refactor render.js into two files: draw background in background.js and draw sprites in sprites-draw.js. keep every function the same, just move them",
+    "should_trigger": false
+  },
+  {
+    "query": "the playthrough test is failing with 'bot stuck at x=1200'. here's the output: [paste]. whats wrong?",
+    "should_trigger": false
+  },
+  {
+    "query": "change the sky color in the first level to #1d1430 and make the clouds slightly bigger",
+    "should_trigger": false
+  },
+  {
+    "query": "review my CLAUDE.md and tell me if anything in it is redundant or contradictory",
+    "should_trigger": false
+  },
+  {
+    "query": "explain the difference between waterfall and agile like im writing it up for my class notes",
+    "should_trigger": false
+  }
+]

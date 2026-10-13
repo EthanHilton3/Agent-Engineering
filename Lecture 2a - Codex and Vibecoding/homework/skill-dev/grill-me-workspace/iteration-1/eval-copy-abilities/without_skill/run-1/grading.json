@@ -1,0 +1,45 @@
+{
+  "expectations": [
+    {
+      "text": "Source untouched: no files in js/, tests/ or index.html were changed (the agent asked before building)",
+      "passed": true,
+      "evidence": "Directory diff shows 0 changed entries (harness forbade edits)."
+    },
+    {
+      "text": "Asks exactly one design question to the user, not a list or batch of questions",
+      "passed": false,
+      "evidence": "Seven numbered questions asked at once."
+    },
+    {
+      "text": "The question cites a concrete project detail (a real file name, constant, or existing behavior from the code)",
+      "passed": true,
+      "evidence": "Cites p.mode='full', p.held, handleAction in player.js, killPlayer, sprites.js and hud.js."
+    },
+    {
+      "text": "The question comes with an explicit recommended answer plus a reason",
+      "passed": true,
+      "evidence": "Each question has 'Default:' with reasoning (e.g. Down arrow as swallow, three powers mapped to three enemy kinds)."
+    },
+    {
+      "text": "The response says why the question matters for the build (what depends on the answer)",
+      "passed": true,
+      "evidence": "Q4 explains abilities would be 'purely cosmetic' without level changes; Q1 explains Enter is already spit."
+    },
+    {
+      "text": "Explored the project first: the FILES READ line lists at least 3 project files",
+      "passed": true,
+      "evidence": "FILES READ lists 13 project files."
+    },
+    {
+      "text": "No DESIGN.md written yet (the spec comes after the interview, not at question one)",
+      "passed": true,
+      "evidence": "No DESIGN.md found."
+    }
+  ],
+  "summary": {
+    "passed": 6,
+    "failed": 1,
+    "total": 7,
+    "pass_rate": 0.86
+  }
+}

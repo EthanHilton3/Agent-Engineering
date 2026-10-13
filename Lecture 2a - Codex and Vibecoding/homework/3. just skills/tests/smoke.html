@@ -1,0 +1,211 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Kirby smoke tests</title>
+<style>
+  body { margin: 0; background: #111; color: #eee; font: 12px monospace; }
+  canvas { image-rendering: pixelated; width: 768px; height: 672px; }
+  #controls { display: none; }
+</style>
+</head>
+<body>
+<!-- Headless smoke test: drives the real game code step by step with synthetic key events.
+     Run:  msedge --headless --disable-gpu --virtual-time-budget=20000 --dump-dom tests/smoke.html
+     Add ?shot=<scene> to render a scene for a screenshot instead (title, play, fly, inhale, boulder, fire, boss, win). -->
+<canvas id="game" width="256" height="224"></canvas>
+<div id="controls"></div>
+<pre id="out">RUNNING</pre>
+<script>
+  window.__errors = [];
+  addEventListener('error', (e) => window.__errors.push(e.message + ' @' + e.lineno));
+  window.requestAnimationFrame = () => 0; // the test drives update() itself
+</script>
+<script src="../js/core.js"></script>
+<script src="../js/sprites.js"></script>
+<script src="../js/level.js"></script>
+<script src="../js/entities.js"></script>
+<script src="../js/kirby.js"></script>
+<script src="../js/game.js"></script>
+<script>
+(function () {
+  const CODES = { left: 'ArrowLeft', right: 'ArrowRight', down: 'ArrowDown', jump: 'Space', action: 'Enter', drop: 'ShiftLeft', pause: 'KeyP' };
+  const press = (a) => dispatchEvent(new KeyboardEvent('keydown', { code: CODES[a] }));
+  const release = (a) => dispatchEvent(new KeyboardEvent('keyup', { code: CODES[a] }));
+  const step = (n = 1) => { for (let i = 0; i < n; i++) { update(); Input.endStep(); } };
+  const tap = (a, after = 1) => { press(a); step(1); release(a); step(after); };
+  const results = [];
+  const check = (name, cond, info = '') => results.push((cond ? 'PASS ' : 'FAIL ') + name + (info ? '  [' + info + ']' : ''));
+  const k = () => G.kirby;
+  const put = (e, x, y) => { e.x = x; e.y = y; G.ents.push(e); return e; };
+  const ground = 10 * TILE;
+  const reset = (x) => { G.checkpoint = 0; loadAttempt(); G.ents = G.ents.filter((e) => e.kind === 'boulder'); k().x = x; k().y = ground - 13; k().invuln = 0; step(2); };
+
+  function runTests() {
+    check('boots to title', G.state === 'title');
+    tap('action', 2);
+    check('Enter starts the game', G.state === 'playing');
+    check('Kirby at start, full health, 3 lives', k().hp === 6 && G.lives === 3);
+
+    reset(40);
+    const x0 = k().x; press('right'); step(60); release('right'); step(20);
+    check('runs right', k().x > x0 + 60, 'dx=' + (k().x - x0).toFixed(1));
+    check('stands on ground', k().onGround);
+
+    reset(40);
+    let top = k().y; press('jump'); for (let i = 0; i < 40; i++) { step(1); top = Math.min(top, k().y); } release('jump'); step(40);
+    const jh = ground - 13 - top;
+    check('jump height about 3 tiles', jh > 40 && jh < 60, jh.toFixed(1) + 'px');
+    reset(40);
+    tap('jump', 1); let shortTop = k().y; for (let i = 0; i < 40; i++) { step(1); shortTop = Math.min(shortTop, k().y); }
+    check('tap jump is a short hop', ground - 13 - shortTop < jh - 10, (ground - 13 - shortTop).toFixed(1) + 'px');
+
+    reset(40);
+    tap('jump', 10);
+    for (let i = 0; i < 12; i++) tap('jump', 8);
+    check('repeated Space flies upward', k().puffed && k().y < ground - 13 - 70, 'y=' + k().y.toFixed(1));
+    const yBefore = k().y; step(30);
+    check('slow sink between flaps', k().y > yBefore && k().y - yBefore < 30, 'sank ' + (k().y - yBefore).toFixed(1));
+    tap('action', 2);
+    check('Enter in flight exhales an air puff', !k().puffed && G.ents.some((e) => e.kind === 'airpuff'));
+
+    reset(100);
+    const w = put(new Walker(), 140, ground - 12);
+    press('action'); step(60);
+    check('holding Enter inhales a walker', k().held && k().held.kind === 'walker' && w.dead, k().held ? k().held.kind : 'nothing');
+    release('action'); step(2);
+    const w2 = put(new Walker(), 200, ground - 12); const s0 = G.score;
+    tap('action', 30);
+    check('Enter spits a star that defeats an enemy', w2.dead && G.score > s0, 'score +' + (G.score - s0));
+
+    reset(100);
+    const sp = put(new Spiky(), 130, ground - 30);
+    press('action'); step(60); release('action'); step(2);
+    check('spiky enemy cannot be inhaled', !k().held && !sp.dead && sp.caughtTimer === 0);
+
+    reset(100);
+    G.level.set(9, 9, T.STAR);
+    k().x = 120; k().facing = 1;
+    press('action'); step(40); release('action'); step(2);
+    check('star blocks can be inhaled', G.level.get(9, 9) !== T.STAR || (k().held && k().held.kind === 'block'));
+
+    reset(139 * TILE - 13);
+    k().facing = 1;
+    check('boulder blocks the passage', G.level.solidAt(140 * TILE + 4, 9 * TILE));
+    press('action');
+    let strained = false;
+    for (let i = 0; i < 200 && !k().held; i++) { step(1); strained = strained || k().straining; }
+    release('action'); step(2);
+    check('Kirby strains against the boulder', strained);
+    check('boulder can be inhaled (big)', k().held && k().held.big);
+    check('passage cleared', !G.level.solidAt(140 * TILE + 4, 9 * TILE));
+    tap('action', 1);
+    const big = G.ents.find((e) => e.kind === 'shot');
+    check('spitting a big object fires a big star', big && big.big);
+
+    reset(100);
+    put(new HotHead(), 135, ground - 13);
+    press('action'); step(60); release('action'); step(2);
+    check('fire creature inhaled', k().held && k().held.gives === 'fire');
+    tap('down', 2);
+    check('Down swallows it and grants Fire', k().ability === 'fire' && !k().held);
+    const w3 = put(new Walker(), k().x + 30, ground - 12);
+    press('action'); step(20); release('action'); step(2);
+    check('fire breath defeats enemies', w3.dead && !k().held);
+    tap('drop', 2);
+    check('Shift drops the ability as a star', k().ability === null && G.ents.some((e) => e.kind === 'abilitystar'));
+
+    reset(100);
+    const w4 = put(new Walker(), 110, ground - 12);
+    step(3);
+    check('touching an enemy costs one health pip', k().hp === 5 && k().invuln > 0, 'hp=' + k().hp);
+    w4.dead = true;
+
+    reset(100);
+    const lives0 = G.lives; k().x = 51 * TILE; k().y = 7 * TILE; step(200);
+    check('falling in a pit costs a life', G.lives === lives0 - 1 && G.state === 'playing', 'lives=' + G.lives);
+
+    reset(100);
+    k().x = FLAG_TX * TILE + 4; step(2);
+    check('midpoint flag sets the checkpoint', G.checkpoint === 1);
+    k().x = 182 * TILE; k().y = ground - 13; step(2);
+    check('door starts the transition', G.state === 'door');
+    step(50);
+    check('door leads into the boss arena', G.state === 'playing' && G.inArena && G.camX === ARENA.camX);
+    step(120);
+    check('boss wakes up', G.boss.vulnerable, G.boss.state);
+    let hits = 0;
+    for (let i = 0; i < 6; i++) { G.ents.push(new StarShot(1, false).at(ARENA.right - 20, 100)); step(3); hits++; }
+    check('stars damage the boss down to 0', G.boss.hp === 0 && G.boss.state === 'dying', 'hp=' + G.boss.hp);
+    step(160);
+    const warp = G.ents.find((e) => e.kind === 'warp');
+    check('defeated boss drops the warp star', !!warp);
+    step(90);
+    check('warp star has landed', warp.arrived);
+    k().x = warp.x + 6; k().y = warp.y; k().invuln = 0; step(2);
+    check('touching the warp star wins', G.state === 'winning');
+    step(160);
+    check('win screen shows with life bonus', G.state === 'win' && G.winBonus === G.lives * 5000);
+    render();
+    step(50); tap('action', 2);
+    check('Enter restarts from the win screen', G.state === 'playing' && G.score === 0 && G.checkpoint === 0);
+
+    G.checkpoint = 2; loadAttempt(); step(130);
+    check('respawn at the boss door resets the boss', G.inArena && G.boss.hp === 6);
+    G.ents.push(new StarShot(1, false).at(ARENA.right - 20, 100)); step(3);
+    const hp1 = G.boss.hp;
+    k().x = ARENA.right - 12 - 4; k().facing = 1; k().ability = 'fire';
+    press('action'); step(130); release('action'); step(2);
+    check('fire breath damages the boss about once per second', G.boss.hp <= hp1 - 2, 'hp ' + hp1 + ' -> ' + G.boss.hp);
+
+    G.lives = 1; k().invuln = 0; k().hp = 1; k().damage(k().cx + 10); step(130);
+    check('losing the last life shows game over', G.state === 'gameover');
+    render();
+    step(50); tap('action', 2);
+    check('Enter restarts after game over', G.state === 'playing' && G.lives === 3);
+
+    // pause
+    tap('pause', 2);
+    check('P pauses', G.state === 'paused'); render();
+    tap('pause', 2);
+    check('P resumes', G.state === 'playing');
+
+    // soak: play the whole level with random inputs for a while, rendering every frame
+    reset(40);
+    const acts = ['left', 'right', 'jump', 'action', 'down', 'drop'];
+    for (let i = 0; i < 6000; i++) {
+      if (i % 7 === 0) { const a = acts[(Math.random() * acts.length) | 0]; Math.random() < 0.5 ? press(a) : release(a); }
+      if (i % 4 === 0) press('right');
+      if (G.state === 'gameover' || G.state === 'win') { tap('action', 1); }
+      step(1); render();
+    }
+    check('6000 random frames with no errors', window.__errors.length === 0);
+    check('no runtime errors at all', window.__errors.length === 0, window.__errors.join(' | '));
+  }
+
+  function scene(name) {
+    if (name === 'title') { step(10); render(); return; }
+    tap('action', 2);
+    const kb = k();
+    kb.invuln = 0;
+    if (name === 'play') { kb.x = 150; step(30); }
+    if (name === 'fly') { kb.x = 51 * TILE; kb.y = 100; kb.puffed = true; G.camX = 46 * TILE; step(1); }
+    if (name === 'inhale') { G.ents = []; kb.x = 100; put(new Walker(), 150, ground - 12); put(new Walker(), 175, ground - 12); press('action'); step(6); }
+    if (name === 'boulder') { G.ents = G.ents.filter((e) => e.kind === 'boulder' || e.kind === 'walker' && e.x > 2200); kb.x = 139 * TILE - 13; kb.facing = 1; G.camX = 130 * TILE; press('action'); step(40); }
+    if (name === 'fire') { kb.x = 152 * TILE; kb.ability = 'fire'; G.camX = 146 * TILE; press('action'); step(20); }
+    if (name === 'hill') { kb.x = 106 * TILE; kb.y = 7 * TILE; G.camX = 104 * TILE; step(60); }
+    if (name === 'boss') { G.checkpoint = 2; loadAttempt(); step(200); G.boss.hp = 3; step(80); }
+    if (name === 'win') { G.checkpoint = 2; loadAttempt(); step(130); G.boss.hit(6); step(260); const w = G.ents.find((e) => e.kind === 'warp'); G.kirby.x = w.x + 6; G.kirby.y = w.y; step(2); step(200); }
+    render();
+  }
+
+  const shot = new URLSearchParams(location.search).get('shot');
+  try { if (shot) scene(shot); else runTests(); }
+  catch (e) { results.push('FAIL exception: ' + e.message + '\n' + e.stack); }
+  if (window.__errors.length) results.push('ERRORS: ' + window.__errors.join(' | '));
+  document.getElementById('out').textContent = shot ? 'SHOT ' + shot : results.join('\n') +
+    '\n\n' + results.filter((r) => r.startsWith('PASS')).length + '/' + results.length + ' passed';
+})();
+</script>
+</body>
+</html>

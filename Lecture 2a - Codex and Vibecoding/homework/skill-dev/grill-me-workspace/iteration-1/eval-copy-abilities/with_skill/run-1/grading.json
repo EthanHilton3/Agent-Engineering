@@ -1,0 +1,45 @@
+{
+  "expectations": [
+    {
+      "text": "Source untouched: no files in js/, tests/ or index.html were changed (the agent asked before building)",
+      "passed": true,
+      "evidence": "Directory diff shows 0 changed entries."
+    },
+    {
+      "text": "Asks exactly one design question to the user, not a list or batch of questions",
+      "passed": true,
+      "evidence": "One question: 'Q1 of ~8: After Kirby swallows an enemy, how does he turn it into a power...?' Lists upcoming topics as bullets but asks only one."
+    },
+    {
+      "text": "The question cites a concrete project detail (a real file name, constant, or existing behavior from the code)",
+      "passed": true,
+      "evidence": "Cites inhale.js, p.held = {kinds, count}, input.js bindings, CLAUDE.md key rule, Inhale.spit."
+    },
+    {
+      "text": "The question comes with an explicit recommended answer plus a reason",
+      "passed": true,
+      "evidence": "'My recommendation: swallowing a power-giving enemy gives the power immediately...' with reasoning and alternatives."
+    },
+    {
+      "text": "The response says why the question matters for the build (what depends on the answer)",
+      "passed": true,
+      "evidence": "'This sets the control scheme, and every other decision builds on it.'"
+    },
+    {
+      "text": "Explored the project first: the FILES READ line lists at least 3 project files",
+      "passed": true,
+      "evidence": "FILES READ lists 8 project files."
+    },
+    {
+      "text": "No DESIGN.md written yet (the spec comes after the interview, not at question one)",
+      "passed": true,
+      "evidence": "No DESIGN.md found."
+    }
+  ],
+  "summary": {
+    "passed": 7,
+    "failed": 0,
+    "total": 7,
+    "pass_rate": 1.0
+  }
+}

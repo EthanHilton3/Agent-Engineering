@@ -1,0 +1,1544 @@
+Split: 12 train, 8 test (holdout=0.4)
+
+============================================================
+Iteration 1/5
+Description: Interview the user, one question at a time, before building anything. Use this whenever the user wants to build, add, or change a feature, game, mechanic, tool or app in a code project, especially when the request is short or open-ended ("add a boss fight", "I want a second level", "let's make a todo app", "what if enemies could...?"), or when they say "grill me", "interview me", "help me spec this", or "let's plan this out". Make sure to use it even if the user doesn't ask for a plan, because a request that sounds simple usually hides several design decisions. Do not use it for bug fixes, fully specified small edits, or questions about how existing code works.
+============================================================
+Train: 20/36 correct, precision=100% recall=11% accuracy=56% (41.2s)
+  [FAIL] rate=0/3 expected=True: lets make the game harder somehow. maybe more enemies or som
+  [FAIL] rate=1/3 expected=True: help me spec out a feature where users can export their note
+  [FAIL] rate=0/3 expected=True: let's plan this out first: a discord bot that posts the dail
+  [FAIL] rate=0/3 expected=True: grill me about this before we write anything: i want multipl
+  [FAIL] rate=1/3 expected=True: ok the kirby game is good now, i want to add a boss fight at
+  [FAIL] rate=0/3 expected=True: can we add a second level? i want it to feel different from 
+  [PASS] rate=0/3 expected=False: how does the inhale cone work in this codebase? walk me thro
+  [PASS] rate=0/3 expected=False: review my CLAUDE.md and tell me if anything in it is redunda
+  [PASS] rate=0/3 expected=False: change the sky color in the first level to #1d1430 and make 
+  [PASS] rate=0/3 expected=False: kirby falls through the floor when he lands on a brick tile 
+  [PASS] rate=0/3 expected=False: the playthrough test is failing with 'bot stuck at x=1200'. 
+  [PASS] rate=0/3 expected=False: explain the difference between waterfall and agile like im w
+Test : 13/24 correct, precision=100% recall=8% accuracy=54% (0.0s)
+  [FAIL] rate=0/3 expected=True: interview me about what the final project for my agent engin
+  [FAIL] rate=0/3 expected=True: i have an idea for a little app that tracks my gym lifts and
+  [FAIL] rate=0/3 expected=True: what if kirby could copy powers from enemies he inhales, lik
+  [FAIL] rate=1/3 expected=True: I want to add dark mode to the dashboard app. where do we ev
+  [PASS] rate=0/3 expected=False: add a tomato pickup at tile column 40 row 10 in level.js, he
+  [PASS] rate=0/3 expected=False: refactor render.js into two files: draw background in backgr
+  [PASS] rate=0/3 expected=False: rename the function getLegalMoves to listLegalMoves everywhe
+  [PASS] rate=0/3 expected=False: write unit tests for physics.js covering gravity, jump cut, 
+
+Improving description...
+Proposed (7.0s): Use this skill before writing any code for a new feature, game mechanic, level, tool, bot or app. It starts a one-question-at-a-time design interview and produces a DESIGN.md. Use it whenever the user asks to add, build, extend or plan something new, even in a single vague sentence, or even when they have already named a stack. Examples are "make the game harder", "add a second level", "let's make a bot" and "I want multiplayer". Use it whenever they ask to spec or plan something, or say "grill me", "interview me" or "plan this out". They may leave decisions to you ("your call"), or they may not mention design at all, but the work still hides unmade choices about scope, behavior and success criteria. Do not use it for bug fixes, failing tests, small fully specified edits such as a color or rename, code explanations, or general questions.
+
+============================================================
+Iteration 2/5
+Description: Use this skill before writing any code for a new feature, game mechanic, level, tool, bot or app. It starts a one-question-at-a-time design interview and produces a DESIGN.md. Use it whenever the user asks to add, build, extend or plan something new, even in a single vague sentence, or even when they have already named a stack. Examples are "make the game harder", "add a second level", "let's make a bot" and "I want multiplayer". Use it whenever they ask to spec or plan something, or say "grill me", "interview me" or "plan this out". They may leave decisions to you ("your call"), or they may not mention design at all, but the work still hides unmade choices about scope, behavior and success criteria. Do not use it for bug fixes, failing tests, small fully specified edits such as a color or rename, code explanations, or general questions.
+============================================================
+Train: 19/36 correct, precision=100% recall=6% accuracy=53% (40.4s)
+  [FAIL] rate=0/3 expected=True: help me spec out a feature where users can export their note
+  [FAIL] rate=1/3 expected=True: lets make the game harder somehow. maybe more enemies or som
+  [FAIL] rate=0/3 expected=True: let's plan this out first: a discord bot that posts the dail
+  [FAIL] rate=0/3 expected=True: grill me about this before we write anything: i want multipl
+  [FAIL] rate=0/3 expected=True: ok the kirby game is good now, i want to add a boss fight at
+  [FAIL] rate=0/3 expected=True: can we add a second level? i want it to feel different from 
+  [PASS] rate=0/3 expected=False: how does the inhale cone work in this codebase? walk me thro
+  [PASS] rate=0/3 expected=False: review my CLAUDE.md and tell me if anything in it is redunda
+  [PASS] rate=0/3 expected=False: change the sky color in the first level to #1d1430 and make 
+  [PASS] rate=0/3 expected=False: kirby falls through the floor when he lands on a brick tile 
+  [PASS] rate=0/3 expected=False: the playthrough test is failing with 'bot stuck at x=1200'. 
+  [PASS] rate=0/3 expected=False: explain the difference between waterfall and agile like im w
+Test : 12/24 correct, precision=100% recall=0% accuracy=50% (0.0s)
+  [FAIL] rate=0/3 expected=True: interview me about what the final project for my agent engin
+  [FAIL] rate=0/3 expected=True: i have an idea for a little app that tracks my gym lifts and
+  [FAIL] rate=0/3 expected=True: what if kirby could copy powers from enemies he inhales, lik
+  [FAIL] rate=0/3 expected=True: I want to add dark mode to the dashboard app. where do we ev
+  [PASS] rate=0/3 expected=False: add a tomato pickup at tile column 40 row 10 in level.js, he
+  [PASS] rate=0/3 expected=False: refactor render.js into two files: draw background in backgr
+  [PASS] rate=0/3 expected=False: rename the function getLegalMoves to listLegalMoves everywhe
+  [PASS] rate=0/3 expected=False: write unit tests for physics.js covering gravity, jump cut, 
+
+Improving description...
+Proposed (5.1s): Interview-first skill for new work. Use this whenever the user wants to add, build, extend, or plan something that doesn't exist yet in a code project: a feature, game mechanic, boss, level, enemy, bot, tool, integration, export, multiplayer, or app. This includes when they say "let's plan this out", "help me spec", "grill me" or "interview me". Trigger even if the request is one loose sentence, "your call", "idk what that means yet", or already names a language or stack, or the project is already working well. Adding anything new always hides unmade choices about scope, behavior, difficulty and how to verify it, so ask questions and write DESIGN.md before any code. Skip for bug fixes, failing tests, tiny fully specified edits (a color, a rename), reviewing or explaining existing code, and general knowledge questions.
+
+============================================================
+Iteration 3/5
+Description: Interview-first skill for new work. Use this whenever the user wants to add, build, extend, or plan something that doesn't exist yet in a code project: a feature, game mechanic, boss, level, enemy, bot, tool, integration, export, multiplayer, or app. This includes when they say "let's plan this out", "help me spec", "grill me" or "interview me". Trigger even if the request is one loose sentence, "your call", "idk what that means yet", or already names a language or stack, or the project is already working well. Adding anything new always hides unmade choices about scope, behavior, difficulty and how to verify it, so ask questions and write DESIGN.md before any code. Skip for bug fixes, failing tests, tiny fully specified edits (a color, a rename), reviewing or explaining existing code, and general knowledge questions.
+============================================================
+Train: 20/36 correct, precision=100% recall=11% accuracy=56% (40.6s)
+  [FAIL] rate=1/3 expected=True: help me spec out a feature where users can export their note
+  [FAIL] rate=0/3 expected=True: let's plan this out first: a discord bot that posts the dail
+  [FAIL] rate=0/3 expected=True: lets make the game harder somehow. maybe more enemies or som
+  [FAIL] rate=0/3 expected=True: grill me about this before we write anything: i want multipl
+  [FAIL] rate=1/3 expected=True: ok the kirby game is good now, i want to add a boss fight at
+  [FAIL] rate=0/3 expected=True: can we add a second level? i want it to feel different from 
+  [PASS] rate=0/3 expected=False: how does the inhale cone work in this codebase? walk me thro
+  [PASS] rate=0/3 expected=False: review my CLAUDE.md and tell me if anything in it is redunda
+  [PASS] rate=0/3 expected=False: change the sky color in the first level to #1d1430 and make 
+  [PASS] rate=0/3 expected=False: kirby falls through the floor when he lands on a brick tile 
+  [PASS] rate=0/3 expected=False: the playthrough test is failing with 'bot stuck at x=1200'. 
+  [PASS] rate=0/3 expected=False: explain the difference between waterfall and agile like im w
+Test : 12/24 correct, precision=100% recall=0% accuracy=50% (0.0s)
+  [FAIL] rate=0/3 expected=True: interview me about what the final project for my agent engin
+  [FAIL] rate=0/3 expected=True: i have an idea for a little app that tracks my gym lifts and
+  [FAIL] rate=0/3 expected=True: what if kirby could copy powers from enemies he inhales, lik
+  [FAIL] rate=0/3 expected=True: I want to add dark mode to the dashboard app. where do we ev
+  [PASS] rate=0/3 expected=False: add a tomato pickup at tile column 40 row 10 in level.js, he
+  [PASS] rate=0/3 expected=False: refactor render.js into two files: draw background in backgr
+  [PASS] rate=0/3 expected=False: rename the function getLegalMoves to listLegalMoves everywhe
+  [PASS] rate=0/3 expected=False: write unit tests for physics.js covering gravity, jump cut, 
+
+Improving description...
+Proposed (5.2s): Use this skill when the user wants to create something that doesn't exist yet in a code project, even if the request is a single loose sentence. That includes a new feature, level, boss, enemy, difficulty change, bot, integration, export, multiplayer mode, or app. It also applies when they say "grill me", "interview me", "help me spec this", or "let's plan this out". Treat these as new work to interview about first: "make it harder, your call", "add a second level, idk what that means yet", "add a boss to the working game", and "a bot in python, haven't started". Naming a stack, saying the project already works well, or delegating decisions does not remove the need to ask. Any new addition hides unmade choices about scope, behavior and how to verify it. Ask one question at a time and write DESIGN.md before any code. Skip bug fixes, failing tests, tiny fully specified edits (a color, a rename), explaining or reviewing existing code, and general questions.
+
+============================================================
+Iteration 4/5
+Description: Use this skill when the user wants to create something that doesn't exist yet in a code project, even if the request is a single loose sentence. That includes a new feature, level, boss, enemy, difficulty change, bot, integration, export, multiplayer mode, or app. It also applies when they say "grill me", "interview me", "help me spec this", or "let's plan this out". Treat these as new work to interview about first: "make it harder, your call", "add a second level, idk what that means yet", "add a boss to the working game", and "a bot in python, haven't started". Naming a stack, saying the project already works well, or delegating decisions does not remove the need to ask. Any new addition hides unmade choices about scope, behavior and how to verify it. Ask one question at a time and write DESIGN.md before any code. Skip bug fixes, failing tests, tiny fully specified edits (a color, a rename), explaining or reviewing existing code, and general questions.
+============================================================
+Train: 20/36 correct, precision=100% recall=11% accuracy=56% (40.4s)
+  [FAIL] rate=0/3 expected=True: lets make the game harder somehow. maybe more enemies or som
+  [FAIL] rate=1/3 expected=True: help me spec out a feature where users can export their note
+  [FAIL] rate=1/3 expected=True: let's plan this out first: a discord bot that posts the dail
+  [FAIL] rate=0/3 expected=True: grill me about this before we write anything: i want multipl
+  [FAIL] rate=0/3 expected=True: ok the kirby game is good now, i want to add a boss fight at
+  [FAIL] rate=0/3 expected=True: can we add a second level? i want it to feel different from 
+  [PASS] rate=0/3 expected=False: how does the inhale cone work in this codebase? walk me thro
+  [PASS] rate=0/3 expected=False: review my CLAUDE.md and tell me if anything in it is redunda
+  [PASS] rate=0/3 expected=False: change the sky color in the first level to #1d1430 and make 
+  [PASS] rate=0/3 expected=False: kirby falls through the floor when he lands on a brick tile 
+  [PASS] rate=0/3 expected=False: the playthrough test is failing with 'bot stuck at x=1200'. 
+  [PASS] rate=0/3 expected=False: explain the difference between waterfall and agile like im w
+Test : 13/24 correct, precision=100% recall=8% accuracy=54% (0.0s)
+  [FAIL] rate=1/3 expected=True: interview me about what the final project for my agent engin
+  [FAIL] rate=0/3 expected=True: i have an idea for a little app that tracks my gym lifts and
+  [FAIL] rate=0/3 expected=True: what if kirby could copy powers from enemies he inhales, lik
+  [FAIL] rate=0/3 expected=True: I want to add dark mode to the dashboard app. where do we ev
+  [PASS] rate=0/3 expected=False: add a tomato pickup at tile column 40 row 10 in level.js, he
+  [PASS] rate=0/3 expected=False: refactor render.js into two files: draw background in backgr
+  [PASS] rate=0/3 expected=False: rename the function getLegalMoves to listLegalMoves everywhe
+  [PASS] rate=0/3 expected=False: write unit tests for physics.js covering gravity, jump cut, 
+
+Improving description...
+Proposed (5.7s): Use this skill when the user asks Claude to make something new in a code project, such as a feature, mechanic, boss, level, enemy, difficulty change, multiplayer mode, bot, integration, export, or app. Use it first, before any planning or coding. Interview them one question at a time, then write DESIGN.md. It applies whatever the wording: a loose one-liner ("make the game harder, your call", "can we add a second level?"), a request that names a stack, an addition to a project that already works well, or an explicit "grill me", "interview me", "help me spec this" or "let's plan this out first". Delegating decisions ("your call", "idk yet") makes the interview more necessary, because every new addition hides unmade choices about scope, behavior, and how to verify it. Do not use it for bug fixes, failing tests, tiny fully specified edits like a color or rename, explaining or reviewing existing code, or general questions.
+
+============================================================
+Iteration 5/5
+Description: Use this skill when the user asks Claude to make something new in a code project, such as a feature, mechanic, boss, level, enemy, difficulty change, multiplayer mode, bot, integration, export, or app. Use it first, before any planning or coding. Interview them one question at a time, then write DESIGN.md. It applies whatever the wording: a loose one-liner ("make the game harder, your call", "can we add a second level?"), a request that names a stack, an addition to a project that already works well, or an explicit "grill me", "interview me", "help me spec this" or "let's plan this out first". Delegating decisions ("your call", "idk yet") makes the interview more necessary, because every new addition hides unmade choices about scope, behavior, and how to verify it. Do not use it for bug fixes, failing tests, tiny fully specified edits like a color or rename, explaining or reviewing existing code, or general questions.
+============================================================
+Train: 21/36 correct, precision=100% recall=17% accuracy=58% (43.4s)
+  [FAIL] rate=0/3 expected=True: lets make the game harder somehow. maybe more enemies or som
+  [FAIL] rate=0/3 expected=True: let's plan this out first: a discord bot that posts the dail
+  [FAIL] rate=1/3 expected=True: help me spec out a feature where users can export their note
+  [FAIL] rate=1/3 expected=True: grill me about this before we write anything: i want multipl
+  [FAIL] rate=0/3 expected=True: ok the kirby game is good now, i want to add a boss fight at
+  [FAIL] rate=1/3 expected=True: can we add a second level? i want it to feel different from 
+  [PASS] rate=0/3 expected=False: how does the inhale cone work in this codebase? walk me thro
+  [PASS] rate=0/3 expected=False: review my CLAUDE.md and tell me if anything in it is redunda
+  [PASS] rate=0/3 expected=False: change the sky color in the first level to #1d1430 and make 
+  [PASS] rate=0/3 expected=False: kirby falls through the floor when he lands on a brick tile 
+  [PASS] rate=0/3 expected=False: the playthrough test is failing with 'bot stuck at x=1200'. 
+  [PASS] rate=0/3 expected=False: explain the difference between waterfall and agile like im w
+Test : 14/24 correct, precision=100% recall=17% accuracy=58% (0.0s)
+  [FAIL] rate=1/3 expected=True: interview me about what the final project for my agent engin
+  [FAIL] rate=0/3 expected=True: i have an idea for a little app that tracks my gym lifts and
+  [FAIL] rate=1/3 expected=True: what if kirby could copy powers from enemies he inhales, lik
+  [FAIL] rate=0/3 expected=True: I want to add dark mode to the dashboard app. where do we ev
+  [PASS] rate=0/3 expected=False: add a tomato pickup at tile column 40 row 10 in level.js, he
+  [PASS] rate=0/3 expected=False: refactor render.js into two files: draw background in backgr
+  [PASS] rate=0/3 expected=False: rename the function getLegalMoves to listLegalMoves everywhe
+  [PASS] rate=0/3 expected=False: write unit tests for physics.js covering gravity, jump cut, 
+
+Max iterations reached (5).
+
+Exit reason: max_iterations (5)
+Best score: 4/8 (iteration 1)
+{
+  "exit_reason": "max_iterations (5)",
+  "original_description": "Interview the user, one question at a time, before building anything. Use this whenever the user wants to build, add, or change a feature, game, mechanic, tool or app in a code project, especially when the request is short or open-ended (\"add a boss fight\", \"I want a second level\", \"let's make a todo app\", \"what if enemies could...?\"), or when they say \"grill me\", \"interview me\", \"help me spec this\", or \"let's plan this out\". Make sure to use it even if the user doesn't ask for a plan, because a request that sounds simple usually hides several design decisions. Do not use it for bug fixes, fully specified small edits, or questions about how existing code works.",
+  "best_description": "Interview the user, one question at a time, before building anything. Use this whenever the user wants to build, add, or change a feature, game, mechanic, tool or app in a code project, especially when the request is short or open-ended (\"add a boss fight\", \"I want a second level\", \"let's make a todo app\", \"what if enemies could...?\"), or when they say \"grill me\", \"interview me\", \"help me spec this\", or \"let's plan this out\". Make sure to use it even if the user doesn't ask for a plan, because a request that sounds simple usually hides several design decisions. Do not use it for bug fixes, fully specified small edits, or questions about how existing code works.",
+  "best_score": "4/8",
+  "best_train_score": "6/12",
+  "best_test_score": "4/8",
+  "final_description": "Use this skill when the user asks Claude to make something new in a code project, such as a feature, mechanic, boss, level, enemy, difficulty change, multiplayer mode, bot, integration, export, or app. Use it first, before any planning or coding. Interview them one question at a time, then write DESIGN.md. It applies whatever the wording: a loose one-liner (\"make the game harder, your call\", \"can we add a second level?\"), a request that names a stack, an addition to a project that already works well, or an explicit \"grill me\", \"interview me\", \"help me spec this\" or \"let's plan this out first\". Delegating decisions (\"your call\", \"idk yet\") makes the interview more necessary, because every new addition hides unmade choices about scope, behavior, and how to verify it. Do not use it for bug fixes, failing tests, tiny fully specified edits like a color or rename, explaining or reviewing existing code, or general questions.",
+  "iterations_run": 5,
+  "holdout": 0.4,
+  "train_size": 12,
+  "test_size": 8,
+  "history": [
+    {
+      "iteration": 1,
+      "description": "Interview the user, one question at a time, before building anything. Use this whenever the user wants to build, add, or change a feature, game, mechanic, tool or app in a code project, especially when the request is short or open-ended (\"add a boss fight\", \"I want a second level\", \"let's make a todo app\", \"what if enemies could...?\"), or when they say \"grill me\", \"interview me\", \"help me spec this\", or \"let's plan this out\". Make sure to use it even if the user doesn't ask for a plan, because a request that sounds simple usually hides several design decisions. Do not use it for bug fixes, fully specified small edits, or questions about how existing code works.",
+      "train_passed": 6,
+      "train_failed": 6,
+      "train_total": 12,
+      "train_results": [
+        {
+          "query": "lets make the game harder somehow. maybe more enemies or something? your call but make it good",
+          "should_trigger": true,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": false
+        },
+        {
+          "query": "help me spec out a feature where users can export their notes to PDF. we use express + sqlite, nothing exists for export yet",
+          "should_trigger": true,
+          "trigger_rate": 0.3333333333333333,
+          "triggers": 1,
+          "runs": 3,
+          "pass": false
+        },
+        {
+          "query": "let's plan this out first: a discord bot that posts the daily BYU devotional summary. python, i haven't started",
+          "should_trigger": true,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": false
+        },
+        {
+          "query": "grill me about this before we write anything: i want multiplayer on the connect4 game from lecture 1a",
+          "should_trigger": true,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": false
+        },
+        {
+          "query": "ok the kirby game is good now, i want to add a boss fight at the end of the level before the warp star",
+          "should_trigger": true,
+          "trigger_rate": 0.3333333333333333,
+          "triggers": 1,
+          "runs": 3,
+          "pass": false
+        },
+        {
+          "query": "can we add a second level? i want it to feel different from the first one but idk what that means yet",
+          "should_trigger": true,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": false
+        },
+        {
+          "query": "how does the inhale cone work in this codebase? walk me through js/logic/inhale.js",
+          "should_trigger": false,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": true
+        },
+        {
+          "query": "review my CLAUDE.md and tell me if anything in it is redundant or contradictory",
+          "should_trigger": false,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": true
+        },
+        {
+          "query": "change the sky color in the first level to #1d1430 and make the clouds slightly bigger",
+          "should_trigger": false,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": true
+        },
+        {
+          "query": "kirby falls through the floor when he lands on a brick tile right after flying. can you fix it? the collision code is in js/logic/physics.js",
+          "should_trigger": false,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": true
+        },
+        {
+          "query": "the playthrough test is failing with 'bot stuck at x=1200'. here's the output: [paste]. whats wrong?",
+          "should_trigger": false,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": true
+        },
+        {
+          "query": "explain the difference between waterfall and agile like im writing it up for my class notes",
+          "should_trigger": false,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": true
+        }
+      ],
+      "test_passed": 4,
+      "test_failed": 4,
+      "test_total": 8,
+      "test_results": [
+        {
+          "query": "interview me about what the final project for my agent engineering class should be, i have 3 vague ideas and no repo yet",
+          "should_trigger": true,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": false
+        },
+        {
+          "query": "i have an idea for a little app that tracks my gym lifts and shows progress charts. its a react project in ~/code/lifttrack, can you help me build it",
+          "should_trigger": true,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": false
+        },
+        {
+          "query": "what if kirby could copy powers from enemies he inhales, like the real games? lets add that",
+          "should_trigger": true,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": false
+        },
+        {
+          "query": "I want to add dark mode to the dashboard app. where do we even start?",
+          "should_trigger": true,
+          "trigger_rate": 0.3333333333333333,
+          "triggers": 1,
+          "runs": 3,
+          "pass": false
+        },
+        {
+          "query": "add a tomato pickup at tile column 40 row 10 in level.js, heals 3 hp, same sprite style as the 1up. no questions needed, just do it",
+          "should_trigger": false,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": true
+        },
+        {
+          "query": "refactor render.js into two files: draw background in background.js and draw sprites in sprites-draw.js. keep every function the same, just move them",
+          "should_trigger": false,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": true
+        },
+        {
+          "query": "rename the function getLegalMoves to listLegalMoves everywhere in the hnefatafl project, including the tests",
+          "should_trigger": false,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": true
+        },
+        {
+          "query": "write unit tests for physics.js covering gravity, jump cut, and wall collisions. use node:test like the other test files",
+          "should_trigger": false,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": true
+        }
+      ],
+      "passed": 6,
+      "failed": 6,
+      "total": 12,
+      "results": [
+        {
+          "query": "lets make the game harder somehow. maybe more enemies or something? your call but make it good",
+          "should_trigger": true,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": false
+        },
+        {
+          "query": "help me spec out a feature where users can export their notes to PDF. we use express + sqlite, nothing exists for export yet",
+          "should_trigger": true,
+          "trigger_rate": 0.3333333333333333,
+          "triggers": 1,
+          "runs": 3,
+          "pass": false
+        },
+        {
+          "query": "let's plan this out first: a discord bot that posts the daily BYU devotional summary. python, i haven't started",
+          "should_trigger": true,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": false
+        },
+        {
+          "query": "grill me about this before we write anything: i want multiplayer on the connect4 game from lecture 1a",
+          "should_trigger": true,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": false
+        },
+        {
+          "query": "ok the kirby game is good now, i want to add a boss fight at the end of the level before the warp star",
+          "should_trigger": true,
+          "trigger_rate": 0.3333333333333333,
+          "triggers": 1,
+          "runs": 3,
+          "pass": false
+        },
+        {
+          "query": "can we add a second level? i want it to feel different from the first one but idk what that means yet",
+          "should_trigger": true,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": false
+        },
+        {
+          "query": "how does the inhale cone work in this codebase? walk me through js/logic/inhale.js",
+          "should_trigger": false,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": true
+        },
+        {
+          "query": "review my CLAUDE.md and tell me if anything in it is redundant or contradictory",
+          "should_trigger": false,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": true
+        },
+        {
+          "query": "change the sky color in the first level to #1d1430 and make the clouds slightly bigger",
+          "should_trigger": false,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": true
+        },
+        {
+          "query": "kirby falls through the floor when he lands on a brick tile right after flying. can you fix it? the collision code is in js/logic/physics.js",
+          "should_trigger": false,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": true
+        },
+        {
+          "query": "the playthrough test is failing with 'bot stuck at x=1200'. here's the output: [paste]. whats wrong?",
+          "should_trigger": false,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": true
+        },
+        {
+          "query": "explain the difference between waterfall and agile like im writing it up for my class notes",
+          "should_trigger": false,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": true
+        }
+      ]
+    },
+    {
+      "iteration": 2,
+      "description": "Use this skill before writing any code for a new feature, game mechanic, level, tool, bot or app. It starts a one-question-at-a-time design interview and produces a DESIGN.md. Use it whenever the user asks to add, build, extend or plan something new, even in a single vague sentence, or even when they have already named a stack. Examples are \"make the game harder\", \"add a second level\", \"let's make a bot\" and \"I want multiplayer\". Use it whenever they ask to spec or plan something, or say \"grill me\", \"interview me\" or \"plan this out\". They may leave decisions to you (\"your call\"), or they may not mention design at all, but the work still hides unmade choices about scope, behavior and success criteria. Do not use it for bug fixes, failing tests, small fully specified edits such as a color or rename, code explanations, or general questions.",
+      "train_passed": 6,
+      "train_failed": 6,
+      "train_total": 12,
+      "train_results": [
+        {
+          "query": "help me spec out a feature where users can export their notes to PDF. we use express + sqlite, nothing exists for export yet",
+          "should_trigger": true,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": false
+        },
+        {
+          "query": "lets make the game harder somehow. maybe more enemies or something? your call but make it good",
+          "should_trigger": true,
+          "trigger_rate": 0.3333333333333333,
+          "triggers": 1,
+          "runs": 3,
+          "pass": false
+        },
+        {
+          "query": "let's plan this out first: a discord bot that posts the daily BYU devotional summary. python, i haven't started",
+          "should_trigger": true,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": false
+        },
+        {
+          "query": "grill me about this before we write anything: i want multiplayer on the connect4 game from lecture 1a",
+          "should_trigger": true,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": false
+        },
+        {
+          "query": "ok the kirby game is good now, i want to add a boss fight at the end of the level before the warp star",
+          "should_trigger": true,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": false
+        },
+        {
+          "query": "can we add a second level? i want it to feel different from the first one but idk what that means yet",
+          "should_trigger": true,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": false
+        },
+        {
+          "query": "how does the inhale cone work in this codebase? walk me through js/logic/inhale.js",
+          "should_trigger": false,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": true
+        },
+        {
+          "query": "review my CLAUDE.md and tell me if anything in it is redundant or contradictory",
+          "should_trigger": false,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": true
+        },
+        {
+          "query": "change the sky color in the first level to #1d1430 and make the clouds slightly bigger",
+          "should_trigger": false,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": true
+        },
+        {
+          "query": "kirby falls through the floor when he lands on a brick tile right after flying. can you fix it? the collision code is in js/logic/physics.js",
+          "should_trigger": false,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": true
+        },
+        {
+          "query": "the playthrough test is failing with 'bot stuck at x=1200'. here's the output: [paste]. whats wrong?",
+          "should_trigger": false,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": true
+        },
+        {
+          "query": "explain the difference between waterfall and agile like im writing it up for my class notes",
+          "should_trigger": false,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": true
+        }
+      ],
+      "test_passed": 4,
+      "test_failed": 4,
+      "test_total": 8,
+      "test_results": [
+        {
+          "query": "interview me about what the final project for my agent engineering class should be, i have 3 vague ideas and no repo yet",
+          "should_trigger": true,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": false
+        },
+        {
+          "query": "i have an idea for a little app that tracks my gym lifts and shows progress charts. its a react project in ~/code/lifttrack, can you help me build it",
+          "should_trigger": true,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": false
+        },
+        {
+          "query": "what if kirby could copy powers from enemies he inhales, like the real games? lets add that",
+          "should_trigger": true,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": false
+        },
+        {
+          "query": "I want to add dark mode to the dashboard app. where do we even start?",
+          "should_trigger": true,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": false
+        },
+        {
+          "query": "add a tomato pickup at tile column 40 row 10 in level.js, heals 3 hp, same sprite style as the 1up. no questions needed, just do it",
+          "should_trigger": false,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": true
+        },
+        {
+          "query": "refactor render.js into two files: draw background in background.js and draw sprites in sprites-draw.js. keep every function the same, just move them",
+          "should_trigger": false,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": true
+        },
+        {
+          "query": "rename the function getLegalMoves to listLegalMoves everywhere in the hnefatafl project, including the tests",
+          "should_trigger": false,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": true
+        },
+        {
+          "query": "write unit tests for physics.js covering gravity, jump cut, and wall collisions. use node:test like the other test files",
+          "should_trigger": false,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": true
+        }
+      ],
+      "passed": 6,
+      "failed": 6,
+      "total": 12,
+      "results": [
+        {
+          "query": "help me spec out a feature where users can export their notes to PDF. we use express + sqlite, nothing exists for export yet",
+          "should_trigger": true,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": false
+        },
+        {
+          "query": "lets make the game harder somehow. maybe more enemies or something? your call but make it good",
+          "should_trigger": true,
+          "trigger_rate": 0.3333333333333333,
+          "triggers": 1,
+          "runs": 3,
+          "pass": false
+        },
+        {
+          "query": "let's plan this out first: a discord bot that posts the daily BYU devotional summary. python, i haven't started",
+          "should_trigger": true,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": false
+        },
+        {
+          "query": "grill me about this before we write anything: i want multiplayer on the connect4 game from lecture 1a",
+          "should_trigger": true,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": false
+        },
+        {
+          "query": "ok the kirby game is good now, i want to add a boss fight at the end of the level before the warp star",
+          "should_trigger": true,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": false
+        },
+        {
+          "query": "can we add a second level? i want it to feel different from the first one but idk what that means yet",
+          "should_trigger": true,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": false
+        },
+        {
+          "query": "how does the inhale cone work in this codebase? walk me through js/logic/inhale.js",
+          "should_trigger": false,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": true
+        },
+        {
+          "query": "review my CLAUDE.md and tell me if anything in it is redundant or contradictory",
+          "should_trigger": false,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": true
+        },
+        {
+          "query": "change the sky color in the first level to #1d1430 and make the clouds slightly bigger",
+          "should_trigger": false,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": true
+        },
+        {
+          "query": "kirby falls through the floor when he lands on a brick tile right after flying. can you fix it? the collision code is in js/logic/physics.js",
+          "should_trigger": false,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": true
+        },
+        {
+          "query": "the playthrough test is failing with 'bot stuck at x=1200'. here's the output: [paste]. whats wrong?",
+          "should_trigger": false,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": true
+        },
+        {
+          "query": "explain the difference between waterfall and agile like im writing it up for my class notes",
+          "should_trigger": false,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": true
+        }
+      ]
+    },
+    {
+      "iteration": 3,
+      "description": "Interview-first skill for new work. Use this whenever the user wants to add, build, extend, or plan something that doesn't exist yet in a code project: a feature, game mechanic, boss, level, enemy, bot, tool, integration, export, multiplayer, or app. This includes when they say \"let's plan this out\", \"help me spec\", \"grill me\" or \"interview me\". Trigger even if the request is one loose sentence, \"your call\", \"idk what that means yet\", or already names a language or stack, or the project is already working well. Adding anything new always hides unmade choices about scope, behavior, difficulty and how to verify it, so ask questions and write DESIGN.md before any code. Skip for bug fixes, failing tests, tiny fully specified edits (a color, a rename), reviewing or explaining existing code, and general knowledge questions.",
+      "train_passed": 6,
+      "train_failed": 6,
+      "train_total": 12,
+      "train_results": [
+        {
+          "query": "help me spec out a feature where users can export their notes to PDF. we use express + sqlite, nothing exists for export yet",
+          "should_trigger": true,
+          "trigger_rate": 0.3333333333333333,
+          "triggers": 1,
+          "runs": 3,
+          "pass": false
+        },
+        {
+          "query": "let's plan this out first: a discord bot that posts the daily BYU devotional summary. python, i haven't started",
+          "should_trigger": true,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": false
+        },
+        {
+          "query": "lets make the game harder somehow. maybe more enemies or something? your call but make it good",
+          "should_trigger": true,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": false
+        },
+        {
+          "query": "grill me about this before we write anything: i want multiplayer on the connect4 game from lecture 1a",
+          "should_trigger": true,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": false
+        },
+        {
+          "query": "ok the kirby game is good now, i want to add a boss fight at the end of the level before the warp star",
+          "should_trigger": true,
+          "trigger_rate": 0.3333333333333333,
+          "triggers": 1,
+          "runs": 3,
+          "pass": false
+        },
+        {
+          "query": "can we add a second level? i want it to feel different from the first one but idk what that means yet",
+          "should_trigger": true,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": false
+        },
+        {
+          "query": "how does the inhale cone work in this codebase? walk me through js/logic/inhale.js",
+          "should_trigger": false,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": true
+        },
+        {
+          "query": "review my CLAUDE.md and tell me if anything in it is redundant or contradictory",
+          "should_trigger": false,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": true
+        },
+        {
+          "query": "change the sky color in the first level to #1d1430 and make the clouds slightly bigger",
+          "should_trigger": false,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": true
+        },
+        {
+          "query": "kirby falls through the floor when he lands on a brick tile right after flying. can you fix it? the collision code is in js/logic/physics.js",
+          "should_trigger": false,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": true
+        },
+        {
+          "query": "the playthrough test is failing with 'bot stuck at x=1200'. here's the output: [paste]. whats wrong?",
+          "should_trigger": false,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": true
+        },
+        {
+          "query": "explain the difference between waterfall and agile like im writing it up for my class notes",
+          "should_trigger": false,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": true
+        }
+      ],
+      "test_passed": 4,
+      "test_failed": 4,
+      "test_total": 8,
+      "test_results": [
+        {
+          "query": "interview me about what the final project for my agent engineering class should be, i have 3 vague ideas and no repo yet",
+          "should_trigger": true,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": false
+        },
+        {
+          "query": "i have an idea for a little app that tracks my gym lifts and shows progress charts. its a react project in ~/code/lifttrack, can you help me build it",
+          "should_trigger": true,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": false
+        },
+        {
+          "query": "what if kirby could copy powers from enemies he inhales, like the real games? lets add that",
+          "should_trigger": true,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": false
+        },
+        {
+          "query": "I want to add dark mode to the dashboard app. where do we even start?",
+          "should_trigger": true,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": false
+        },
+        {
+          "query": "add a tomato pickup at tile column 40 row 10 in level.js, heals 3 hp, same sprite style as the 1up. no questions needed, just do it",
+          "should_trigger": false,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": true
+        },
+        {
+          "query": "refactor render.js into two files: draw background in background.js and draw sprites in sprites-draw.js. keep every function the same, just move them",
+          "should_trigger": false,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": true
+        },
+        {
+          "query": "rename the function getLegalMoves to listLegalMoves everywhere in the hnefatafl project, including the tests",
+          "should_trigger": false,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": true
+        },
+        {
+          "query": "write unit tests for physics.js covering gravity, jump cut, and wall collisions. use node:test like the other test files",
+          "should_trigger": false,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": true
+        }
+      ],
+      "passed": 6,
+      "failed": 6,
+      "total": 12,
+      "results": [
+        {
+          "query": "help me spec out a feature where users can export their notes to PDF. we use express + sqlite, nothing exists for export yet",
+          "should_trigger": true,
+          "trigger_rate": 0.3333333333333333,
+          "triggers": 1,
+          "runs": 3,
+          "pass": false
+        },
+        {
+          "query": "let's plan this out first: a discord bot that posts the daily BYU devotional summary. python, i haven't started",
+          "should_trigger": true,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": false
+        },
+        {
+          "query": "lets make the game harder somehow. maybe more enemies or something? your call but make it good",
+          "should_trigger": true,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": false
+        },
+        {
+          "query": "grill me about this before we write anything: i want multiplayer on the connect4 game from lecture 1a",
+          "should_trigger": true,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": false
+        },
+        {
+          "query": "ok the kirby game is good now, i want to add a boss fight at the end of the level before the warp star",
+          "should_trigger": true,
+          "trigger_rate": 0.3333333333333333,
+          "triggers": 1,
+          "runs": 3,
+          "pass": false
+        },
+        {
+          "query": "can we add a second level? i want it to feel different from the first one but idk what that means yet",
+          "should_trigger": true,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": false
+        },
+        {
+          "query": "how does the inhale cone work in this codebase? walk me through js/logic/inhale.js",
+          "should_trigger": false,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": true
+        },
+        {
+          "query": "review my CLAUDE.md and tell me if anything in it is redundant or contradictory",
+          "should_trigger": false,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": true
+        },
+        {
+          "query": "change the sky color in the first level to #1d1430 and make the clouds slightly bigger",
+          "should_trigger": false,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": true
+        },
+        {
+          "query": "kirby falls through the floor when he lands on a brick tile right after flying. can you fix it? the collision code is in js/logic/physics.js",
+          "should_trigger": false,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": true
+        },
+        {
+          "query": "the playthrough test is failing with 'bot stuck at x=1200'. here's the output: [paste]. whats wrong?",
+          "should_trigger": false,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": true
+        },
+        {
+          "query": "explain the difference between waterfall and agile like im writing it up for my class notes",
+          "should_trigger": false,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": true
+        }
+      ]
+    },
+    {
+      "iteration": 4,
+      "description": "Use this skill when the user wants to create something that doesn't exist yet in a code project, even if the request is a single loose sentence. That includes a new feature, level, boss, enemy, difficulty change, bot, integration, export, multiplayer mode, or app. It also applies when they say \"grill me\", \"interview me\", \"help me spec this\", or \"let's plan this out\". Treat these as new work to interview about first: \"make it harder, your call\", \"add a second level, idk what that means yet\", \"add a boss to the working game\", and \"a bot in python, haven't started\". Naming a stack, saying the project already works well, or delegating decisions does not remove the need to ask. Any new addition hides unmade choices about scope, behavior and how to verify it. Ask one question at a time and write DESIGN.md before any code. Skip bug fixes, failing tests, tiny fully specified edits (a color, a rename), explaining or reviewing existing code, and general questions.",
+      "train_passed": 6,
+      "train_failed": 6,
+      "train_total": 12,
+      "train_results": [
+        {
+          "query": "lets make the game harder somehow. maybe more enemies or something? your call but make it good",
+          "should_trigger": true,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": false
+        },
+        {
+          "query": "help me spec out a feature where users can export their notes to PDF. we use express + sqlite, nothing exists for export yet",
+          "should_trigger": true,
+          "trigger_rate": 0.3333333333333333,
+          "triggers": 1,
+          "runs": 3,
+          "pass": false
+        },
+        {
+          "query": "let's plan this out first: a discord bot that posts the daily BYU devotional summary. python, i haven't started",
+          "should_trigger": true,
+          "trigger_rate": 0.3333333333333333,
+          "triggers": 1,
+          "runs": 3,
+          "pass": false
+        },
+        {
+          "query": "grill me about this before we write anything: i want multiplayer on the connect4 game from lecture 1a",
+          "should_trigger": true,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": false
+        },
+        {
+          "query": "ok the kirby game is good now, i want to add a boss fight at the end of the level before the warp star",
+          "should_trigger": true,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": false
+        },
+        {
+          "query": "can we add a second level? i want it to feel different from the first one but idk what that means yet",
+          "should_trigger": true,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": false
+        },
+        {
+          "query": "how does the inhale cone work in this codebase? walk me through js/logic/inhale.js",
+          "should_trigger": false,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": true
+        },
+        {
+          "query": "review my CLAUDE.md and tell me if anything in it is redundant or contradictory",
+          "should_trigger": false,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": true
+        },
+        {
+          "query": "change the sky color in the first level to #1d1430 and make the clouds slightly bigger",
+          "should_trigger": false,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": true
+        },
+        {
+          "query": "kirby falls through the floor when he lands on a brick tile right after flying. can you fix it? the collision code is in js/logic/physics.js",
+          "should_trigger": false,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": true
+        },
+        {
+          "query": "the playthrough test is failing with 'bot stuck at x=1200'. here's the output: [paste]. whats wrong?",
+          "should_trigger": false,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": true
+        },
+        {
+          "query": "explain the difference between waterfall and agile like im writing it up for my class notes",
+          "should_trigger": false,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": true
+        }
+      ],
+      "test_passed": 4,
+      "test_failed": 4,
+      "test_total": 8,
+      "test_results": [
+        {
+          "query": "interview me about what the final project for my agent engineering class should be, i have 3 vague ideas and no repo yet",
+          "should_trigger": true,
+          "trigger_rate": 0.3333333333333333,
+          "triggers": 1,
+          "runs": 3,
+          "pass": false
+        },
+        {
+          "query": "i have an idea for a little app that tracks my gym lifts and shows progress charts. its a react project in ~/code/lifttrack, can you help me build it",
+          "should_trigger": true,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": false
+        },
+        {
+          "query": "what if kirby could copy powers from enemies he inhales, like the real games? lets add that",
+          "should_trigger": true,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": false
+        },
+        {
+          "query": "I want to add dark mode to the dashboard app. where do we even start?",
+          "should_trigger": true,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": false
+        },
+        {
+          "query": "add a tomato pickup at tile column 40 row 10 in level.js, heals 3 hp, same sprite style as the 1up. no questions needed, just do it",
+          "should_trigger": false,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": true
+        },
+        {
+          "query": "refactor render.js into two files: draw background in background.js and draw sprites in sprites-draw.js. keep every function the same, just move them",
+          "should_trigger": false,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": true
+        },
+        {
+          "query": "rename the function getLegalMoves to listLegalMoves everywhere in the hnefatafl project, including the tests",
+          "should_trigger": false,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": true
+        },
+        {
+          "query": "write unit tests for physics.js covering gravity, jump cut, and wall collisions. use node:test like the other test files",
+          "should_trigger": false,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": true
+        }
+      ],
+      "passed": 6,
+      "failed": 6,
+      "total": 12,
+      "results": [
+        {
+          "query": "lets make the game harder somehow. maybe more enemies or something? your call but make it good",
+          "should_trigger": true,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": false
+        },
+        {
+          "query": "help me spec out a feature where users can export their notes to PDF. we use express + sqlite, nothing exists for export yet",
+          "should_trigger": true,
+          "trigger_rate": 0.3333333333333333,
+          "triggers": 1,
+          "runs": 3,
+          "pass": false
+        },
+        {
+          "query": "let's plan this out first: a discord bot that posts the daily BYU devotional summary. python, i haven't started",
+          "should_trigger": true,
+          "trigger_rate": 0.3333333333333333,
+          "triggers": 1,
+          "runs": 3,
+          "pass": false
+        },
+        {
+          "query": "grill me about this before we write anything: i want multiplayer on the connect4 game from lecture 1a",
+          "should_trigger": true,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": false
+        },
+        {
+          "query": "ok the kirby game is good now, i want to add a boss fight at the end of the level before the warp star",
+          "should_trigger": true,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": false
+        },
+        {
+          "query": "can we add a second level? i want it to feel different from the first one but idk what that means yet",
+          "should_trigger": true,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": false
+        },
+        {
+          "query": "how does the inhale cone work in this codebase? walk me through js/logic/inhale.js",
+          "should_trigger": false,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": true
+        },
+        {
+          "query": "review my CLAUDE.md and tell me if anything in it is redundant or contradictory",
+          "should_trigger": false,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": true
+        },
+        {
+          "query": "change the sky color in the first level to #1d1430 and make the clouds slightly bigger",
+          "should_trigger": false,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": true
+        },
+        {
+          "query": "kirby falls through the floor when he lands on a brick tile right after flying. can you fix it? the collision code is in js/logic/physics.js",
+          "should_trigger": false,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": true
+        },
+        {
+          "query": "the playthrough test is failing with 'bot stuck at x=1200'. here's the output: [paste]. whats wrong?",
+          "should_trigger": false,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": true
+        },
+        {
+          "query": "explain the difference between waterfall and agile like im writing it up for my class notes",
+          "should_trigger": false,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": true
+        }
+      ]
+    },
+    {
+      "iteration": 5,
+      "description": "Use this skill when the user asks Claude to make something new in a code project, such as a feature, mechanic, boss, level, enemy, difficulty change, multiplayer mode, bot, integration, export, or app. Use it first, before any planning or coding. Interview them one question at a time, then write DESIGN.md. It applies whatever the wording: a loose one-liner (\"make the game harder, your call\", \"can we add a second level?\"), a request that names a stack, an addition to a project that already works well, or an explicit \"grill me\", \"interview me\", \"help me spec this\" or \"let's plan this out first\". Delegating decisions (\"your call\", \"idk yet\") makes the interview more necessary, because every new addition hides unmade choices about scope, behavior, and how to verify it. Do not use it for bug fixes, failing tests, tiny fully specified edits like a color or rename, explaining or reviewing existing code, or general questions.",
+      "train_passed": 6,
+      "train_failed": 6,
+      "train_total": 12,
+      "train_results": [
+        {
+          "query": "lets make the game harder somehow. maybe more enemies or something? your call but make it good",
+          "should_trigger": true,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": false
+        },
+        {
+          "query": "let's plan this out first: a discord bot that posts the daily BYU devotional summary. python, i haven't started",
+          "should_trigger": true,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": false
+        },
+        {
+          "query": "help me spec out a feature where users can export their notes to PDF. we use express + sqlite, nothing exists for export yet",
+          "should_trigger": true,
+          "trigger_rate": 0.3333333333333333,
+          "triggers": 1,
+          "runs": 3,
+          "pass": false
+        },
+        {
+          "query": "grill me about this before we write anything: i want multiplayer on the connect4 game from lecture 1a",
+          "should_trigger": true,
+          "trigger_rate": 0.3333333333333333,
+          "triggers": 1,
+          "runs": 3,
+          "pass": false
+        },
+        {
+          "query": "ok the kirby game is good now, i want to add a boss fight at the end of the level before the warp star",
+          "should_trigger": true,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": false
+        },
+        {
+          "query": "can we add a second level? i want it to feel different from the first one but idk what that means yet",
+          "should_trigger": true,
+          "trigger_rate": 0.3333333333333333,
+          "triggers": 1,
+          "runs": 3,
+          "pass": false
+        },
+        {
+          "query": "how does the inhale cone work in this codebase? walk me through js/logic/inhale.js",
+          "should_trigger": false,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": true
+        },
+        {
+          "query": "review my CLAUDE.md and tell me if anything in it is redundant or contradictory",
+          "should_trigger": false,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": true
+        },
+        {
+          "query": "change the sky color in the first level to #1d1430 and make the clouds slightly bigger",
+          "should_trigger": false,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": true
+        },
+        {
+          "query": "kirby falls through the floor when he lands on a brick tile right after flying. can you fix it? the collision code is in js/logic/physics.js",
+          "should_trigger": false,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": true
+        },
+        {
+          "query": "the playthrough test is failing with 'bot stuck at x=1200'. here's the output: [paste]. whats wrong?",
+          "should_trigger": false,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": true
+        },
+        {
+          "query": "explain the difference between waterfall and agile like im writing it up for my class notes",
+          "should_trigger": false,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": true
+        }
+      ],
+      "test_passed": 4,
+      "test_failed": 4,
+      "test_total": 8,
+      "test_results": [
+        {
+          "query": "interview me about what the final project for my agent engineering class should be, i have 3 vague ideas and no repo yet",
+          "should_trigger": true,
+          "trigger_rate": 0.3333333333333333,
+          "triggers": 1,
+          "runs": 3,
+          "pass": false
+        },
+        {
+          "query": "i have an idea for a little app that tracks my gym lifts and shows progress charts. its a react project in ~/code/lifttrack, can you help me build it",
+          "should_trigger": true,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": false
+        },
+        {
+          "query": "what if kirby could copy powers from enemies he inhales, like the real games? lets add that",
+          "should_trigger": true,
+          "trigger_rate": 0.3333333333333333,
+          "triggers": 1,
+          "runs": 3,
+          "pass": false
+        },
+        {
+          "query": "I want to add dark mode to the dashboard app. where do we even start?",
+          "should_trigger": true,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": false
+        },
+        {
+          "query": "add a tomato pickup at tile column 40 row 10 in level.js, heals 3 hp, same sprite style as the 1up. no questions needed, just do it",
+          "should_trigger": false,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": true
+        },
+        {
+          "query": "refactor render.js into two files: draw background in background.js and draw sprites in sprites-draw.js. keep every function the same, just move them",
+          "should_trigger": false,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": true
+        },
+        {
+          "query": "rename the function getLegalMoves to listLegalMoves everywhere in the hnefatafl project, including the tests",
+          "should_trigger": false,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": true
+        },
+        {
+          "query": "write unit tests for physics.js covering gravity, jump cut, and wall collisions. use node:test like the other test files",
+          "should_trigger": false,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": true
+        }
+      ],
+      "passed": 6,
+      "failed": 6,
+      "total": 12,
+      "results": [
+        {
+          "query": "lets make the game harder somehow. maybe more enemies or something? your call but make it good",
+          "should_trigger": true,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": false
+        },
+        {
+          "query": "let's plan this out first: a discord bot that posts the daily BYU devotional summary. python, i haven't started",
+          "should_trigger": true,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": false
+        },
+        {
+          "query": "help me spec out a feature where users can export their notes to PDF. we use express + sqlite, nothing exists for export yet",
+          "should_trigger": true,
+          "trigger_rate": 0.3333333333333333,
+          "triggers": 1,
+          "runs": 3,
+          "pass": false
+        },
+        {
+          "query": "grill me about this before we write anything: i want multiplayer on the connect4 game from lecture 1a",
+          "should_trigger": true,
+          "trigger_rate": 0.3333333333333333,
+          "triggers": 1,
+          "runs": 3,
+          "pass": false
+        },
+        {
+          "query": "ok the kirby game is good now, i want to add a boss fight at the end of the level before the warp star",
+          "should_trigger": true,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": false
+        },
+        {
+          "query": "can we add a second level? i want it to feel different from the first one but idk what that means yet",
+          "should_trigger": true,
+          "trigger_rate": 0.3333333333333333,
+          "triggers": 1,
+          "runs": 3,
+          "pass": false
+        },
+        {
+          "query": "how does the inhale cone work in this codebase? walk me through js/logic/inhale.js",
+          "should_trigger": false,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": true
+        },
+        {
+          "query": "review my CLAUDE.md and tell me if anything in it is redundant or contradictory",
+          "should_trigger": false,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": true
+        },
+        {
+          "query": "change the sky color in the first level to #1d1430 and make the clouds slightly bigger",
+          "should_trigger": false,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": true
+        },
+        {
+          "query": "kirby falls through the floor when he lands on a brick tile right after flying. can you fix it? the collision code is in js/logic/physics.js",
+          "should_trigger": false,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": true
+        },
+        {
+          "query": "the playthrough test is failing with 'bot stuck at x=1200'. here's the output: [paste]. whats wrong?",
+          "should_trigger": false,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": true
+        },
+        {
+          "query": "explain the difference between waterfall and agile like im writing it up for my class notes",
+          "should_trigger": false,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 3,
+          "pass": true
+        }
+      ]
+    }
+  ]
+}Results saved to: C:\Users\ethan\Documents\GitHub\Agent Engineering\Lecture 2a - Codex and Vibecoding\homework\skill-dev\grill-me-workspace\description-loop\2026-10-09_193911
+

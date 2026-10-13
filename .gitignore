@@ -5,3 +5,9 @@ venv/
 .env
 .DS_Store
 Thumbs.db
+
+# Lecture 2a scratch: test copies, sandboxes, and temp files
+**/.tmp/
+**/skill-dev/optimizer/sandbox*/
+**/skill-dev/grill-me-workspace/test-game-template/
+**/skill-dev/grill-me-workspace/iteration-*/*/*/*/game/

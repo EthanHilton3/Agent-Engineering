@@ -1,0 +1,45 @@
+{
+  "expectations": [
+    {
+      "text": "Source untouched: no files in js/, tests/ or index.html were changed (the agent asked before building)",
+      "passed": true,
+      "evidence": "Directory diff vs original copy shows 0 changed entries (but the test harness forbade edits, so this does not discriminate)."
+    },
+    {
+      "text": "Asks exactly one design question to the user, not a list or batch of questions",
+      "passed": false,
+      "evidence": "Seven numbered questions asked at once (boss type, damage, attacks, arena, win/death, difficulty, extras)."
+    },
+    {
+      "text": "The question cites a concrete project detail (a real file name, constant, or existing behavior from the code)",
+      "passed": true,
+      "evidence": "Cites win() in game.js, level.js stairs section, playthrough.test.js, render.js at 356 lines."
+    },
+    {
+      "text": "The question comes with an explicit recommended answer plus a reason",
+      "passed": true,
+      "evidence": "Each question carries a 'My default' with some reasoning, e.g. 'stationary tree is much cheaper and fits the inhale/spit mechanic'."
+    },
+    {
+      "text": "The response says why the question matters for the build (what depends on the answer)",
+      "passed": false,
+      "evidence": "Questions state defaults but do not say what depends on each answer; no per-question 'why it matters'."
+    },
+    {
+      "text": "Explored the project first: the FILES READ line lists at least 3 project files",
+      "passed": true,
+      "evidence": "FILES READ lists 10 project files."
+    },
+    {
+      "text": "No DESIGN.md written yet (the spec comes after the interview, not at question one)",
+      "passed": true,
+      "evidence": "No DESIGN.md found."
+    }
+  ],
+  "summary": {
+    "passed": 5,
+    "failed": 2,
+    "total": 7,
+    "pass_rate": 0.71
+  }
+}

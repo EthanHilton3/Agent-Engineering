@@ -1,0 +1,28 @@
+/grill_me
+
+Work only inside the current directory. Do not read or modify any files outside it.
+
+Build a pixel-art platformer game that runs in the browser by opening index.html.
+
+Character: a small, round, pink character named Kirby who is surprisingly strong.
+He can run, jump, and fly by pressing jump repeatedly while in the air. He can
+also inhale: holding the action key pulls in nearby enemies and objects in front
+of him. Once he has swallowed something, pressing the action key again spits it
+out as a projectile that can defeat other enemies.
+
+Game:
+- One side-scrolling level with platforms, gaps, and a clear goal at the end.
+- At least two kinds of enemies with different behavior (for example one that
+  walks and one that flies).
+- Lives, a score, a game-over screen, a win screen, and a way to restart.
+- Controls: arrow keys or A/D to move, Space to jump and fly, Enter to inhale and spit.
+  Show the controls on screen.
+
+Look and feel:
+- Retro pixel-art style with crisp pixels, a limited color palette, and simple
+  animations (idle, run, jump, fly, inhale).
+- Draw all sprites in code, with no external image files or libraries.
+- Movement should feel tight and fun: sensible gravity, a floaty-but-controllable
+  fly, and a satisfying inhale.
+
+Make it polished and fun to play.

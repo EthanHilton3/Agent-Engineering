@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Kirby: Dream Meadows</title>
+  <style>
+    html, body { margin: 0; height: 100%; background: #1d1130; color: #cdeeff; }
+    body { display: flex; flex-direction: column; align-items: center; justify-content: center;
+      font: 12px/1.4 monospace; overflow: hidden; }
+    canvas { display: block; image-rendering: pixelated; image-rendering: crisp-edges;
+      box-shadow: 0 0 0 4px #46435f, 0 8px 32px #000; }
+    p { margin: 8px 0 0; opacity: 0.8; text-align: center; }
+    kbd { color: #ffd83d; }
+  </style>
+</head>
+<body>
+  <canvas id="game" width="256" height="224" tabindex="0"></canvas>
+  <p><kbd>&larr; &rarr;</kbd> / <kbd>A D</kbd> move &middot; <kbd>Space</kbd> jump, tap again in the air to fly &middot;
+    <kbd>Enter</kbd> hold to inhale, press to spit &middot; <kbd>P</kbd>/<kbd>Esc</kbd> pause &middot;
+    <kbd>M</kbd> mute &middot; <kbd>R</kbd> restart</p>
+
+  <script src="js/logic/constants.js"></script>
+  <script src="js/logic/physics.js"></script>
+  <script src="js/logic/world.js"></script>
+  <script src="js/logic/enemies.js"></script>
+  <script src="js/logic/player.js"></script>
+  <script src="js/logic/boss.js"></script>
+  <script src="js/logic/game.js"></script>
+  <script src="js/level.js"></script>
+  <script src="js/input.js"></script>
+  <script src="js/sprites.js"></script>
+  <script src="js/sprites-world.js"></script>
+  <script src="js/hud.js"></script>
+  <script src="js/render.js"></script>
+  <script src="js/audio.js"></script>
+  <script src="js/main.js"></script>
+</body>
+</html>

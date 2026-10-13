@@ -1,0 +1,53 @@
+{
+  "skill_name": "grill-me",
+  "evals": [
+    {
+      "id": 0,
+      "name": "boss-fight",
+      "prompt": "ok the game is working great. i want to add a boss fight at the end of the level",
+      "expected_output": "Agent explores the project, then asks one grounded design question with a recommendation instead of building.",
+      "files": [],
+      "assertions": [
+        "Source untouched: no files in js/, tests/ or index.html were changed (the agent asked before building)",
+        "Asks exactly one design question to the user, not a list or batch of questions",
+        "The question cites a concrete project detail (a real file name, constant, or existing behavior from the code)",
+        "The question comes with an explicit recommended answer plus a reason",
+        "The response says why the question matters for the build (what depends on the answer)",
+        "Explored the project first: the FILES READ line lists at least 3 project files",
+        "No DESIGN.md written yet (the spec comes after the interview, not at question one)"
+      ]
+    },
+    {
+      "id": 1,
+      "name": "second-level",
+      "prompt": "can we add a second level? i want it to feel different from the first one",
+      "expected_output": "Agent explores how the level is defined, then asks one grounded question about the second level.",
+      "files": [],
+      "assertions": [
+        "Source untouched: no files in js/, tests/ or index.html were changed (the agent asked before building)",
+        "Asks exactly one design question to the user, not a list or batch of questions",
+        "The question cites a concrete project detail (a real file name, constant, or existing behavior from the code)",
+        "The question comes with an explicit recommended answer plus a reason",
+        "The response says why the question matters for the build (what depends on the answer)",
+        "Explored the project first: the FILES READ line lists at least 3 project files",
+        "No DESIGN.md written yet (the spec comes after the interview, not at question one)"
+      ]
+    },
+    {
+      "id": 2,
+      "name": "copy-abilities",
+      "prompt": "what if kirby could get powers from enemies he inhales, like in the real games? lets add that",
+      "expected_output": "Agent explores inhale/swallow code, then asks one grounded question about the power system's scope.",
+      "files": [],
+      "assertions": [
+        "Source untouched: no files in js/, tests/ or index.html were changed (the agent asked before building)",
+        "Asks exactly one design question to the user, not a list or batch of questions",
+        "The question cites a concrete project detail (a real file name, constant, or existing behavior from the code)",
+        "The question comes with an explicit recommended answer plus a reason",
+        "The response says why the question matters for the build (what depends on the answer)",
+        "Explored the project first: the FILES READ line lists at least 3 project files",
+        "No DESIGN.md written yet (the spec comes after the interview, not at question one)"
+      ]
+    }
+  ]
+}

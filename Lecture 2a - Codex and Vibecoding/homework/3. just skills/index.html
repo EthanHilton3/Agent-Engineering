@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kirby's Pixel Quest</title>
+<style>
+  :root { --bg: #0e0818; --ink: #1b1029; --pink: #ff9ccb; --text: #fff8f0; --dim: #9aa0b4; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); overflow: hidden;
+    font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; }
+  #wrap { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; gap: 12px; }
+  canvas { display: block; image-rendering: pixelated; image-rendering: crisp-edges;
+    box-shadow: 0 0 0 4px var(--ink), 0 0 0 6px #ff9ccb66, 0 10px 40px #000a; }
+  #controls { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 16px; padding: 0 16px;
+    max-width: 960px; font-size: 13px; color: var(--dim); }
+  #controls span { white-space: nowrap; }
+  kbd { display: inline-block; min-width: 1.2em; padding: 1px 5px; margin: 0 1px; border-radius: 3px; text-align: center;
+    background: #241838; color: var(--pink); border: 1px solid #ff9ccb55; border-bottom-width: 3px; font: inherit; }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <canvas id="game" width="256" height="224"></canvas>
+  <div id="controls">
+    <span><kbd>&larr;</kbd><kbd>&rarr;</kbd> / <kbd>A</kbd><kbd>D</kbd> Move</span>
+    <span><kbd>Space</kbd> Jump &middot; tap in air to Fly</span>
+    <span><kbd>Enter</kbd> hold: Inhale &middot; tap: Spit / Exhale &middot; with Fire: breathe</span>
+    <span><kbd>&darr;</kbd> Swallow</span>
+    <span><kbd>Shift</kbd> Drop ability</span>
+    <span><kbd>P</kbd> Pause</span>
+    <span><kbd>M</kbd> Mute</span>
+  </div>
+</div>
+<script src="js/core.js"></script>
+<script src="js/sprites.js"></script>
+<script src="js/level.js"></script>
+<script src="js/entities.js"></script>
+<script src="js/kirby.js"></script>
+<script src="js/game.js"></script>
+</body>
+</html>

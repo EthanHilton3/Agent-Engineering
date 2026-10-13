@@ -1,0 +1,45 @@
+{
+  "expectations": [
+    {
+      "text": "Source untouched: no files in js/, tests/ or index.html were changed (the agent asked before building)",
+      "passed": true,
+      "evidence": "Directory diff shows 0 changed entries."
+    },
+    {
+      "text": "Asks exactly one design question to the user, not a list or batch of questions",
+      "passed": true,
+      "evidence": "One question: 'Q1 of ~7: ...which kind of different do you mean?' It previews that more will follow but asks only one."
+    },
+    {
+      "text": "The question cites a concrete project detail (a real file name, constant, or existing behavior from the code)",
+      "passed": true,
+      "evidence": "Cites js/level.js DEFAULT_ROWS, KB.Level.load(), win() in game.js, restart(), render.js/sprites.js."
+    },
+    {
+      "text": "The question comes with an explicit recommended answer plus a reason",
+      "passed": true,
+      "evidence": "'My recommendation: change the look and add one new gameplay twist' with reasoning, plus alternatives."
+    },
+    {
+      "text": "The response says why the question matters for the build (what depends on the answer)",
+      "passed": true,
+      "evidence": "'This decides how big the job is and which files change. Every other question depends on this answer.'"
+    },
+    {
+      "text": "Explored the project first: the FILES READ line lists at least 3 project files",
+      "passed": true,
+      "evidence": "FILES READ lists 9 project files."
+    },
+    {
+      "text": "No DESIGN.md written yet (the spec comes after the interview, not at question one)",
+      "passed": true,
+      "evidence": "No DESIGN.md found."
+    }
+  ],
+  "summary": {
+    "passed": 7,
+    "failed": 0,
+    "total": 7,
+    "pass_rate": 1.0
+  }
+}

@@ -1,0 +1,45 @@
+{
+  "expectations": [
+    {
+      "text": "Source untouched: no files in js/, tests/ or index.html were changed (the agent asked before building)",
+      "passed": true,
+      "evidence": "Directory diff vs original copy shows 0 changed entries."
+    },
+    {
+      "text": "Asks exactly one design question to the user, not a list or batch of questions",
+      "passed": true,
+      "evidence": "One question: 'Q1 of ~8: Should the boss replace the warp star as the goal of the level, or guard it?'"
+    },
+    {
+      "text": "The question cites a concrete project detail (a real file name, constant, or existing behavior from the code)",
+      "passed": true,
+      "evidence": "Cites win() in game.js, g.goal overlap in stepPlaying, tutorial sign '6', the playthrough test."
+    },
+    {
+      "text": "The question comes with an explicit recommended answer plus a reason",
+      "passed": true,
+      "evidence": "'My recommendation: add a boss arena after the stairs and have the warp star appear only when the boss is defeated.' with reasoning."
+    },
+    {
+      "text": "The response says why the question matters for the build (what depends on the answer)",
+      "passed": true,
+      "evidence": "'Why it matters: this decides how the level ends, and the other questions depend on it.'"
+    },
+    {
+      "text": "Explored the project first: the FILES READ line lists at least 3 project files",
+      "passed": true,
+      "evidence": "FILES READ lists 7 project files (CLAUDE.md, constants.js, game.js, entities.js, level.js, inhale.js, playthrough.test.js)."
+    },
+    {
+      "text": "No DESIGN.md written yet (the spec comes after the interview, not at question one)",
+      "passed": true,
+      "evidence": "No DESIGN.md found in the run's game folder."
+    }
+  ],
+  "summary": {
+    "passed": 7,
+    "failed": 0,
+    "total": 7,
+    "pass_rate": 1.0
+  }
+}

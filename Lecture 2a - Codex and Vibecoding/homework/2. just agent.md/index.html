@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Kirby: Dream Dash</title>
+  <style>
+    html, body { margin: 0; height: 100%; background: #1b1030; color: #ffd8ec; }
+    body { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;
+           font-family: "Courier New", monospace; font-size: 14px; }
+    canvas { display: block; image-rendering: pixelated; image-rendering: crisp-edges;
+             box-shadow: 0 0 0 4px #ffd8ec, 0 0 0 8px #d8689a; }
+    #help { text-align: center; line-height: 1.5; padding: 0 12px; }
+    kbd { background: #ffd8ec; color: #1b1030; border-radius: 3px; padding: 0 5px; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <canvas id="game" width="320" height="192"></canvas>
+  <div id="help">
+    <kbd>&larr;</kbd><kbd>&rarr;</kbd> or <kbd>A</kbd><kbd>D</kbd> move &nbsp;
+    <kbd>Space</kbd> jump, tap again in the air to fly &nbsp;
+    <kbd>Enter</kbd> hold to inhale, press again to spit<br>
+    <kbd>P</kbd> pause &nbsp; <kbd>M</kbd> mute &nbsp; <kbd>R</kbd> restart
+  </div>
+
+  <script src="js/logic/constants.js"></script>
+  <script src="js/level.js"></script>
+  <script src="js/logic/physics.js"></script>
+  <script src="js/logic/entities.js"></script>
+  <script src="js/logic/inhale.js"></script>
+  <script src="js/logic/player.js"></script>
+  <script src="js/logic/game.js"></script>
+  <script src="js/input.js"></script>
+  <script src="js/sprites.js"></script>
+  <script src="js/tiles.js"></script>
+  <script src="js/font.js"></script>
+  <script src="js/render.js"></script>
+  <script src="js/hud.js"></script>
+  <script src="js/audio.js"></script>
+  <script src="js/main.js"></script>
+</body>
+</html>
