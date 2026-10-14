@@ -674,6 +674,61 @@ Implementation: a stdin reader thread parses lines and calls `Session` commands.
 
 **Migration path:** a desktop app (Electron/Tauri) spawns this process and talks over its pipes. A web app wraps the same message set in a WebSocket endpoint (a ~50-line FastAPI layer, out of scope for v3). The app owns all presentation, including live text deltas, collapsible tool rows, side-by-side diffs, and approval buttons. All of that data already arrives in events.
 
+#### Protocol v1 reference
+
+Frozen at `PROTOCOL_VERSION = 1` (sent in `session_started`); later changes are additive only, so clients must ignore unknown fields, unknown event types and unknown `error` codes. One JSON object per line, UTF-8 (the server writes ASCII-escaped JSON). Blank lines are ignored. Start the server, read lines; the first is always `session_started`. Run `python -m agent_v3.frontends.stdio_server --workspace <path> [--approval ask|auto-edit|full-auto] [--model ...]` (same config flags as the CLI; `--log-level` sets stderr verbosity; `--fake-model-script` is test-only). `--transcript`, `--events-log` and `--verbose` do not exist here: the client already receives every event.
+
+**Client → server.** Extra fields are ignored. Anything malformed gets `error`/`bad_request`.
+
+| type | fields | effect and replies |
+|---|---|---|
+| `user_message` | `text` (non-empty string) | Starts a turn; events follow. `error`/`busy` if a turn is running. |
+| `approval_response` | `request_id`, `decision` (`allow`/`allow_session`/`reject`), `feedback` (string or null) | Answers the pending `approval_requested`. No reply; a stale or unknown `request_id` (e.g. after a cancel) is ignored and logged to stderr. |
+| `cancel` | none | Cancels the running turn (`approval_resolved` by `cancel` if one was pending, then `turn_cancelled`). No-op when idle. |
+| `new_conversation` | none | Clears history (`notice` `new_conversation`). `error`/`busy` if a turn is running. |
+| `get_usage` | none | Replies with `usage`; allowed at any time. |
+| `shutdown` | none | Cancels a running turn (its `turn_cancelled` is written first), then the process exits 0. EOF on stdin does the same. |
+
+```json
+{"type": "user_message", "text": "Fix the failing test in test_store.py"}
+{"type": "approval_response", "request_id": "ap_1", "decision": "reject", "feedback": "use a smaller change"}
+{"type": "cancel"}
+{"type": "new_conversation"}
+{"type": "get_usage"}
+{"type": "shutdown"}
+```
+
+**Server → client.** Every line is one of the following. Event lines (everything except `usage` and `error`) also carry the common fields `session_id`, `turn_id` (null outside a turn), `seq` (1, 2, 3, ... per session, no gaps, in delivery order) and `ts`; the examples show only the type-specific fields. A turn's events run `turn_started`, then rounds of `model_round_started` ... `model_round_completed` with tool and approval events between them, then exactly one of `turn_completed` / `turn_cancelled` / `turn_failed`. Details of each field are in §7.
+
+```json
+{"type": "session_started", "seq": 1, "protocol_version": 1, "config": {"model": "gpt-5.6-luna", "reasoning": "none", "approval": "ask", "workspace": "C:\\work\\app", "web_search": true, "tools": ["list_dir", "read_file", "write_file"]}}
+{"type": "turn_started", "turn_id": "t1", "user_message": "make hello.txt"}
+{"type": "model_round_started", "turn_id": "t1", "round": 1}
+{"type": "text_delta", "turn_id": "t1", "round": 2, "text": "Created"}
+{"type": "model_retry", "turn_id": "t1", "round": 2, "attempt": 1, "reason": "stream ended before response.completed", "delay_s": 2.4}
+{"type": "model_round_completed", "turn_id": "t1", "round": 1, "duration_s": 1.8, "input_tokens": 6300, "cached_tokens": 0, "output_tokens": 120, "reasoning_tokens": 0, "cost_usd": 0.0262, "function_calls": 1}
+{"type": "web_action", "turn_id": "t1", "kind": "search", "detail": "python 3.13 release notes"}
+{"type": "tool_started", "turn_id": "t1", "call_id": "call_1", "name": "write_file", "group": 1, "target": "hello.txt", "args": {"path": "hello.txt", "content": "hi\n"}}
+{"type": "tool_completed", "turn_id": "t1", "call_id": "call_1", "name": "write_file", "group": 1, "ok": true, "summary": "created · 1 line", "error_code": null, "duration_s": 0.008, "output": "Created hello.txt (1 line, sha 98ea6e4f216f)", "metadata": {"path": "hello.txt", "files_changed": [{"path": "hello.txt", "added": 1, "removed": 0}]}}
+{"type": "approval_requested", "turn_id": "t1", "request": {"request_id": "ap_1", "kind": "edit", "title": "Create file", "reason": "edits need approval in 'ask' mode", "paths": ["C:\\work\\app\\hello.txt"], "diff": "--- /dev/null\n+++ b/hello.txt\n+hi", "command": null, "cwd": null, "timeout": null, "outside_workspace": false, "metadata": {"full_content": "hi\n"}}}
+{"type": "approval_resolved", "turn_id": "t1", "request_id": "ap_1", "decision": "allow", "feedback": null, "by": "user", "wait_s": 4.2}
+{"type": "notice", "turn_id": null, "level": "info", "code": "new_conversation", "message": "Conversation history cleared."}
+{"type": "turn_completed", "turn_id": "t1", "text": "Created hello.txt.", "sources": [], "sources_all": [], "stop_reason": "done", "stats": {"rounds": 2, "tool_calls": 1, "parallel_groups": 0, "web_searches": 0, "web_opens": 0, "web_finds": 0, "input_tokens": 200, "cached_tokens": 0, "output_tokens": 20, "reasoning_tokens": 0, "model_cost_usd": 0.000064, "web_cost_usd": 0.0, "elapsed_s": 0.01, "model_wait_s": 0.0, "tool_wait_s": 0.008, "approval_wait_s": 0.0}}
+{"type": "turn_cancelled", "turn_id": "t1", "stats": {"rounds": 1, "tool_calls": 0, "elapsed_s": 2.1}}
+{"type": "turn_failed", "turn_id": "t1", "error_code": "api_error", "message": "The model request failed after retries.", "stats": {"rounds": 1, "tool_calls": 0, "elapsed_s": 31.0}}
+{"type": "usage", "totals": {"rounds": 2, "tool_calls": 1, "input_tokens": 200, "output_tokens": 20, "model_cost_usd": 0.000064, "elapsed_s": 0.01}}
+{"type": "error", "code": "busy", "message": "A turn is already running."}
+```
+
+(`stats` and `totals` are abbreviated in the `turn_cancelled`, `turn_failed` and `usage` examples; they always carry every key listed under §7.)
+
+Rules a client can rely on:
+- `error` codes: `busy` (command needs an idle session), `bad_request` (malformed line, unknown type, missing or mistyped field), `internal_error` (a server bug while handling one command; the server keeps running). An `error` is a reply to a command, not an event: it has no `seq`.
+- `approval_requested` blocks the turn until answered or cancelled. At most one request is pending, and `approval_resolved` is always emitted for it (`by`: `user`, `policy`, `cancel`). Answer with the request's own `request_id`.
+- After `model_retry`, discard the partial `text_delta`s of that round.
+- stdout carries protocol lines only; logs and stray output go to stderr.
+- The server writes events synchronously, so a client that stops reading stdout eventually stalls the session.
+
 ### 10.3 Transcript (`frontends/transcript.py`)
 
 An event consumer that writes v2-compatible Markdown (`**USER:**`, `> TOOL: ...`, `**AGENT:**`, sources, usage block at the end), plus one line per round:
@@ -1026,3 +1081,28 @@ Interpretation: **the hint did not improve T1–T8 and the sweep is slightly wor
 Decisions taken: keep the prompt hint (T10 gain, no safety or correctness regression; it is harmless on short tasks); keep the revised gate thresholds; **not done, by decision:** softening rule 1, and the fixed-path/shared-key cache rerun (~$3), which only changes how cost is measured. Total spend on Phase 3b benchmarking: about $9.6 (single run $0.54, sweep $1.60, 4 ablations $2.11, cache test $0.2, T10 runs ~$2.2, hint $0.61 + $0.53, final sweep $1.64).
 
 Phase 3b status: benchmark adapter, ablations, thresholds, T10 and fixes are done. Still open from Phase 3: the manual CLI checks (live model turn, real Ctrl+C, terminal appearance), which need a person at a console.
+
+### Phase 4 — JSON-lines server (2026-10-13)
+
+Built: `frontends/stdio_server.py` (`StdioServer`, `claim_stdio`, `main`; about 225 LOC), `frontends/args.py` (the config flags, shared with the CLI), the test-only `--fake-model-script` flag, `tests/fakes.py` and `tests/test_stdio_server.py`. No core file (`session.py`, `events.py`, `model.py`, `approvals.py`, tools) was changed. Run it from the project folder: `python -m agent_v3.frontends.stdio_server --workspace <path> [config flags]`. The protocol is written up as "Protocol v1 reference" at the end of §10.2. `PROTOCOL_VERSION = 1` is frozen; later changes are additive only.
+
+Tests: `tests/test_stdio_server.py` has 19 tests, 17 of them starting the server as a subprocess (16 talk to it over pipes with `--fake-model-script`). **261 passed on Windows 11 / Python 3.13.7 in about 58 s** (242 earlier + 19). The new file alone takes about 37 s because every test starts a Python process (~1.5 s), and it was green on 4 repeated runs. No network. They cover:
+- **Happy path:** the first line is `session_started` with `protocol_version` 1. `user_message` → `approval_requested` → `approval_response allow` → ordered event sequence (checked as a subsequence, `seq` strictly increasing, one `session_id`) → `turn_completed`, with the file written only after the answer. Also reject with feedback, streamed `text_delta`s, and non-ASCII text both ways.
+- **Cancel:** during an approval (then a second turn works), during a model wait, and while idle (no-op).
+- **Busy:** `user_message` and `new_conversation` during a turn return `busy`, `get_usage` still works, and `new_conversation` is accepted once idle.
+- **`get_usage`:** idle zeros, then session totals after two turns.
+- **`bad_request`:** 12 malformed inputs (invalid JSON, non-object, no or unknown `type`, invalid UTF-8, missing or mistyped fields, bad `decision`). The server keeps serving afterwards, blank lines are ignored, and unknown extra fields are ignored. A stale `approval_response` gets no reply and a warning on stderr.
+- **Shutdown:** idle, during a turn (`turn_cancelled` is written before the exit, code 0) and EOF on stdin.
+- **Startup and output:** an unusable model script exits with code 2 and empty stdout. Command output stays inside `tool_completed`. Every client also asserts at teardown that every stdout line was a complete JSON object.
+- **Write path (in-process):** 8 threads writing through a sink that takes each line in two pieces never interleave lines and keep per-writer order. Removing the write lock makes this test fail (checked by hand). A closed stdout stops output without raising.
+
+Design notes and deviations:
+- **`on_event`** is `json.dumps` (outside the write lock), then one write and a flush under `_write_lock`, nothing else. The write lock is separate from the session lock and the reader never holds it while taking the session lock, so the order is always session → write (no deadlock). Because it runs under the session lock, a client that stops reading stdout will eventually stall the whole session once the pipe fills. That is the cost of the specified design; a writer thread with a queue would remove it if it ever matters.
+- **The main thread is the stdin reader**, not a separate thread: it only ever waits on `readline`, so a second thread would add nothing, and `shutdown`/EOF become a plain loop exit followed by `session.close()`. A turn that is running at that moment is cancelled and its `turn_cancelled` is written before the process exits.
+- **Stdout is reserved for the protocol.** `claim_stdio()` duplicates the real stdout and stdin for the server, then points fd 1 at stderr (`sys.stdout` too) and fd 0 at the null device, so a stray `print`, a library or a child process cannot corrupt the stream or steal input. Output is ASCII-escaped JSON (valid on any code page, no encoding errors on a pipe). A broken stdout pipe is logged once to stderr and the server stops writing and exits at the next input line. **The POSIX branch of this is untested** (Windows-only machine), though it uses the same `os.dup`/`os.dup2` calls.
+- **Replies beyond §10.2.** `internal_error` is a third `error` code, for a bug while handling one command (the server keeps running and logs the traceback). A stale or unknown `request_id` in `approval_response` is ignored and logged rather than answered, since §8.6 treats it as a normal race with cancel. `error` and `usage` lines are replies, not events: they have no `seq`.
+- **Flags.** The config flags moved from `cli.build_parser`/`config_from_args` into `frontends/args.py` (a pure refactor; `cli.py` imports them, so `cli.config_from_args` and `cli.build_parser` still work and the CLI tests are unchanged) so the server does not import the terminal frontend. The server adds `--log-level` (stderr only). It has **no `--transcript`, `--events-log` or `--verbose`**: the client already receives every event, and writing a log file inside `on_event` would break the "nothing else" rule. `EventLogWriter` is thread-safe if that is ever wanted.
+- **`--fake-model-script FILE`** (test-only) builds a `FakeModelAdapter` from JSON in the existing scripting format: a list of rounds, each either a list of output items (the dicts `fn_call`/`msg` produce) or an object with `Round` fields (`output`, `usage`, `fail_times`, `fail_after`, `block`, `status`, `incomplete_reason`, `stream_error`). `block` may only be `"cancel"`, since the other modes need Python objects. To share one implementation, `Round`, `FakeStream`, `FakeModelAdapter` and `usage` moved from `tests/conftest.py` to `tests/fakes.py`, which has no pytest import. `conftest.py` re-exports them, so `from conftest import ...` in the old tests still works. The server imports `fakes` from the repository's `tests/` folder by path and exits with a usage error if the folder is missing, so the flag cannot be used from an installed package.
+- `session_started` is written during `Session` construction, before the first line is read, so it is always the first line and a client needs nothing from the server's startup to be ready.
+- **Not done:** a run against the live API through the server (only the fake model was used), and any real desktop or web client. The two items still open from Phase 3 (manual CLI checks) are unchanged.
+- Exit criterion met: the protocol test passes and `PROTOCOL_VERSION = 1` is frozen.
