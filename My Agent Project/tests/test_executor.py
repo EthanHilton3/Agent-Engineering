@@ -57,7 +57,7 @@ def call(i, name, label, delay=0.0):
 
 def make(env, rec, **cfg):
     events = []
-    ex = ToolExecutor(rec.registry(), AgentConfig(**cfg), emit=lambda t, d: events.append((t, d)))
+    ex = ToolExecutor(rec.registry(), AgentConfig(**cfg), emit=lambda e: events.append((e.type, e.to_dict())))
     rec.cancel = env.cancel
     return ex, events
 

@@ -11,3 +11,9 @@ Thumbs.db
 **/skill-dev/optimizer/sandbox*/
 **/skill-dev/grill-me-workspace/test-game-template/
 **/skill-dev/grill-me-workspace/iteration-*/*/*/*/game/
+
+# agent_v3 run output (tool logs); transcripts and event logs may contain secrets, see plan section 13
+.agent_v3/
+
+# per-run benchmark event logs (regenerable; summary results are committed)
+My Agent Project/bench/results/events/

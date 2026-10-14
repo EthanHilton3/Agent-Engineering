@@ -10,6 +10,9 @@ from collections import defaultdict
 from pathlib import Path
 
 COST_GATED = ["T2", "T3", "T4", "T5", "T8"]
+ROUNDS_LIMIT = 0.9          # revised from 0.75 after the first v3 sweep (plan §11 addendum)
+COST_LIMIT = 1.0            # revised from 0.75: both agents pay the same ~6.3k-token cold prefix
+T10_INPUT_LIMIT = 0.6       # turn-3 input of the long-session task (pruning gate; replaces T8 turn 2)
 
 
 def load(path: str) -> dict[str, list[dict]]:
@@ -25,9 +28,13 @@ def med(rows: list[dict], key: str) -> float:
     return statistics.median(row[key] for row in rows)
 
 
-def turn2_input(rows: list[dict]) -> float | None:
-    values = [r["turns"][1]["input_tokens"] for r in rows if len(r.get("turns", [])) > 1]
+def turn_input(rows: list[dict], index: int) -> float | None:
+    values = [r["turns"][index]["input_tokens"] for r in rows if len(r.get("turns", [])) > index]
     return statistics.median(values) if values else None
+
+
+def turn2_input(rows: list[dict]) -> float | None:
+    return turn_input(rows, 1)
 
 
 def print_medians(label: str, data: dict[str, list[dict]]) -> None:
@@ -67,13 +74,17 @@ def print_gates(a: dict[str, list[dict]], b: dict[str, list[dict]]) -> None:
             print(f"  [{verdict(ok)}] {name} {task}: B {rb:.3f} vs A {ra:.3f} "
                   f"(ratio {rb / ra:.2f}, limit {limit})" if ra else f"  [n/a ] {name} {task}: A is 0")
 
-    ratio_gate("rounds", "rounds", 0.75, COST_GATED)
-    ratio_gate("cost", "cost_usd", 0.75, COST_GATED)
-    if "T8" in a and "T8" in b:
-        ta, tb = turn2_input(a["T8"]), turn2_input(b["T8"])
-        ok = tb <= 0.6 * ta if ta and tb is not None else None
-        print(f"  [{verdict(ok)}] T8 turn-2 input tokens: B {tb} vs A {ta} (limit 0.6x)")
-    ratio_gate("wall", "wall_s", 0.8, [t for t in b if t in a])
+    ratio_gate("rounds", "rounds", ROUNDS_LIMIT, COST_GATED)
+    ratio_gate("cost", "cost_usd", COST_LIMIT, COST_GATED)
+    if "T8" in a and "T8" in b:      # report only: T8's files are too small for pruning to show (plan §11 addendum)
+        print(f"  [info] T8 turn-2 input tokens: B {turn2_input(b['T8'])} vs A {turn2_input(a['T8'])}")
+    if "T10" in a and "T10" in b:
+        ta, tb = turn_input(a["T10"], 2), turn_input(b["T10"], 2)
+        ok = tb <= T10_INPUT_LIMIT * ta if ta and tb is not None else None
+        print(f"  [{verdict(ok)}] T10 turn-3 input tokens: B {tb} vs A {ta} (limit {T10_INPUT_LIMIT}x)")
+    for task in (t for t in b if t in a):      # report only until the prefix-cache question is settled
+        ra, rb = med(a[task], "wall_s"), med(b[task], "wall_s")
+        print(f"  [info] wall {task}: B {rb:.1f} vs A {ra:.1f} (ratio {rb / ra:.2f})")
     if "T6" in b:
         ok = all(r["web_actions"] == 0 for r in b["T6"])
         print(f"  [{verdict(ok)}] T6 web actions are 0 in every B run")

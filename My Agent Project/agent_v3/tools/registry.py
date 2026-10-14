@@ -108,7 +108,7 @@ class ToolRegistry:
 
 def ask_approval(ctx: ToolContext, req: ApprovalRequest) -> ToolResult | None:
     """Ask the gateway. Returns None when allowed, or the REJECTED result to hand back to the model."""
-    res = ctx.approvals.request(req)
+    res = ctx.approvals.request(req, turn_id=ctx.turn_id, cancel=ctx.cancel)
     if res.allowed:
         return None
     what = "command" if req.kind == "command" else "edit"

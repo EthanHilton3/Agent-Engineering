@@ -3,6 +3,10 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 
+APPROVAL_MODES = ("ask", "auto-edit", "full-auto")
+REASONING_EFFORTS = ("none", "minimal", "low", "medium", "high", "xhigh")
+SEARCH_CONTEXT_SIZES = ("low", "medium", "high")
+
 
 @dataclass
 class AgentConfig:
@@ -31,3 +35,22 @@ class AgentConfig:
     store: bool = False                     # do not persist responses on OpenAI
     prompt_path: Path | None = None         # override bundled prompt.md
     output_dir: Path | None = None          # default: <workspace>/.agent_v3/outputs
+
+    def __post_init__(self):
+        self.workspace = Path(self.workspace).expanduser().resolve()
+        if self.prompt_path is not None:
+            self.prompt_path = Path(self.prompt_path)
+        if self.output_dir is not None:
+            self.output_dir = Path(self.output_dir)
+        for name, value, allowed in (("approval", self.approval, APPROVAL_MODES),
+                                     ("reasoning", self.reasoning, REASONING_EFFORTS),
+                                     ("search_context_size", self.search_context_size, SEARCH_CONTEXT_SIZES)):
+            if value not in allowed:
+                raise ValueError(f"{name} must be one of {', '.join(allowed)}; got {value!r}")
+        if self.max_rounds < 1:
+            raise ValueError("max_rounds must be at least 1")
+
+    def summary(self) -> dict:
+        """The JSON-safe subset sent in `session_started` (plan §7)."""
+        return {"model": self.model, "reasoning": self.reasoning, "approval": self.approval,
+                "workspace": str(self.workspace), "web_search": self.web_search}

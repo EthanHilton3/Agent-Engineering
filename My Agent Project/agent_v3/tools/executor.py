@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import itertools
 import json
 import threading
 import time
@@ -10,13 +11,13 @@ from typing import Any, Callable, Iterable
 from pydantic import ValidationError
 
 from ..config import AgentConfig
+from ..events import Event, ToolCompleted, ToolStarted
 from .registry import ErrorCode, ToolContext, ToolRegistry, ToolResult
 
 # Failures that say nothing about whether an identical retry could succeed.
 _NOT_REPEAT_GUARDED = {ErrorCode.REJECTED, ErrorCode.NONZERO_EXIT, ErrorCode.CANCELLED}
 
-# emit(event_type, fields): Phase 2 turns these into Event dataclasses.
-Emit = Callable[[str, dict], None]
+Emit = Callable[[Event], None]
 
 
 @dataclass
@@ -51,6 +52,7 @@ class ToolExecutor:
                                         thread_name_prefix="tool")
         self._failures: dict[str, dict[str, str]] = {}   # turn_id → call key → first line of the error
         self._lock = threading.Lock()
+        self._groups = itertools.count(1)                 # group ids are unique for the executor's life
 
     def shutdown(self) -> None:
         self._pool.shutdown(wait=False, cancel_futures=True)
@@ -79,7 +81,8 @@ class ToolExecutor:
         """Run the model's tool calls; results come back in call order."""
         calls = list(calls)
         results: list[tuple[Any, ToolResult, float] | None] = [None] * len(calls)
-        for group, idxs in enumerate(self._plan(calls), start=1):
+        for idxs in self._plan(calls):
+            group = next(self._groups)
             if ctx.cancel.cancelled:
                 for i in idxs:
                     results[i] = self._cancelled(calls[i], ctx, group)
@@ -93,14 +96,15 @@ class ToolExecutor:
 
     def _cancelled(self, call: Any, ctx: ToolContext, group: int) -> tuple[Any, ToolResult, float]:
         result = ToolResult.failure(ErrorCode.CANCELLED, "Cancelled by user before running.", summary="cancelled")
-        self._emit("tool_completed", self._completed_fields(call, ctx, group, result, 0.0))
+        self._emit(self._completed(call, ctx, group, result, 0.0))
         return call, result, 0.0
 
-    def _completed_fields(self, call: Any, ctx: ToolContext, group: int, result: ToolResult, dur: float) -> dict:
-        return {"turn_id": ctx.turn_id, "call_id": call.call_id, "name": call.name, "group": group,
-                "ok": result.ok, "summary": result.summary,
-                "error_code": result.error_code.value if result.error_code else None,
-                "duration_s": round(dur, 3), "output": result.output, "metadata": result.metadata}
+    @staticmethod
+    def _completed(call: Any, ctx: ToolContext, group: int, result: ToolResult, dur: float) -> ToolCompleted:
+        return ToolCompleted(turn_id=ctx.turn_id, call_id=call.call_id, name=call.name, group=group,
+                             ok=result.ok, summary=result.summary,
+                             error_code=result.error_code.value if result.error_code else None,
+                             duration_s=round(dur, 3), output=result.output, metadata=result.metadata)
 
     def _run_one(self, call: Any, index: int, group: int, ctx: ToolContext) -> tuple[Any, ToolResult, float]:
         cctx = replace(ctx, call_id=call.call_id, call_index=index)
@@ -108,15 +112,15 @@ class ToolExecutor:
             args_json: Any = json.loads(call.arguments)
         except (json.JSONDecodeError, TypeError):
             args_json = call.arguments
-        self._emit("tool_started", {"turn_id": ctx.turn_id, "call_id": call.call_id, "name": call.name,
-                                    "group": group, "target": _target(args_json), "args": args_json})
+        self._emit(ToolStarted(turn_id=ctx.turn_id, call_id=call.call_id, name=call.name, group=group,
+                               target=_target(args_json), args=args_json))
         start = time.monotonic()
         try:
             result = self._execute(call, cctx)
         except Exception as e:      # _execute handles tool errors; this is the last line of defence
             result = ToolResult.failure(ErrorCode.INTERNAL, f"{type(e).__name__}: {e}")
         dur = time.monotonic() - start
-        self._emit("tool_completed", self._completed_fields(call, ctx, group, result, dur))
+        self._emit(self._completed(call, ctx, group, result, dur))
         return call, result, dur
 
     # -- one call ---------------------------------------------------------------------------

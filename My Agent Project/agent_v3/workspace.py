@@ -187,23 +187,49 @@ def kill_process_tree(proc: subprocess.Popen) -> None:
 
 
 class CancelToken:
-    """Cooperative cancel flag that also kills registered child processes immediately."""
+    """Cooperative cancel flag that also kills registered child processes and runs registered
+    callbacks (e.g. closing a model stream blocked in a network read) immediately."""
 
     def __init__(self):
         self._event = threading.Event()
         self._procs: set[subprocess.Popen] = set()
+        self._callbacks: list = []
         self._lock = threading.Lock()
 
     @property
     def cancelled(self) -> bool:
         return self._event.is_set()
 
+    def wait(self, timeout: float | None = None) -> bool:
+        """Sleep up to `timeout`; True as soon as the token is cancelled."""
+        return self._event.wait(timeout)
+
     def cancel(self) -> None:
         self._event.set()
         with self._lock:
             procs = list(self._procs)
+            callbacks = list(self._callbacks)
         for proc in procs:
             kill_process_tree(proc)
+        for callback in callbacks:
+            try:
+                callback()
+            except Exception:
+                pass
+
+    def add_callback(self, callback) -> None:
+        with self._lock:
+            self._callbacks.append(callback)
+        if self._event.is_set():
+            try:
+                callback()
+            except Exception:
+                pass
+
+    def remove_callback(self, callback) -> None:
+        with self._lock:
+            if callback in self._callbacks:
+                self._callbacks.remove(callback)
 
     def register(self, proc: subprocess.Popen) -> None:
         with self._lock:

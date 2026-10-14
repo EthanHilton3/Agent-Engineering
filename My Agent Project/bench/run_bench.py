@@ -10,7 +10,7 @@ from dataclasses import asdict
 from datetime import datetime
 from pathlib import Path
 
-from adapters import RunStats, run_v2
+from adapters import RunStats, run_v2, run_v3
 from tasks import TASKS, TASKS_BY_ID, Task
 
 BENCH = Path(__file__).resolve().parent
@@ -49,29 +49,45 @@ def main() -> None:
     parser.add_argument("--model", default="gpt-5.6-luna")
     parser.add_argument("--reasoning", default="none")
     parser.add_argument("--with-web", action="store_true", help="Also run the opt-in web task (T9).")
+    parser.add_argument("--with-long", action="store_true", help="Also run the opt-in long-session task (T10).")
     parser.add_argument("--keep-workdirs", action="store_true", help="Don't delete the temp workspaces.")
+    parser.add_argument("--no-parallel-reads", action="store_true", help="v3 ablation: run tool calls one at a time.")
+    parser.add_argument("--no-prune-history", action="store_true", help="v3 ablation: keep full tool output in history.")
+    parser.add_argument("--no-dedupe-reads", action="store_true", help="v3 ablation: re-send unchanged file reads.")
+    parser.add_argument("--no-lenient-edit", action="store_true", help="v3 ablation: exact-match edits only.")
+    parser.add_argument("--label", default="", help="Suffix for the results file name, e.g. noprune.")
     args = parser.parse_args()
 
-    if args.agent == "v3":
-        raise SystemExit("agent v3 does not exist yet (run_v3 arrives in Phase 3).")
-    runner = run_v2
+    ablations = {"parallel_reads": not args.no_parallel_reads, "prune_history": not args.no_prune_history,
+                 "dedupe_reads": not args.no_dedupe_reads, "lenient_edit_match": not args.no_lenient_edit}
+    if args.agent == "v2":
+        if not all(ablations.values()):
+            raise SystemExit("the --no-* ablation flags only apply to --agent v3.")
+        runner = run_v2
+    else:
+        runner = run_v3
 
     if args.tasks:
         tasks = [TASKS_BY_ID[t.strip().upper()] for t in args.tasks.split(",")]
     else:
-        tasks = [t for t in TASKS if not t.web or args.with_web]
+        tasks = [t for t in TASKS if (not t.web or args.with_web) and (not t.long or args.with_long)]
 
     RESULTS.mkdir(exist_ok=True)
-    out_path = RESULTS / f"{datetime.now():%Y%m%d-%H%M%S}_{args.agent}.jsonl"
+    stamp = f"{datetime.now():%Y%m%d-%H%M%S}"
+    out_path = RESULTS / f"{stamp}_{args.agent}{'_' + args.label if args.label else ''}.jsonl"
+    off = [name for name, on in ablations.items() if not on]
     print(f"agent={args.agent} model={args.model} reasoning={args.reasoning} "
-          f"tasks={','.join(t.id for t in tasks)} runs={args.runs}\nwriting {out_path}\n")
+          f"tasks={','.join(t.id for t in tasks)} runs={args.runs}"
+          f"{' ablated=' + ','.join(off) if off else ''}\nwriting {out_path}\n")
 
     total_cost = 0.0
     for task in tasks:
         for run in range(1, args.runs + 1):
             workdir = prepare_workdir(task)
+            flags = {**ablations, "events_log": RESULTS / "events" / f"{out_path.stem}_{task.id}_r{run}.jsonl"} \
+                if args.agent == "v3" else None
             try:
-                stats: RunStats = runner(task, workdir, args.model, args.reasoning, None, run)
+                stats: RunStats = runner(task, workdir, args.model, args.reasoning, flags, run)
             finally:
                 if not args.keep_workdirs:
                     _rmtree(workdir)
