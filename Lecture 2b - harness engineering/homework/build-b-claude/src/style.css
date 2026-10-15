@@ -1,0 +1,541 @@
+body {
+  margin: 0;
+  font-family: system-ui, sans-serif;
+  background: #f4efe1;
+  color: #222;
+}
+
+#app {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 16px;
+}
+
+h1 {
+  margin: 0 0 12px;
+  font-size: 1.6rem;
+}
+
+.error {
+  min-height: 1.3em;
+  margin: 4px 0;
+  color: #b00020;
+  font-weight: 600;
+}
+
+/* New-game form */
+
+.new-game {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-width: 320px;
+}
+
+.new-game input,
+.new-game select,
+.new-game button {
+  font: inherit;
+  padding: 4px 6px;
+}
+
+.name-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.name-field {
+  display: flex;
+  flex-direction: column;
+}
+
+/* Game header */
+
+.game-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 24px;
+}
+
+.game-header h1 {
+  margin: 0;
+}
+
+.seed {
+  margin: 0;
+  color: #555;
+}
+
+.swatch {
+  display: inline-block;
+  width: 0.9em;
+  height: 0.9em;
+  margin-right: 6px;
+  border: 1px solid #222;
+  border-radius: 2px;
+  vertical-align: -0.1em;
+}
+
+/* Board (SVG units: hex size 1) */
+
+.board {
+  display: block;
+  width: 100%;
+  max-width: 640px;
+  height: auto;
+  margin: 0 auto;
+}
+
+.hex-shape {
+  stroke: #f4efe1;
+  stroke-width: 0.06;
+}
+
+.terrain-forest .hex-shape { fill: #2e7d32; }
+.terrain-pasture .hex-shape { fill: #9ccc65; }
+.terrain-fields .hex-shape { fill: #f2c94c; }
+.terrain-hills .hex-shape { fill: #c1642d; }
+.terrain-mountains .hex-shape { fill: #8d8d8d; }
+.terrain-desert .hex-shape { fill: #e6d3a3; }
+
+.terrain-label {
+  font-size: 0.2px;
+  fill: #fff;
+  text-anchor: middle;
+  dominant-baseline: middle;
+  paint-order: stroke;
+  stroke: rgba(0, 0, 0, 0.45);
+  stroke-width: 0.04;
+  pointer-events: none;
+}
+
+.terrain-desert .terrain-label {
+  fill: #6b5a33;
+  stroke: none;
+}
+
+.number-token circle {
+  fill: #fbf3dc;
+  stroke: #6b5a33;
+  stroke-width: 0.03;
+}
+
+.number-token text {
+  font-size: 0.3px;
+  font-weight: 600;
+  fill: #222;
+  text-anchor: middle;
+  dominant-baseline: central;
+}
+
+.number-token.red-number text {
+  font-size: 0.36px;
+  font-weight: 800;
+  fill: #c62828;
+}
+
+.robber circle {
+  fill: #2b2b2b;
+  stroke: #fff;
+  stroke-width: 0.03;
+}
+
+.robber text {
+  font-size: 0.2px;
+  font-weight: 700;
+  fill: #fff;
+  text-anchor: middle;
+  dominant-baseline: central;
+}
+
+.road {
+  stroke-width: 0.13;
+  stroke-linecap: round;
+}
+
+.building {
+  stroke: #222;
+  stroke-width: 0.025;
+}
+
+.target {
+  cursor: pointer;
+}
+
+.edge-target {
+  stroke: rgba(255, 255, 255, 0.75);
+  stroke-width: 0.16;
+  stroke-linecap: round;
+}
+
+.edge-target:hover {
+  stroke: #fff;
+  stroke-width: 0.2;
+}
+
+.corner-target {
+  fill: rgba(255, 255, 255, 0.8);
+  stroke: #222;
+  stroke-width: 0.03;
+}
+
+.corner-target:hover {
+  fill: #fff;
+  stroke-width: 0.05;
+}
+
+.hex-target {
+  cursor: pointer;
+}
+
+.hex-target .hex-shape {
+  stroke: #fff;
+  stroke-width: 0.09;
+  stroke-dasharray: 0.12 0.08;
+}
+
+.hex-target:hover .hex-shape {
+  filter: brightness(1.15);
+  stroke-dasharray: none;
+}
+
+/* Game layout */
+
+.game-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(280px, 2fr);
+  gap: 16px;
+  align-items: start;
+}
+
+@media (max-width: 800px) {
+  .game-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+.side-column {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+button,
+select,
+input {
+  font: inherit;
+}
+
+button {
+  padding: 4px 10px;
+  border: 1px solid #6b5a33;
+  border-radius: 4px;
+  background: #fbf3dc;
+  cursor: pointer;
+}
+
+button.primary {
+  background: #2e5aa8;
+  border-color: #1f3f78;
+  color: #fff;
+  font-weight: 600;
+}
+
+h2 {
+  margin: 0 0 6px;
+  font-size: 1.1rem;
+}
+
+.hint {
+  margin: 4px 0;
+  color: #444;
+}
+
+/* Action bar */
+
+.action-bar {
+  padding: 10px 12px;
+  border: 2px solid #6b5a33;
+  border-radius: 6px;
+  background: #fffaf0;
+}
+
+.action-bar p {
+  margin: 2px 0;
+}
+
+.status .turn {
+  font-size: 1.15rem;
+  font-weight: 700;
+}
+
+.status .phase {
+  font-weight: 600;
+}
+
+.die {
+  display: inline-block;
+  min-width: 1.4em;
+  margin-right: 4px;
+  padding: 1px 4px;
+  border: 1px solid #222;
+  border-radius: 4px;
+  background: #fff;
+  text-align: center;
+  font-weight: 700;
+}
+
+.phase-controls {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 8px 0 4px;
+}
+
+.build-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.build-button.selected {
+  background: #f2c94c;
+  border-width: 2px;
+  font-weight: 600;
+}
+
+.build-button.unavailable {
+  opacity: 0.55;
+  cursor: help;
+}
+
+.bank-trade {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.discard-prompt h3 {
+  margin: 0 0 6px;
+  font-size: 1rem;
+}
+
+.discard-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+}
+
+.discard-fields label {
+  display: flex;
+  flex-direction: column;
+  font-size: 0.9rem;
+}
+
+.discard-fields input {
+  width: 4.5em;
+}
+
+.steal-chooser {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Player panels */
+
+.player-panels {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 8px;
+}
+
+.player-panel {
+  padding: 8px 10px;
+  border: 1px solid #c9b88a;
+  border-radius: 6px;
+  background: #fffaf0;
+}
+
+.player-panel.current {
+  border: 2px solid #222;
+  box-shadow: 0 0 0 2px #f2c94c;
+}
+
+.badge {
+  margin-left: 6px;
+  padding: 0 6px;
+  border-radius: 8px;
+  background: #ddd;
+  font-size: 0.75rem;
+  font-weight: 600;
+  vertical-align: middle;
+}
+
+.badge.longest-road {
+  background: #f2c94c;
+}
+
+.player-stats {
+  margin: 0;
+}
+
+.stat {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 0.9rem;
+}
+
+.stat dt {
+  color: #555;
+}
+
+.stat dd {
+  margin: 0;
+  font-weight: 600;
+  text-align: right;
+}
+
+.hand {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.card {
+  padding: 2px 6px;
+  border: 1px solid #222;
+  border-radius: 4px;
+  font-size: 0.85rem;
+}
+
+.card-count {
+  margin-right: 4px;
+  font-weight: 700;
+}
+
+.resource-wood { background: #a5d6a7; }
+.resource-brick { background: #e8a87c; }
+.resource-sheep { background: #dcedc8; }
+.resource-wheat { background: #fbe7a1; }
+.resource-ore { background: #cfcfcf; }
+
+/* Event log */
+
+.log {
+  padding: 8px 10px;
+  border: 1px solid #c9b88a;
+  border-radius: 6px;
+  background: #fffaf0;
+}
+
+.log-entries {
+  max-height: 260px;
+  margin: 0;
+  padding-left: 2.2em;
+  overflow-y: auto;
+  font-size: 0.9rem;
+}
+
+.log-entries li:first-child {
+  font-weight: 600;
+}
+
+/* Debug */
+
+.debug-toggle {
+  margin-left: auto;
+}
+
+.debug-panel {
+  padding: 8px 10px;
+  border: 2px dashed #7a3fa0;
+  border-radius: 6px;
+  background: #f6efff;
+}
+
+.debug-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 6px 0;
+}
+
+.debug-row .error {
+  flex-basis: 100%;
+  min-height: 0;
+}
+
+.debug-row input[type='text'] {
+  width: 9em;
+}
+
+.debug-row input[type='number'] {
+  width: 4em;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.id-labels {
+  pointer-events: none;
+}
+
+.id-label {
+  font-size: 0.13px;
+  font-weight: 700;
+  text-anchor: middle;
+  dominant-baseline: central;
+  paint-order: stroke;
+  stroke: #fff;
+  stroke-width: 0.035;
+}
+
+.corner-id { fill: #7a3fa0; }
+.edge-id { fill: #1f3f78; }
+.hex-id {
+  font-size: 0.16px;
+  fill: #000;
+}
+
+/* Winner screen */
+
+.winner-screen {
+  margin: 8px 0 16px;
+  padding: 12px 16px;
+  border: 3px solid #c69c1d;
+  border-radius: 8px;
+  background: #fff6d6;
+}
+
+.winner-screen h2 {
+  font-size: 1.4rem;
+}
+
+.final-scores {
+  margin: 8px 0 12px;
+  border-collapse: collapse;
+}
+
+.final-scores th,
+.final-scores td {
+  padding: 4px 10px;
+  border-bottom: 1px solid #c9b88a;
+  text-align: left;
+}
