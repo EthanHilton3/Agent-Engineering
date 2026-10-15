@@ -14,8 +14,9 @@ from ..config import AgentConfig
 from ..events import Event, ToolCompleted, ToolStarted
 from .registry import ErrorCode, ToolContext, ToolRegistry, ToolResult
 
-# Failures that say nothing about whether an identical retry could succeed.
-_NOT_REPEAT_GUARDED = {ErrorCode.REJECTED, ErrorCode.NONZERO_EXIT, ErrorCode.CANCELLED}
+# Failures that say nothing about whether an identical retry could succeed. CONFLICT is cured by a
+# read, which is read-only and so never clears the guard.
+_NOT_REPEAT_GUARDED = {ErrorCode.REJECTED, ErrorCode.NONZERO_EXIT, ErrorCode.CANCELLED, ErrorCode.CONFLICT}
 
 Emit = Callable[[Event], None]
 
@@ -87,9 +88,9 @@ class ToolExecutor:
                 for i in idxs:
                     results[i] = self._cancelled(calls[i], ctx, group)
             elif len(idxs) == 1:
-                results[idxs[0]] = self._run_one(calls[idxs[0]], idxs[0], group, ctx)
+                results[idxs[0]] = self._run_one(calls[idxs[0]], group, ctx)
             else:
-                futures = [self._pool.submit(self._run_one, calls[i], i, group, ctx) for i in idxs]
+                futures = [self._pool.submit(self._run_one, calls[i], group, ctx) for i in idxs]
                 for i, fut in zip(idxs, futures):
                     results[i] = fut.result()
         return results  # type: ignore[return-value]
@@ -106,17 +107,18 @@ class ToolExecutor:
                              error_code=result.error_code.value if result.error_code else None,
                              duration_s=round(dur, 3), output=result.output, metadata=result.metadata)
 
-    def _run_one(self, call: Any, index: int, group: int, ctx: ToolContext) -> tuple[Any, ToolResult, float]:
-        cctx = replace(ctx, call_id=call.call_id, call_index=index)
+    def _run_one(self, call: Any, group: int, ctx: ToolContext) -> tuple[Any, ToolResult, float]:
+        cctx = replace(ctx, call_id=call.call_id)
+        parse_error = None
         try:
-            args_json: Any = json.loads(call.arguments)
-        except (json.JSONDecodeError, TypeError):
-            args_json = call.arguments
+            parsed: Any = json.loads(call.arguments)
+        except (json.JSONDecodeError, TypeError) as e:
+            parsed, parse_error = call.arguments, e
         self._emit(ToolStarted(turn_id=ctx.turn_id, call_id=call.call_id, name=call.name, group=group,
-                               target=_target(args_json), args=args_json))
+                               target=_target(parsed), args=parsed))
         start = time.monotonic()
         try:
-            result = self._execute(call, cctx)
+            result = self._execute(call, parsed, parse_error, cctx)
         except Exception as e:      # _execute handles tool errors; this is the last line of defence
             result = ToolResult.failure(ErrorCode.INTERNAL, f"{type(e).__name__}: {e}")
         dur = time.monotonic() - start
@@ -125,18 +127,14 @@ class ToolExecutor:
 
     # -- one call ---------------------------------------------------------------------------
 
-    def _execute(self, call: Any, ctx: ToolContext) -> ToolResult:
+    def _execute(self, call: Any, parsed: Any, parse_error: Exception | None, ctx: ToolContext) -> ToolResult:
         spec = self.registry.get(call.name)
         if spec is None:
             return ToolResult.failure(ErrorCode.UNKNOWN_TOOL, f"No tool named '{call.name}'. "
                                       f"Available: {', '.join(self.registry.names())}", summary="unknown tool")
-        raw = call.arguments
-        try:
-            parsed = json.loads(raw)
-        except (json.JSONDecodeError, TypeError) as e:
-            return ToolResult.failure(ErrorCode.INVALID_ARGUMENTS,
-                                      f"Arguments are not valid JSON ({e}). Raw arguments: {str(raw)[:200]}",
-                                      summary="invalid JSON")
+        if parse_error is not None:
+            return ToolResult.failure(ErrorCode.INVALID_ARGUMENTS, f"Arguments are not valid JSON ({parse_error}). "
+                                      f"Raw arguments: {str(call.arguments)[:200]}", summary="invalid JSON")
         try:
             args = spec.args_model.model_validate(parsed)
         except ValidationError as e:

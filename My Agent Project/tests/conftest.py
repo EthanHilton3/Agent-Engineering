@@ -40,7 +40,7 @@ class Env:
         self._calls += 1
         return ToolContext(config=self.config, workspace=WorkspacePolicy(self.root), files=self.files,
                            approvals=self.approvals, cancel=self.cancel, turn_id=self.turn_id,
-                           call_id=f"c{self._calls}", seen_reads=self.seen_reads, call_index=self._calls)
+                           call_id=f"c{self._calls}", seen_reads=self.seen_reads)
 
     def call(self, name: str, **args) -> ToolResult:
         spec = self.registry.get(name)

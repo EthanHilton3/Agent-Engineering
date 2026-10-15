@@ -8,8 +8,7 @@ from __future__ import annotations
 
 import random
 import time
-from collections import Counter
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Callable, Iterable
 
 import httpx
@@ -25,7 +24,6 @@ Emit = Callable[[Event], None]
 # Errors that mean "the connection broke"; retried only once the stream has started, because the
 # SDK already retries connection errors, 429 and 5xx before that (max_retries=3).
 RETRYABLE_STREAM_ERRORS = (httpx.TransportError, openai.APIConnectionError)
-OPTIONAL_PARAMS = ("include", "prompt_cache_key")
 
 
 # Max silence between stream chunks before the connection counts as stalled (then retried). High
@@ -123,9 +121,6 @@ class ModelResponse:
     usage: Usage
     cost_usd: float | None
     duration_s: float
-    status: str = "completed"
-    incomplete_reason: str | None = None
-    web: Counter = field(default_factory=Counter)   # search / open_page / find_in_page, incl. retried attempts
 
     @property
     def function_calls(self) -> list[dict]:
@@ -147,8 +142,7 @@ class ModelAdapter:
         self._client = client
         self.retry_delays = retry_delays
         self.jitter = jitter
-        self.dropped_params: set[str] = set()   # optional params/values the API rejected this session
-        self._dropped_include: set[str] = set()
+        self.dropped_params: set[str] = set()   # prompt_cache_key / include values the API rejected this session
         self._unknown_price_noticed = False
 
     @property
@@ -166,8 +160,8 @@ class ModelAdapter:
                         "parallel_tool_calls": True, "reasoning": {"effort": cfg.reasoning}, "store": cfg.store}
         include = [*(["reasoning.encrypted_content"] if not cfg.store else []),
                    *(["web_search_call.action.sources"] if cfg.web_search else [])]
-        include = [v for v in include if v not in self._dropped_include]
-        if include and "include" not in self.dropped_params:
+        include = [v for v in include if v not in self.dropped_params]
+        if include:
             params["include"] = include
         if cache_key and "prompt_cache_key" not in self.dropped_params:
             params["prompt_cache_key"] = cache_key
@@ -179,12 +173,14 @@ class ModelAdapter:
 
     def _drop_rejected(self, err: openai.BadRequestError, params: dict, emit: Emit) -> bool:
         """If the 400 names an optional param (or include value), drop it for the session and say so."""
-        text = f"{getattr(err, 'param', '') or ''} {getattr(err, 'message', '') or err}"
+        param = getattr(err, "param", None) or ""
+        text = f"{param} {getattr(err, 'message', '') or err}"
         if "include" in params:
+            # Exact values only: "include" alone is a common English word in unrelated 400 messages.
             named = [v for v in params["include"] if v in text]
-            if named or "include" in text:
+            if named or param.split("[")[0] == "include":
                 values = named or list(params["include"])
-                self._dropped_include.update(values)
+                self.dropped_params.update(values)
                 emit(Notice(level="warning", code="include_rejected",
                             message=f"The API rejected include={values}; continuing without it."))
                 return True
@@ -214,11 +210,10 @@ class ModelAdapter:
     def respond(self, input_items: list, *, tools: list[dict], round_no: int, cancel: CancelToken,
                 emit: Emit, tool_choice: str = "auto", cache_key: str | None = None) -> ModelResponse:
         started = time.monotonic()
-        web: Counter = Counter()
         attempt = 0
         while True:
             try:
-                final = self._attempt(input_items, tools, tool_choice, cache_key, round_no, cancel, emit, web)
+                final = self._attempt(input_items, tools, tool_choice, cache_key, round_no, cancel, emit)
                 break
             except _StreamBroke as e:
                 if attempt >= len(self.retry_delays):
@@ -229,10 +224,10 @@ class ModelAdapter:
                 emit(ModelRetry(round=round_no, attempt=attempt, reason=str(e)[:200], delay_s=round(delay, 2)))
                 if cancel.wait(delay):
                     raise Cancelled() from e
-        return self._finish(final, web, time.monotonic() - started, emit)
+        return self._finish(final, time.monotonic() - started, emit)
 
     def _attempt(self, input_items, tools, tool_choice, cache_key, round_no, cancel: CancelToken,
-                 emit: Emit, web: Counter) -> dict:
+                 emit: Emit) -> dict:
         if cancel.cancelled:
             raise Cancelled()
         stream = self._start(input_items, tools, tool_choice, cache_key, emit)
@@ -252,7 +247,6 @@ class ModelAdapter:
                     item = as_dict(ev.get("item")) or {}
                     if item.get("type") == "web_search_call":
                         wkind, detail = describe_web_action(item.get("action"))
-                        web[wkind] += 1
                         emit(WebAction(kind=wkind, detail=detail))
                 elif kind in ("response.completed", "response.incomplete"):
                     final = as_dict(ev.get("response"))
@@ -286,7 +280,7 @@ class ModelAdapter:
             raise _StreamBroke("stream ended before response.completed")
         return final
 
-    def _finish(self, final: dict, web: Counter, duration: float, emit: Emit) -> ModelResponse:
+    def _finish(self, final: dict, duration: float, emit: Emit) -> ModelResponse:
         output = [as_dict(i) for i in final.get("output") or []]
         usage = Usage.from_api(final.get("usage"))
         cost = cost_usd(self.config.model, usage)
@@ -294,11 +288,9 @@ class ModelAdapter:
             self._unknown_price_noticed = True
             emit(Notice(level="warning", code="unknown_pricing",
                         message=f"No price table entry for model '{self.config.model}'; cost is not tracked."))
-        status = final.get("status") or "completed"
-        reason = None
-        if status == "incomplete":
+        if final.get("status") == "incomplete":
             reason = (final.get("incomplete_details") or {}).get("reason") or "unknown"
             emit(Notice(level="warning", code="response_incomplete",
                         message=f"The model's response was cut short ({reason}). Continuing with what it returned."))
         return ModelResponse(output=output, text=output_text(output), usage=usage, cost_usd=cost,
-                             duration_s=round(duration, 3), status=status, incomplete_reason=reason, web=web)
+                             duration_s=round(duration, 3))

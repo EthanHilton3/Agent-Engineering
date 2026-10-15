@@ -34,29 +34,35 @@ class TranscriptWriter:
         self._requests: dict[str, dict] = {}       # request_id -> approval request
         self._started = False
         self._closed = False
+        self._file = None                          # opened on the first line, so an unused writer creates no file
 
     # -- public --------------------------------------------------------------------------------
 
     def write(self, event) -> None:
         d = event if isinstance(event, dict) else event.to_dict()
         handler = getattr(self, f"_on_{d.get('type')}", None)
-        if handler is not None:
+        if handler is not None and not self._closed:
             handler(d)
 
     __call__ = write
 
     def close(self) -> None:
-        """Append the usage block (once)."""
-        if self._closed or not self._started:
+        """Append the usage block (once) and close the file."""
+        if self._closed:
             return
+        if self._started:
+            self._log("```\n" + format_usage(self.model, self.totals) + "\n```")
         self._closed = True
-        self._log("```\n" + format_usage(self.model, self.totals) + "\n```")
+        if self._file is not None:
+            self._file.close()
 
     # -- helpers -------------------------------------------------------------------------------
 
     def _log(self, text: str) -> None:
-        with self.path.open("a", encoding="utf-8") as f:
-            f.write(text + "\n")
+        if self._file is None:
+            self._file = self.path.open("a", encoding="utf-8")
+        self._file.write(text + "\n")
+        self._file.flush()                         # the transcript is readable while the session runs
 
     def _add_stats(self, stats: dict) -> None:
         for k in _SUMMED:

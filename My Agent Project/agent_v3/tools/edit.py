@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field
 from ..approvals import ApprovalRequest
 from ..workspace import atomic_write_bytes, sha12
 from .files import (BOM, MAX_READ_BYTES, diff_stats, format_numbered, looks_binary, plural,
-                    split_lines, unified_diff)
+                    restore_endings, split_lines, unified_diff)
 from .registry import ErrorCode, ToolContext, ToolResult, ToolSpec, ask_approval
 
 CLOSEST_MIN_RATIO = 0.6
@@ -42,9 +42,8 @@ class _EditFail(Exception):
 class _FileBuf:
     path: Path
     rel: str
-    raw: bytes
     sha: str
-    crlf: bool
+    decoded: str           # as decoded, line endings intact
     bom: bool
     had_newline: bool
     original: str          # \n-normalized
@@ -61,9 +60,8 @@ def _load(ctx: ToolContext, path: Path, rel: str) -> _FileBuf:
     raw = path.read_bytes()
     if looks_binary(raw):
         raise _EditFail(ErrorCode.BINARY, f"{rel} is a binary file, not text.")
-    bom = raw.startswith(BOM)
     try:
-        decoded = raw[len(BOM):].decode("utf-8") if bom else raw.decode("utf-8")
+        decoded = raw.decode("utf-8-sig")
     except UnicodeDecodeError:
         raise _EditFail(ErrorCode.BINARY, f"{rel} is not UTF-8 text.")
     sha = sha12(raw)
@@ -72,7 +70,7 @@ def _load(ctx: ToolContext, path: Path, rel: str) -> _FileBuf:
         raise _EditFail(ErrorCode.CONFLICT, f"{rel} changed since you last read it (sha {known}→{sha}). "
                                             "Re-read the region you are editing.")
     text = decoded.replace("\r\n", "\n")
-    return _FileBuf(path, rel, raw, sha, b"\r\n" in raw, bom, text.endswith("\n"), text, text)
+    return _FileBuf(path, rel, sha, decoded, raw.startswith(BOM), text.endswith("\n"), text, text)
 
 
 # ---------------------------------------------------------------------------------------------
@@ -229,9 +227,7 @@ def _encode(buf: _FileBuf, text: str) -> bytes:
         text += "\n"
     elif not buf.had_newline and text.endswith("\n"):
         text = text[:-1]
-    if buf.crlf:
-        text = text.replace("\n", "\r\n")
-    return (BOM if buf.bom else b"") + text.encode("utf-8")
+    return (BOM if buf.bom else b"") + restore_endings(buf.decoded, text).encode("utf-8")
 
 
 def edit_files(args: EditFilesArgs, ctx: ToolContext) -> ToolResult:
@@ -270,15 +266,14 @@ def edit_files(args: EditFilesArgs, ctx: ToolContext) -> ToolResult:
     for b in bufs.values():
         old_l, new_l = split_lines(b.original), split_lines(b.text)
         stats[b.rel] = diff_stats(old_l, new_l)
-        if b in changed:
+        if b.text != b.original:
             diff_parts.append(unified_diff(old_l, new_l, f"a/{b.rel}", f"b/{b.rel}"))
 
     outside = any(not ctx.workspace.is_inside(b.path) for b in bufs.values())
     if changed:
         rejected = ask_approval(ctx, ApprovalRequest(
             kind="edit", title=f"Edit {plural(len(changed), 'file')}", paths=[str(b.path) for b in changed],
-            diff="\n".join(diff_parts), outside_workspace=outside,
-            reason="write outside workspace" if outside else "edits need approval"))
+            diff="\n".join(diff_parts), outside_workspace=outside))
         if rejected:
             return rejected
 

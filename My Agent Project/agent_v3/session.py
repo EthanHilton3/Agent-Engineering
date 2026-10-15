@@ -29,6 +29,7 @@ from .model import Cancelled, ModelAdapter, ModelError, ModelResponse, web_tools
 from .prompt import build_system_prompt
 from .tools import build_registry
 from .tools.executor import ToolCall, ToolExecutor
+from .tools.files import plural
 from .tools.registry import ToolContext, ToolRegistry
 from .workspace import CancelToken, FileState, WorkspacePolicy
 
@@ -162,7 +163,7 @@ class _Turn:
         if parts:
             return "; ".join(parts)
         n = self.stats.tool_calls
-        return f"{n} tool call{'s' if n != 1 else ''}, no files read or changed" if n else "no tool calls"
+        return f"{plural(n, 'tool call')}, no files read or changed" if n else "no tool calls"
 
     def add_sources(self, response: ModelResponse) -> None:
         for src in response.sources:

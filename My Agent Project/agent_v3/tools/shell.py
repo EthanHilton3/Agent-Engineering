@@ -49,7 +49,8 @@ def cap_output(text: str, ctx: ToolContext) -> tuple[str, dict]:
     capped = text[:head] + f"\n[… {len(text) - limit:,} chars omitted …]\n" + text[-(limit - head):]
     meta: dict = {"truncated": True}
     try:
-        log = ctx.output_dir / f"{ctx.turn_id}_{ctx.call_index}.log"
+        name = re.sub(r"[^\w.-]", "_", ctx.call_id) or "output"     # call ids are unique across rounds
+        log = ctx.output_dir / f"{name}.log"
         log.parent.mkdir(parents=True, exist_ok=True)
         log.write_text(text, encoding="utf-8")
         shown = ctx.workspace.display(log)
@@ -80,12 +81,9 @@ def run_command(args: RunCommandArgs, ctx: ToolContext) -> ToolResult:
     outside = not ctx.workspace.is_inside(cwd)
     rejected = ask_approval(ctx, ApprovalRequest(
         kind="command", title="Run command", command=args.command, cwd=str(cwd), timeout=timeout,
-        outside_workspace=outside,
-        reason="cwd outside workspace" if outside else "commands need approval"))
+        outside_workspace=outside))
     if rejected:
         return rejected
-    if ctx.cancel.cancelled:
-        return ToolResult.failure(ErrorCode.CANCELLED, "Cancelled by user before running.", summary="cancelled")
 
     env = {**os.environ, "PYTHONIOENCODING": "utf-8", "PYTHONUNBUFFERED": "1", "GIT_PAGER": "cat",
            "PAGER": "cat", "NO_COLOR": "1", "TERM": "dumb"}

@@ -55,6 +55,28 @@ def diff_stats(old: list[str], new: list[str]) -> tuple[int, int, int, int]:
     return added, removed, first, last
 
 
+def restore_endings(original: str, text: str) -> str:
+    """Give \\n-normalized `text` the line endings of `original` (as decoded, \\r\\n intact).
+
+    Lines kept from `original` keep their own ending; new or changed lines get the majority ending,
+    so a mixed-ending file is not rewritten wholesale (ties go to \\r\\n)."""
+    old = original.split("\n")
+    crlf = sum(line.endswith("\r") for line in old[:-1])
+    if crlf == 0:
+        return text
+    if crlf == len(old) - 1:
+        return text.replace("\n", "\r\n")
+    majority = "\r\n" if 2 * crlf >= len(old) - 1 else "\n"
+    old_bodies = [line.removesuffix("\r") for line in old[:-1]]
+    new = text.split("\n")
+    out = []
+    for tag, i1, _, j1, j2 in difflib.SequenceMatcher(None, old_bodies, new[:-1], autojunk=False).get_opcodes():
+        for k in range(j2 - j1):
+            ending = ("\r\n" if old[i1 + k].endswith("\r") else "\n") if tag == "equal" else majority
+            out.append(new[j1 + k] + ending)
+    return "".join(out) + new[-1]
+
+
 def unified_diff(old: list[str], new: list[str], name_old: str, name_new: str) -> str:
     return "\n".join(difflib.unified_diff(old, new, name_old, name_new, lineterm=""))
 
@@ -369,8 +391,7 @@ def search_text(args: SearchTextArgs, ctx: ToolContext) -> ToolResult:
 
     if total_matches == 0:
         return ToolResult.success("[0 matches in 0 files]", "0 matches", matches=0, files=0, **meta)
-    width = max(r[0] for _, rows in blocks for r in rows if r)
-    width = len(str(width))
+    width = len(str(max(r[0] for _, rows in blocks for r in rows if r)))
     out = []
     for rel, rows in blocks:
         out.append(rel)
@@ -399,7 +420,7 @@ def write_file(args: WriteFileArgs, ctx: ToolContext) -> ToolResult:
     path = ctx.workspace.resolve(args.path)
     rel = ctx.workspace.display(path)
     outside = not ctx.workspace.is_inside(path)
-    meta = {"path": rel, **({"outside_workspace": True} if outside else {})}
+    meta = {"path": rel, **_outside_meta(ctx, path)}
     existed = path.exists()
     old_raw = b""
     if existed:
@@ -413,12 +434,12 @@ def write_file(args: WriteFileArgs, ctx: ToolContext) -> ToolResult:
         if known is None or known != sha12(old_raw):
             return ToolResult.failure(ErrorCode.CONFLICT, "Read the current file before overwriting it.", **meta)
 
-    crlf = b"\r\n" in old_raw
     bom = old_raw.startswith(BOM)
+    old_text = old_raw.decode("utf-8-sig", errors="replace")
     content = args.content.replace("\r\n", "\n")
     new_lines = split_lines(content)
     if existed:
-        old_lines = split_lines(old_raw.decode("utf-8-sig", errors="replace"))
+        old_lines = split_lines(old_text)
         diff = unified_diff(old_lines, new_lines, f"a/{rel}", f"b/{rel}")
         added, removed, _, _ = diff_stats(old_lines, new_lines)
         title, extra = "Overwrite file", {}
@@ -430,15 +451,14 @@ def write_file(args: WriteFileArgs, ctx: ToolContext) -> ToolResult:
         title, extra = "Create file", {"full_content": args.content}
 
     rejected = ask_approval(ctx, ApprovalRequest(
-        kind="edit", title=title, paths=[str(path)], diff=diff, outside_workspace=outside, metadata=extra,
-        reason="write outside workspace" if outside else "edits need approval"))
+        kind="edit", title=title, paths=[str(path)], diff=diff, outside_workspace=outside, metadata=extra))
     if rejected:
         return rejected
 
     # Re-check after the (possibly long) approval wait.
-    if path.exists() != existed or (existed and sha12(path.read_bytes()) != sha12(old_raw)):
+    if path.exists() != existed or (existed and path.read_bytes() != old_raw):
         return ToolResult.failure(ErrorCode.CONFLICT, f"{rel} changed while waiting for approval. Re-read it and retry.", **meta)
-    data = (content.replace("\n", "\r\n") if crlf else content).encode("utf-8")
+    data = restore_endings(old_text, content).encode("utf-8")
     if bom:
         data = BOM + data
     try:

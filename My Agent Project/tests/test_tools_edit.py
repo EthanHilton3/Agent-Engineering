@@ -217,6 +217,16 @@ def test_crlf_preserved(env):
     assert env.read("w.txt") == b"one\r\nTWO\r\nTHREE\r\nFOUR\r\n"
 
 
+def test_mixed_endings_keep_untouched_lines_and_new_lines_use_the_majority(env):
+    env.write("lf.txt", b"a\nb\nc\r\nd\n")
+    assert edit(env, E("lf.txt", "b", "B\nB2")).ok
+    assert env.read("lf.txt") == b"a\nB\nB2\nc\r\nd\n"
+    env.write("crlf.txt", b"a\r\nb\r\nc\nd\r\n")
+    r = edit(env, E("crlf.txt", "b", "B\nB2"))
+    assert r.ok and r.metadata["files_changed"] == [{"path": "crlf.txt", "added": 2, "removed": 1}]
+    assert env.read("crlf.txt") == b"a\r\nB\r\nB2\r\nc\nd\r\n"
+
+
 def test_crlf_in_model_text_still_matches(env):
     env.write("w.txt", b"one\r\ntwo\r\n")
     assert edit(env, E("w.txt", "one\r\ntwo", "1\r\n2")).ok
@@ -402,6 +412,13 @@ def test_write_overwrite_preserves_crlf_and_bom(env):
     env.call("read_file", path="w.txt")
     assert env.call("write_file", path="w.txt", content="x\ny\nz\n", overwrite=True).ok
     assert env.read("w.txt") == b"\xef\xbb\xbfx\r\ny\r\nz\r\n"
+
+
+def test_write_overwrite_keeps_mixed_endings_of_unchanged_lines(env):
+    env.write("m.txt", b"one\r\ntwo\nthree\r\nfour\r\n")
+    env.call("read_file", path="m.txt")
+    assert env.call("write_file", path="m.txt", content="one\ntwo\nTHREE\nfour\nfive\n", overwrite=True).ok
+    assert env.read("m.txt") == b"one\r\ntwo\nTHREE\r\nfour\r\nfive\r\n"
 
 
 def test_write_new_file_keeps_content_as_given(env):

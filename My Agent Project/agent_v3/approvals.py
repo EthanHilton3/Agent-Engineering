@@ -32,7 +32,7 @@ class Decision(StrEnum):
 class ApprovalRequest:
     kind: Literal["command", "edit"]
     title: str                     # "Run command" / "Edit 2 files" / "Create file"
-    reason: str                    # why asking; the policy replaces the tool's default text
+    reason: str = ""               # why asking; set by the gateway from the policy
     request_id: str = ""           # assigned by the gateway when empty
     command: str | None = None
     cwd: str | None = None
@@ -161,11 +161,11 @@ class ApprovalGateway:
         with self._lock:
             if not req.request_id:
                 req.request_id = f"ap_{next(self._ids)}"
-        if self.policy is not None:
-            needs_user, reason = self.policy.check(req)
-            if not needs_user:
-                return ApprovalResult(Decision.ALLOW, by="policy")
-            req.reason = reason
+        # Without a policy everything reaches `decide`; a fresh 'ask' policy (which always needs the
+        # user) still supplies the reason text.
+        needs_user, req.reason = (self.policy or ApprovalPolicy()).check(req)
+        if not needs_user:
+            return ApprovalResult(Decision.ALLOW, by="policy")
         if self._decide is not None:
             result = self._decide(req)
         else:

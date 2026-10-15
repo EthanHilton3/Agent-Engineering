@@ -148,7 +148,7 @@ def test_truncation_saves_full_log_and_keeps_tail(make_env):
     assert "line 1000\n" not in r.output
     assert len(r.output) < 1400
     rel = r.metadata["full_output_path"]
-    assert rel.startswith(".agent_v3/outputs/t1_") and rel.endswith(".log")
+    assert rel.startswith(".agent_v3/outputs/c") and rel.endswith(".log")     # named by call_id
     assert f"Full output saved to {rel}" in r.output and "chars total" in r.output
     full = (env.root / rel).read_text(encoding="utf-8")
     assert "line 1000\n" in full and full.count("line ") == 2000

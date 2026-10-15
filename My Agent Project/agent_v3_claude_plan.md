@@ -1106,3 +1106,37 @@ Design notes and deviations:
 - `session_started` is written during `Session` construction, before the first line is read, so it is always the first line and a client needs nothing from the server's startup to be ready.
 - **Not done:** a run against the live API through the server (only the fake model was used), and any real desktop or web client. The two items still open from Phase 3 (manual CLI checks) are unchanged.
 - Exit criterion met: the protocol test passes and `PROTOCOL_VERSION = 1` is frozen.
+
+### Phase 5a — review (2026-10-14)
+
+A `/code-review high` of `agent_v3/` reported 10 findings: 5 bugs (1–5) and 5 cleanups (6–10). All 10 were applied and none were skipped. The event protocol (`PROTOCOL_VERSION = 1`) and the interfaces used by `frontends/` and `bench/` are unchanged. **Suite: 267 passed** (261 before + 6 new). Each new test was checked against the pre-fix code, where it fails. Size: `agent_v3/` went from 3,956 to **3,964 lines (+8)**: the bug fixes add about 30 lines, mostly `restore_endings`, and the cleanups remove about 23. Tests went from 3,523 to 3,607 lines.
+
+Bug fixes:
+1. **Fixed: CONFLICT was repeat-guarded.** A `write_file`/`edit_files` CONFLICT tells the model to read the file first. But the read is read-only, so it never cleared the guard, and the identical retry got `repeated_failure`. CONFLICT is now in `_NOT_REPEAT_GUARDED`. Test: `test_conflict_is_not_repeat_guarded_so_a_read_unblocks_the_same_write`.
+2. **Fixed: full-output logs could overwrite each other.** Logs were named `<turn_id>_<call_index>.log`, so a later round, or a later session where turn ids restart at `t1`, overwrote a log the model had been told to search. They are now named by `call_id`, sanitized to `[\w.-]`, and `ToolContext.call_index` is removed. Test: `test_truncated_outputs_in_different_rounds_keep_separate_logs`. `test_truncation_saves_full_log_and_keeps_tail` now checks for the new name.
+3. **Fixed: edits could be written after a cancel.** Only `run_command` checked the cancel token after approval. `ask_approval` now does the check, so every tool returns CANCELLED instead of acting. Test: `test_cancel_right_after_approval_writes_nothing` (approve, then cancel before the worker resumes; the file is unchanged, no `tool_completed`, and the turn record has no edit). **Residual window:** if the cancel arrives after the worker has passed this check, the write still happens and can be missing from the turn record. Closing that would need the write to hold a lock that `cancel()` also takes, and that was not done.
+4. **Fixed: any 400 mentioning "include" dropped the include values.** `_drop_rejected` matched the bare word "include" anywhere in the message. It now matches exact include values in the param or message, or `err.param` equal to `include` / `include[...]`. Test: `test_unrelated_400_mentioning_include_keeps_include`.
+5. **Fixed: mixed line endings became all-CRLF on any edit.** One CRLF line was enough to convert the whole file. The new `files.restore_endings` keeps each unchanged line's original ending (matched with SequenceMatcher). New and changed lines get the file's majority ending, with ties going to CRLF. Pure-LF and pure-CRLF files behave exactly as before. It is used by both `edit_files` and `write_file`. Tests: `test_mixed_endings_keep_untouched_lines_and_new_lines_use_the_majority`, `test_write_overwrite_keeps_mixed_endings_of_unchanged_lines`.
+
+Cleanups from the review:
+6. **Applied: dead model-adapter code removed.** `OPTIONAL_PARAMS`, `ModelResponse.status`/`incomplete_reason`/`web`, and the `web` Counter threaded through `respond`/`_attempt`/`_finish` are gone. The two drop sets are merged into `dropped_params`, which still holds `prompt_cache_key` and rejected include values.
+7. **Applied: arguments are parsed once.** `_run_one` parses them once and passes the result, or the parse error, to `_execute`. Its unused `index` parameter is removed.
+8. **Applied: one `plural()`.** `formatting.py` imports it from `tools/files.py` instead of redefining it, and `session.py` uses it in place of an inline copy.
+9. **Applied: the policy owns the approval reason.** Tools no longer pass `reason`, and `ApprovalRequest.reason` defaults to `""`. The gateway sets it from the policy, or from a fresh `'ask'` policy when none is set; that policy always needs the user, so the no-policy path still always reaches `decide`. Phase 1 tests still get "write outside workspace" / "cwd outside workspace". The one visible change: with no policy, inside-workspace requests now read "edits/commands need approval in 'ask' mode" instead of "edits/commands need approval". This is display-only.
+10. **Applied: the transcript keeps one file handle.** `TranscriptWriter` opens the file on the first line and flushes after each write. `close()` writes the usage block and closes the file, and events after `close()` are ignored.
+
+Other simplifications:
+- Removed the unused `_FileBuf.raw` field and the unused `ToolRegistry.__contains__`.
+- `_load` decodes with `utf-8-sig`, which is equivalent to the manual BOM strip.
+- `edit_files` checks `b.text != b.original` instead of a dataclass-equality membership test.
+- `write_file` uses `_outside_meta` and compares bytes directly after the approval wait instead of hashing both sides.
+- `search_text`'s width computation is one line instead of two.
+
+Not cut, by choice: there is little dead code left. The only remaining unused name is `ErrorCode.OUTSIDE_WORKSPACE`, kept because it is part of the documented error vocabulary. The size gap to the §12 estimates (about 1,950 LOC) comes from features with tests:
+- the Windows Job Object process-tree kill
+- the lenient indentation and tab re-mapping in `edit_files`
+- the CLI's approval and diff UI
+- `claim_stdio`
+- strict-schema conversion
+
+Removing any of them would cost behavior or test coverage.

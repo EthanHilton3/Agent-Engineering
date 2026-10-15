@@ -136,6 +136,21 @@ def test_repeated_failure_memory_is_per_turn(make_session):
     assert outputs(fake.requests[3])["c2"].startswith("Error (not_found)")
 
 
+def test_conflict_is_not_repeat_guarded_so_a_read_unblocks_the_same_write(make_session):
+    write = dict(path="a.py", content="x = 2\n", overwrite=True)
+    s, fake, log = make_session([
+        [fn_call("write_file", call_id="w1", **write)],
+        [fn_call("read_file", call_id="r1", path="a.py")],
+        [fn_call("write_file", call_id="w2", **write)],
+        [msg("done")],
+    ], approval="full-auto")
+    p = ws_file(s, "a.py", "x = 1\n")
+    run(s)
+    assert outputs(fake.requests[1])["w1"].startswith("Error (conflict): Read the current file")
+    assert outputs(fake.requests[3])["w2"].startswith("Overwrote a.py")
+    assert p.read_text() == "x = 2\n"
+
+
 # --- approvals -------------------------------------------------------------------------------
 
 def edit_call(path="a.py", old="x = 1", new="x = 2", call_id=None):
@@ -327,6 +342,34 @@ def test_cancel_during_approval(make_session):
     assert log.of("turn_completed")[0].text == "fresh"
 
 
+def test_cancel_right_after_approval_writes_nothing(tmp_path):
+    """A stdio/CLI client sends approval_response allow and then cancel straight away. When the cancel
+    lands before the approved tool resumes, the tool must not write: cancel() has already committed
+    a turn record without the edit, and the worker's ToolCompleted is dropped as stale."""
+    cfg = AgentConfig(workspace=tmp_path, web_search=False)
+    log, holder = EventLog(), {}
+
+    def on_event(ev):
+        log(ev)
+        if ev.type == "approval_resolved" and ev.decision == "allow":
+            holder["session"]._active.cancel.cancel()      # the cancel arrives before the worker wakes
+
+    fake = FakeModelAdapter(cfg, [[edit_call()], [msg("unused")]])
+    s = holder["session"] = Session(cfg, on_event, model=fake)
+    p = ws_file(s, "a.py", "x = 1\n")
+    tid = s.start_turn("edit")
+    worker = next(t for t in threading.enumerate() if t.name == f"agent-{tid}")
+    req = log.wait_for("approval_requested").request
+    assert s.respond_approval(req["request_id"], "allow") is True
+    s.cancel()
+    worker.join(5)
+    assert not worker.is_alive()
+    assert p.read_text() == "x = 1\n"
+    assert log.types()[-1] == "turn_cancelled" and not log.of("tool_completed")
+    assert "edited" not in s.history[-1]["content"] and len(fake.requests) == 1
+    s.close()
+
+
 def test_cancel_during_command_kills_it(make_session):
     s, fake, log = make_session([[fn_call("run_command", command="sleep 30")], [msg("unused")]],
                                 approval="full-auto")
@@ -337,6 +380,19 @@ def test_cancel_during_command_kills_it(make_session):
     s.cancel()
     assert time.monotonic() - t0 < 3 and not s.busy
     assert "Turn cancelled by user after" in s.history[-1]["content"]
+
+
+def test_truncated_outputs_in_different_rounds_keep_separate_logs(make_session):
+    s, fake, log = make_session([
+        [fn_call("run_command", command="seq 1 2000")],
+        [fn_call("run_command", command="seq 5001 7000")],
+        [msg("done")],
+    ], approval="full-auto", tool_output_max_chars=1000)
+    run(s)
+    paths = [e.metadata["full_output_path"] for e in log.of("tool_completed")]
+    assert len(set(paths)) == 2
+    first, second = ((s.workspace.root / p).read_text(encoding="utf-8") for p in paths)
+    assert first.startswith("1\n") and second.startswith("5001\n")
 
 
 def test_cancel_when_idle_is_a_noop(make_session):
@@ -501,6 +557,17 @@ def test_rejected_include_is_dropped_with_a_notice(make_session):
     [notice] = log.of("notice")
     assert notice.code == "include_rejected" and notice.level == "warning"
     assert log.of("turn_completed")[1].text == "still fine"
+
+
+def test_unrelated_400_mentioning_include_keeps_include(make_session):
+    err = bad_request("Invalid value: 'extreme'. Supported values include: 'low', 'medium', 'high'.",
+                      param="reasoning.effort")
+    s, fake, log = make_session([Round(output=[msg("fine")], error=err)])
+    run(s)
+    assert log.of("turn_failed")[0].error_code == "bad_request"
+    assert not log.of("notice") and len(fake.requests) == 1
+    run(s)
+    assert fake.requests[1]["include"] == ["reasoning.encrypted_content"]
 
 
 def test_rejected_prompt_cache_key_is_dropped(make_session):

@@ -62,7 +62,6 @@ class ToolContext:
     call_id: str
     seen_reads: dict                 # per-turn dedupe cache (§6.4); guarded by seen_lock
     seen_lock: threading.Lock = field(default_factory=threading.Lock)
-    call_index: int = 0              # position within the model's batch; names full-output logs
 
     @property
     def output_dir(self) -> Path:
@@ -96,9 +95,6 @@ class ToolRegistry:
     def names(self) -> list[str]:
         return list(self._specs)
 
-    def __contains__(self, name: str) -> bool:
-        return name in self._specs
-
     def schemas(self) -> list[dict]:
         """Responses API function tools, in registration order (never reordered within a session)."""
         return [{"type": "function", "name": s.name, "description": s.description,
@@ -107,8 +103,12 @@ class ToolRegistry:
 
 
 def ask_approval(ctx: ToolContext, req: ApprovalRequest) -> ToolResult | None:
-    """Ask the gateway. Returns None when allowed, or the REJECTED result to hand back to the model."""
+    """Ask the gateway. Returns None when allowed, or the REJECTED/CANCELLED result to hand back.
+
+    A cancel can land while the user is approving; checking here means no tool acts after it."""
     res = ctx.approvals.request(req, turn_id=ctx.turn_id, cancel=ctx.cancel)
+    if ctx.cancel.cancelled:
+        return ToolResult.failure(ErrorCode.CANCELLED, "Cancelled by user before running.", summary="cancelled")
     if res.allowed:
         return None
     what = "command" if req.kind == "command" else "edit"

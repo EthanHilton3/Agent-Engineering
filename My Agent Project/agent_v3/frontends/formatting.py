@@ -1,6 +1,8 @@
 """Plain-text formatting shared by the CLI and the transcript. Works on event/stats dicts, no I/O."""
 from __future__ import annotations
 
+from ..tools.files import plural
+
 
 def fmt_tokens(n: int) -> str:
     return str(n) if n < 1000 else f"{n / 1000:.1f}k"
@@ -13,10 +15,6 @@ def fmt_cost(cost: float | None, places: int | None = None) -> str:
     if places is None:
         places = 3 if cost >= 0.01 else 4
     return f"${cost:.{places}f}"
-
-
-def plural(n: int, word: str) -> str:
-    return f"{n} {word}" + ("" if n == 1 else "s")
 
 
 def round_summary(d: dict, sep: str = " · ") -> str:
