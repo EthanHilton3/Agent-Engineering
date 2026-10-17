@@ -16,8 +16,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from .config import REASONING_EFFORTS, AgentConfig
-from .events import Event, jsonable, now_iso
+from .events import Event, event_from_dict, jsonable, now_iso
 from .jsonl import append_line, read_jsonl, repair_tail
+from .stats import StatsCounter, TurnStats
 
 if os.name == "nt":
     import msvcrt
@@ -32,6 +33,7 @@ TERMINAL_EVENTS = frozenset({"turn_completed", "turn_cancelled", "turn_failed"})
 EVENTS_FILE, HISTORY_FILE, META_FILE, LOCK_FILE = "events.jsonl", "history.jsonl", "meta.json", "lock"
 RESTORABLE_SETTINGS = ("model", "reasoning")       # never "approval" (owner decision, option C)
 _REPLACE_TRIES, _REPLACE_PAUSE_S = 5, 0.02
+_LOCK_TRIES, _LOCK_PAUSE_S = 5, 0.025      # ~100 ms: outlasts another process's momentary status probe
 _O_BINARY = getattr(os, "O_BINARY", 0)
 
 
@@ -89,9 +91,7 @@ class SavedSession:
     all_turn_lines: int
     turn_no: int
     last_seq: int
-    totals: dict
-    prune_history: bool
-    model: str
+    totals: dict                      # TurnStats.to_dict() shape
     interrupted: InterruptedTurn | None
     saved_config: dict = field(default_factory=dict)   # {model, reasoning, approval, prune_history} at the last save
 
@@ -124,8 +124,8 @@ class _Locked(OSError):
 class _FileLock:
     """Non-blocking exclusive OS lock on one file. The OS releases it when the process dies (§4.6)."""
 
-    def __init__(self, path: Path):
-        self.fd: int | None = os.open(path, os.O_RDWR | os.O_CREAT | _O_BINARY, 0o600)
+    def __init__(self, path: Path, *, create: bool = True):
+        self.fd: int | None = os.open(path, os.O_RDWR | (os.O_CREAT if create else 0) | _O_BINARY, 0o600)
         try:
             if os.name == "nt":
                 msvcrt.locking(self.fd, msvcrt.LK_NBLCK, 1)
@@ -214,7 +214,7 @@ class SessionStore:
         folder = self._existing_dir(session_id)
         lock = error = None
         try:
-            lock = _FileLock(folder / LOCK_FILE)
+            lock = _take_lock(folder / LOCK_FILE)
         except _Locked:
             raise SessionInUse(session_id, self._owner_pid(session_id)) from None
         except OSError as e:
@@ -236,14 +236,30 @@ class SessionStore:
         return saved, recorder
 
     def delete(self, session_id: str) -> None:
-        """Remove one session's folder. Raises SessionInUse while it is open anywhere."""
+        """Remove one session's folder. Raises SessionInUse while it is open anywhere.
+
+        Everything but the lock file is removed while the lock is held, so no other process can open the session
+        halfway through. A lock file or folder that cannot be removed afterwards is left behind: with no logs it
+        is no longer a session (not listed, not loadable).
+        """
         folder = self._existing_dir(session_id)
         try:
-            lock = _FileLock(folder / LOCK_FILE)
+            lock = _take_lock(folder / LOCK_FILE)
         except _Locked:
             raise SessionInUse(session_id, self._owner_pid(session_id)) from None
-        lock.close()                                    # Windows cannot delete an open file
-        shutil.rmtree(folder)
+        try:
+            for path in folder.iterdir():
+                if path.name != LOCK_FILE:
+                    _retry(shutil.rmtree if path.is_dir() else os.unlink, path)
+        except OSError as e:
+            raise SessionStoreError(f"Could not delete session {session_id}: {e}") from e
+        finally:
+            lock.close()                                # Windows cannot delete an open file
+        try:
+            _retry((folder / LOCK_FILE).unlink)         # a status probe in another process can hold it briefly
+            folder.rmdir()
+        except OSError:
+            pass
 
     # -- internals -----------------------------------------------------------------------------
 
@@ -275,12 +291,13 @@ class SessionStore:
         return _read_lines(folder / EVENTS_FILE), _read_lines(folder / HISTORY_FILE)
 
     def _status(self, sid: str, meta: dict) -> str:
+        """Probe the lock without creating it: listing writes nothing."""
         try:
-            _FileLock(self.session_dir(sid) / LOCK_FILE).close()
+            _FileLock(self.session_dir(sid) / LOCK_FILE, create=False).close()
         except _Locked:
             return "in_use"
         except OSError:
-            pass                                        # e.g. a read-only folder: nobody can hold it either
+            pass                                        # no lock file, or a read-only folder: nobody holds it
         return "interrupted" if meta.get("active_turn") else "idle"
 
     def _owner_pid(self, sid: str) -> int | None:
@@ -307,8 +324,7 @@ class SessionStore:
         saved = SavedSession(
             info=info, turn_lines=[line for line in lines[last_reset + 1:] if line.get("kind") == "turn"],
             all_turn_lines=rebuilt["turns"], turn_no=meta["turn_no"], last_seq=meta["last_seq"],
-            totals=_rounded(meta["totals"]), prune_history=bool(meta.get("prune_history", True)), model=info.model,
-            interrupted=interrupted,
+            totals=meta["totals"].to_dict(), interrupted=interrupted,
             saved_config={"model": info.model, "reasoning": info.reasoning, "approval": str(meta.get("approval") or ""),
                           "prune_history": bool(meta.get("prune_history", True))})
         return saved, meta
@@ -400,6 +416,8 @@ class SessionRecorder:
         record = None if record is None else jsonable(record)
         line = {"v": FORMAT_VERSION, "kind": "turn", "turn_id": turn_id, "outcome": outcome, "ts": now_iso(),
                 "model": self._meta.get("model") or "",       # the model whose items these are (restore, §5.2)
+                "prune_history": bool(self._meta.get("prune_history", True)),   # for a meta rebuilt from the logs
+                "web_search_fee_usd": self._meta.get("web_search_fee_usd"),     # prices its searches in a rebuild
                 "user_message": user_message, "text": text, "items": items,
                 "record": None if record == items else record}
         self._ensure_files()
@@ -409,7 +427,7 @@ class SessionRecorder:
         m["turns"] += 1
         m["turn_no"] = max(m["turn_no"], _turn_number(turn_id))
         if stats:
-            _add_stats(m["totals"], stats)
+            m["totals"].add(TurnStats.from_dict(stats))
         if outcome == "interrupted":             # no terminal event follows, so save the meta now
             if m["active_turn"] == turn_id:
                 m["active_turn"] = None
@@ -467,7 +485,7 @@ class SessionRecorder:
             m["turn_no"] = max(m["turn_no"], _turn_number(d["turn_id"]))
             m["title"] = m["title"] or session_title(d["user_message"])
         elif d["type"] in TERMINAL_EVENTS:
-            _add_stats(m["totals"], d.get("stats"))
+            m["totals"].add(TurnStats.from_dict(d.get("stats")))
             if m["active_turn"] == d["turn_id"]:
                 m["active_turn"] = None
         else:
@@ -478,26 +496,43 @@ class SessionRecorder:
     def _write_meta(self) -> None:
         """Replace meta.json atomically. On Windows a reader can block os.replace: retry, then skip (it is a cache)."""
         m = self._meta
-        m["cost_usd"] = _cost(m["totals"])
-        data = json.dumps({**m, "totals": _rounded(m["totals"])}, ensure_ascii=False, indent=1).encode("utf-8")
+        m["cost_usd"] = m["totals"].cost_usd
+        data = json.dumps({**m, "totals": m["totals"].to_dict()}, ensure_ascii=False, indent=1).encode("utf-8")
         path, tmp = self.dir / META_FILE, self.dir / f".{META_FILE}.tmp"
         fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | _O_BINARY, 0o600)
         with os.fdopen(fd, "wb") as f:
             f.write(data)
-        for attempt in range(_REPLACE_TRIES):
-            try:
-                os.replace(tmp, path)
-                return
-            except PermissionError:
-                if attempt + 1 < _REPLACE_TRIES:
-                    time.sleep(_REPLACE_PAUSE_S)
         try:
-            tmp.unlink()
-        except OSError:
-            pass
+            _retry(os.replace, tmp, path)
+        except PermissionError:
+            try:
+                tmp.unlink()
+            except OSError:
+                pass
 
 
 # -- helpers -----------------------------------------------------------------------------------
+
+def _take_lock(path: Path) -> _FileLock:
+    """`_FileLock`, retried for ~100 ms: `list()` and `load()` in another process probe locks for a moment."""
+    for _ in range(_LOCK_TRIES - 1):
+        try:
+            return _FileLock(path)
+        except _Locked:
+            time.sleep(_LOCK_PAUSE_S)
+    return _FileLock(path)
+
+
+def _retry(fn, *args) -> None:
+    """Call `fn`, retrying a PermissionError: on Windows another process reading the file blocks it briefly."""
+    for _ in range(_REPLACE_TRIES - 1):
+        try:
+            fn(*args)
+            return
+        except PermissionError:
+            time.sleep(_REPLACE_PAUSE_S)
+    fn(*args)
+
 
 def _open_append(path: Path):
     fd = os.open(path, os.O_WRONLY | os.O_APPEND | os.O_CREAT | _O_BINARY, 0o600)
@@ -513,17 +548,18 @@ def _read_lines(path: Path) -> list[dict]:
 
 def _settings(config: AgentConfig) -> dict:
     return {"workspace": str(config.workspace), "model": config.model, "reasoning": config.reasoning,
-            "approval": config.approval, "prune_history": config.prune_history}
+            "approval": config.approval, "prune_history": config.prune_history,
+            "web_search_fee_usd": config.web_search_fee_usd}
 
 
 def _new_meta(sid: str, config: AgentConfig) -> dict:
     return {"v": FORMAT_VERSION, "session_id": sid, "title": "", "created": "", "updated": "", "turns": 0,
             "cost_usd": 0.0, **_settings(config), "turn_no": 0, "last_seq": 0, "active_turn": None,
-            "owner_pid": os.getpid(), "totals": {}}
+            "owner_pid": os.getpid(), "totals": TurnStats()}
 
 
 def _read_meta(folder: Path, sid: str) -> dict | None:
-    """meta.json if it is readable and well-formed, else None (the caller rebuilds it from the logs)."""
+    """meta.json if it is readable and well-formed (`totals` as a TurnStats), else None (rebuilt from the logs)."""
     try:
         meta = json.loads((folder / META_FILE).read_bytes())
     except (OSError, ValueError):
@@ -534,7 +570,7 @@ def _read_meta(folder: Path, sid: str) -> dict | None:
                       ("title", str), ("updated", str), ("created", str)):
         if not isinstance(meta.get(key), kind) or isinstance(meta.get(key), bool):
             return None
-    return meta
+    return {**meta, "totals": TurnStats.from_dict(meta["totals"])}
 
 
 def _info(sid: str, meta: dict, status: str) -> SessionInfo:
@@ -546,22 +582,6 @@ def _info(sid: str, meta: dict, status: str) -> SessionInfo:
 def _turn_number(turn_id) -> int:
     m = re.fullmatch(r"t(\d+)", turn_id) if isinstance(turn_id, str) else None
     return int(m.group(1)) if m else 0
-
-
-def _add_stats(totals: dict, stats) -> None:
-    if isinstance(stats, dict):
-        for k, v in stats.items():
-            if isinstance(v, (int, float)) and not isinstance(v, bool):
-                totals[k] = totals.get(k, 0) + v
-
-
-def _rounded(totals: dict) -> dict:
-    """Same rounding as TurnStats.to_dict."""
-    return {k: round(v, 6 if k.endswith("_usd") else 3) if isinstance(v, float) else v for k, v in totals.items()}
-
-
-def _cost(totals: dict) -> float:
-    return round(totals.get("model_cost_usd", 0) + totals.get("web_cost_usd", 0), 6)
 
 
 def _interrupted(events: list[dict], lines: list[dict]) -> InterruptedTurn | None:
@@ -578,39 +598,30 @@ def _interrupted(events: list[dict], lines: list[dict]) -> InterruptedTurn | Non
                            events=[e for e in events[starts[-1]:] if e.get("turn_id") == turn_id])
 
 
-def _logged_stats(events: list[dict], turn_id: str) -> dict:
-    """The costs and counts a turn without a terminal event left in the log (its rounds were billed)."""
-    s = dict.fromkeys(("rounds", "tool_calls", "web_searches", "web_opens", "web_finds", "input_tokens",
-                       "cached_tokens", "output_tokens", "reasoning_tokens"), 0)
-    s.update(model_cost_usd=0.0, web_cost_usd=0.0, model_wait_s=0.0, approval_wait_s=0.0)
-    web_keys = {"search": "web_searches", "open_page": "web_opens", "find_in_page": "web_finds"}
-    for e in events:
-        if e.get("turn_id") != turn_id:
-            continue
-        kind = e.get("type")
-        if kind == "model_round_completed":
-            s["rounds"] += 1
-            for k in ("input_tokens", "cached_tokens", "output_tokens", "reasoning_tokens"):
-                s[k] += e.get(k) or 0
-            s["model_cost_usd"] += e.get("cost_usd") or 0.0
-            s["model_wait_s"] += e.get("duration_s") or 0.0
-        elif kind == "tool_started":
-            s["tool_calls"] += 1
-        elif kind == "web_action" and e.get("kind") in web_keys:
-            s[web_keys[e["kind"]]] += 1
-        elif kind == "approval_resolved":
-            s["approval_wait_s"] += e.get("wait_s") or 0.0
-    s["web_cost_usd"] = s["web_searches"] * AgentConfig.web_search_fee_usd
-    return s
+def _logged_stats(events: list[dict], turn_id: str, web_fee_usd: float) -> dict:
+    """The stats a turn without a terminal event left in the log (its rounds were billed), counted as live."""
+    counter = StatsCounter(web_fee_usd)
+    for d in events:
+        if d.get("turn_id") == turn_id:
+            try:
+                counter.observe(event_from_dict(d))
+            except (TypeError, ValueError):
+                continue                         # a line from another version; the rest still counts
+    return counter.stats.to_dict()
+
+
+def _line_setting(line: dict | None, name: str, kind, default):
+    """A setting tagged on a turn line, or `default` for a line without it (or no line)."""
+    value = (line or {}).get(name)
+    return value if isinstance(value, kind) and (kind is bool or not isinstance(value, bool)) else default
 
 
 def _meta_from_logs(sid: str, events: list[dict], lines: list[dict]) -> dict:
-    """Rebuild meta.json from the two logs (owner_pid is unknown)."""
+    """Rebuild meta.json from the two logs (owner_pid is unknown). Totals are summed in commit order, as live."""
     config: dict = {}
     title = created = updated = ""
     turn_no = last_seq = 0
-    totals: dict = {}
-    ended = set()
+    ended: dict = {}                             # turn_id -> its terminal event's stats
     for e in events:
         seq, ts, turn_id = e.get("seq"), str(e.get("ts") or ""), e.get("turn_id")
         if isinstance(seq, int):
@@ -624,22 +635,27 @@ def _meta_from_logs(sid: str, events: list[dict], lines: list[dict]) -> dict:
             title = title or session_title(str(e.get("user_message") or ""))
             updated = max(updated, ts)
         elif kind in TERMINAL_EVENTS:
-            _add_stats(totals, e.get("stats"))
-            ended.add(turn_id)
+            ended[turn_id] = e.get("stats")
             updated = max(updated, ts)
+    totals = TurnStats()
     turn_lines = [line for line in lines if line.get("kind") == "turn"]
     for line in turn_lines:                      # `updated` follows the recorder: turn start and end only
-        turn_no = max(turn_no, _turn_number(line.get("turn_id")))
-        if line.get("outcome") == "interrupted" and line.get("turn_id") not in ended:
-            _add_stats(totals, _logged_stats(events, line["turn_id"]))
+        turn_id = line.get("turn_id")
+        turn_no = max(turn_no, _turn_number(turn_id))
+        if turn_id in ended:
+            totals.add(TurnStats.from_dict(ended[turn_id]))
+        else:                                    # interrupted, or the process died between commit and terminal event
+            fee = _line_setting(line, "web_search_fee_usd", (int, float), AgentConfig.web_search_fee_usd)
+            totals.add(TurnStats.from_dict(_logged_stats(events, turn_id, fee)))
             updated = max(updated, str(line.get("ts") or ""))
+    last_line = turn_lines[-1] if turn_lines else None
     interrupted = _interrupted(events, lines)
-    prune = config.get("prune_history")
-    if not isinstance(prune, bool):              # not in the config summary: a kept `record` means it was off
-        prune = not any(line.get("record") is not None for line in turn_lines)
     return {"v": FORMAT_VERSION, "session_id": sid, "title": title, "workspace": str(config.get("workspace") or ""),
-            "created": created, "updated": updated, "turns": len(turn_lines), "cost_usd": _cost(totals),
+            "created": created, "updated": updated, "turns": len(turn_lines), "cost_usd": totals.cost_usd,
             "model": str(config.get("model") or ""), "reasoning": str(config.get("reasoning") or ""),
-            "approval": str(config.get("approval") or ""), "prune_history": prune, "turn_no": turn_no,
-            "last_seq": last_seq, "active_turn": interrupted.turn_id if interrupted else None, "owner_pid": None,
-            "totals": totals}
+            "approval": str(config.get("approval") or ""),
+            "prune_history": _line_setting(last_line, "prune_history", bool, True),
+            "web_search_fee_usd": _line_setting(last_line, "web_search_fee_usd", (int, float),
+                                                AgentConfig.web_search_fee_usd),
+            "turn_no": turn_no, "last_seq": last_seq, "active_turn": interrupted.turn_id if interrupted else None,
+            "owner_pid": None, "totals": totals}

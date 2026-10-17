@@ -18,18 +18,18 @@ import logging
 import threading
 import time
 import uuid
-from collections import Counter
-from dataclasses import dataclass, fields, replace
+from dataclasses import replace
 from typing import Callable
 
 from .approvals import ApprovalGateway, ApprovalPolicy, Decision
 from .config import AgentConfig
-from .events import (ApprovalResolved, Event, ModelRoundCompleted, ModelRoundStarted, Notice, SessionResumed,
-                     SessionStarted, ToolCompleted, ToolStarted, TurnCancelled, TurnCompleted, TurnFailed, TurnStarted,
-                     WebAction, event_from_dict, now_iso)
+from .events import (Event, ModelRoundCompleted, ModelRoundStarted, Notice, SessionResumed, SessionStarted,
+                     ToolCompleted, ToolStarted, TurnCancelled, TurnCompleted, TurnFailed, TurnStarted, event_from_dict,
+                     now_iso)
 from .model import Cancelled, ModelAdapter, ModelError, ModelResponse, web_tools
 from .prompt import build_system_prompt, prompt_cache_key
 from .sessions import InterruptedTurn, SavedSession, SessionRecorder, SessionStore
+from .stats import StatsCounter, TurnStats
 from .tools import build_registry
 from .tools.executor import ToolCall, ToolExecutor
 from .tools.files import plural
@@ -48,89 +48,35 @@ class Busy(RuntimeError):
     """A turn is running; the command needs an idle session."""
 
 
-@dataclass
-class TurnStats:
-    rounds: int = 0
-    tool_calls: int = 0
-    parallel_groups: int = 0
-    web_searches: int = 0
-    web_opens: int = 0
-    web_finds: int = 0
-    input_tokens: int = 0
-    cached_tokens: int = 0
-    output_tokens: int = 0
-    reasoning_tokens: int = 0
-    model_cost_usd: float = 0.0
-    web_cost_usd: float = 0.0
-    elapsed_s: float = 0.0
-    model_wait_s: float = 0.0
-    tool_wait_s: float = 0.0
-    approval_wait_s: float = 0.0
-
-    def add(self, other: "TurnStats") -> None:
-        for f in fields(self):
-            setattr(self, f.name, getattr(self, f.name) + getattr(other, f.name))
-
-    def to_dict(self) -> dict:
-        out = {}
-        for f in fields(self):
-            v = getattr(self, f.name)
-            out[f.name] = round(v, 6 if f.name.endswith("_usd") else 3) if isinstance(v, float) else v
-        return out
-
-
 def _clip(text: str, n: int) -> str:
     return text if len(text) <= n else text[: n - 1] + "…"
 
 
-class _Turn:
+class _Turn(StatsCounter):
     """Per-turn state. `observe` runs under the session lock for every delivered event of this turn."""
 
     def __init__(self, turn_id: str, generation: int, user_message: str, base_history: list, web_fee: float):
+        super().__init__(web_fee)
         self.id = turn_id
         self.generation = generation
         self.user_message = user_message
         self.base_history = base_history         # history snapshot taken at start_turn
-        self.web_fee = web_fee
         self.cancel = CancelToken()
         self.started = time.monotonic()
-        self.stats = TurnStats()
         self.sources: list[dict] = []
         self.sources_all: list[dict] = []
         self._started_calls: dict[str, ToolStarted] = {}
-        self._group_sizes: Counter = Counter()
         self._reads: dict[str, None] = {}
         self._edits: dict[str, list[int]] = {}
         self._commands: list[str] = []
         self._rejected: list[str] = []
 
     def observe(self, ev: Event) -> None:
-        s = self.stats
-        if isinstance(ev, ModelRoundCompleted):
-            s.rounds += 1
-            s.input_tokens += ev.input_tokens
-            s.cached_tokens += ev.cached_tokens
-            s.output_tokens += ev.output_tokens
-            s.reasoning_tokens += ev.reasoning_tokens
-            s.model_cost_usd += ev.cost_usd or 0.0
-            s.model_wait_s += ev.duration_s
-        elif isinstance(ev, WebAction):
-            if ev.kind == "search":
-                s.web_searches += 1
-                s.web_cost_usd = s.web_searches * self.web_fee
-            elif ev.kind == "open_page":
-                s.web_opens += 1
-            elif ev.kind == "find_in_page":
-                s.web_finds += 1
-        elif isinstance(ev, ToolStarted):
-            s.tool_calls += 1
+        super().observe(ev)                      # the stats
+        if isinstance(ev, ToolStarted):
             self._started_calls[ev.call_id] = ev
-            self._group_sizes[ev.group] += 1
-            s.parallel_groups = sum(1 for n in self._group_sizes.values() if n >= 2)
         elif isinstance(ev, ToolCompleted):
             self._record(ev)
-        elif isinstance(ev, ApprovalResolved):
-            s.approval_wait_s += ev.wait_s
 
     def _record(self, ev: ToolCompleted) -> None:
         started = self._started_calls.get(ev.call_id)
@@ -187,6 +133,7 @@ class Session:
         self.config = config
         self._recorder: SessionRecorder | None = None
         self._save_failure_reported = False
+        self._hold_save_failure = False          # while the resume events go out (§5.5: session_resumed comes next)
         saved: SavedSession | None = None
         if resume is not None:
             if store is None:
@@ -204,13 +151,16 @@ class Session:
             if self._recorder is not None:
                 self._recorder.close()
             raise
-        self._emit(SessionStarted(config={**config.summary(), "tools": self.registry.names()}))
+        opening: list[Event] = [SessionStarted(config={**config.summary(), "tools": self.registry.names()})]
         if resumed is not None:
-            self._emit(resumed)
+            opening.append(resumed)
             if resumed.interrupted_turn:
-                self._emit(Notice(level="warning", code="turn_interrupted", message=(
+                opening.append(Notice(level="warning", code="turn_interrupted", message=(
                     f"Turn {resumed.interrupted_turn} was interrupted when the agent stopped. "
                     "Its partial work is noted in the history.")))
+        for n, event in enumerate(opening, 1):
+            self._hold_save_failure = n < len(opening)   # a failure at open or recovery is reported after these
+            self._emit(event)
 
     def _setup(self, config: AgentConfig, on_event: Callable[[Event], None], model: ModelAdapter | None,
                registry: ToolRegistry | None) -> None:
@@ -246,9 +196,7 @@ class Session:
         cfg = self.config
         self._seq = saved.last_seq
         self._turn_no = saved.turn_no
-        names = {f.name for f in fields(TurnStats)}
-        self._totals = TurnStats(**{k: v for k, v in saved.totals.items()
-                                    if k in names and isinstance(v, (int, float)) and not isinstance(v, bool)})
+        self._totals = TurnStats.from_dict(saved.totals)
         full = False
         turns = []
         for line in saved.turn_lines:
@@ -258,7 +206,7 @@ class Session:
             # A full turn (record kept) goes back only to the model that made it, in a session that keeps full
             # turns; otherwise its pruned record does, which is valid for any model.
             if record is not None:
-                if not cfg.prune_history and (line.get("model") or saved.model) == cfg.model:
+                if not cfg.prune_history and (line.get("model") or saved.info.model) == cfg.model:
                     full = True
                 else:
                     items = record
@@ -342,7 +290,6 @@ class Session:
             self.files = FileState()       # the model no longer remembers what it read
             if self._recorder is not None:
                 self._recorder.on_reset()
-                self._report_save_failure()
             self._emit(Notice(level="info", code="new_conversation", message="Conversation history cleared."))
 
     def close(self) -> None:
@@ -392,9 +339,12 @@ class Session:
             return True
 
     def _report_save_failure(self) -> None:
-        """Emit one `session_save_failed` notice the first time the recorder disables itself (§5.4)."""
+        """Emit one `session_save_failed` notice the first time the recorder disables itself (§5.4).
+
+        Called only by `_emit`, after it delivered an event, so the notice follows the event whose write failed.
+        """
         r = self._recorder
-        if r is not None and r.error is not None and not self._save_failure_reported:
+        if r is not None and r.error is not None and not self._save_failure_reported and not self._hold_save_failure:
             self._save_failure_reported = True
             self._emit(Notice(level="warning", code="session_save_failed",
                               message=f"Saving stopped: {r.error}. The session continues unsaved."))
@@ -525,7 +475,6 @@ class Session:
         if self._recorder is not None:
             self._recorder.on_commit(turn_id=turn.id, outcome=outcome, user_message=turn.user_message, text=text,
                                      items=items, record=record)
-            self._report_save_failure()
 
     def _close_stats(self, turn: _Turn) -> dict:
         turn.stats.elapsed_s = time.monotonic() - turn.started

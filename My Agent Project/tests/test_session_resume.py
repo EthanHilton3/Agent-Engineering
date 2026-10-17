@@ -356,7 +356,7 @@ def test_a_failing_disk_gives_one_notice_and_the_turns_still_complete(open_sessi
     assert [i["content"] for i in s.history if i["role"] == "assistant"] == ["no file", "again"]
 
 
-def test_a_failing_fsync_is_reported_before_the_terminal_event(open_session, monkeypatch):
+def test_a_failing_fsync_is_reported_right_after_the_terminal_event(open_session, monkeypatch):
     s, fake, log = open_session([[msg("a1")], [msg("a2")]])
     run(s, "u1")
 
@@ -366,8 +366,73 @@ def test_a_failing_fsync_is_reported_before_the_terminal_event(open_session, mon
     monkeypatch.setattr(os, "fsync", broken)
     run(s, "u2")
     types = log.types()
-    assert types[-2:] == ["notice", "turn_completed"] and log.events[-2].code == "session_save_failed"
+    assert types[-2:] == ["turn_completed", "notice"] and log.events[-1].code == "session_save_failed"
     assert not s.saved and s.history[-2]["content"] == "a2"
+
+
+def interrupt(open_session, ws):
+    """A saved session whose t2 was running when its process "died". Returns (session id, release event)."""
+    release = threading.Event()
+    s1, fake1, _ = open_session([[msg("one")], Round(output=[msg("never")], block="release", release=release)])
+    run(s1, "first")
+    s1.start_turn("second")
+    wait_blocked(fake1, n=2)
+    with s1._lock:
+        s1._recorder.close()
+    return s1.session_id, release
+
+
+def test_a_save_failure_on_resume_is_reported_after_the_resume_events(open_session, ws, monkeypatch):
+    sid, release = interrupt(open_session, ws)
+    try:
+        def broken(fd):
+            raise OSError(5, "Input/output error")
+
+        monkeypatch.setattr(os, "fsync", broken)            # the recovered turn's history line fails
+        s2, _, log2 = open_session([], resume=sid)
+        assert log2.types() == ["session_started", "session_resumed", "notice", "notice"]
+        assert [e.code for e in log2.of("notice")] == ["turn_interrupted", "session_save_failed"]
+        assert not s2.saved
+        s2.close()
+        monkeypatch.undo()
+
+        def unlockable(path, **kwargs):
+            raise PermissionError(13, "Permission denied", str(path))
+
+        s3, _, log3 = open_session([], resume=sid)           # recovers t2 for real this time
+        s3.close()
+        monkeypatch.setattr(sessions_mod, "_FileLock", unlockable)   # e.g. a read-only folder
+        s4, _, log4 = open_session([], resume=sid)
+        assert log4.types() == ["session_started", "session_resumed", "notice"]
+        assert log4.events[-1].code == "session_save_failed" and not s4.saved
+    finally:
+        release.set()
+
+
+def test_totals_rebuilt_from_the_logs_equal_the_live_ones(open_session, ws, store):
+    from test_sessions_store import Driver
+
+    config = AgentConfig(workspace=ws, web_search=False, web_search_fee_usd=0.05)
+    rec = store.create("s_000000000001", config)
+    d = Driver(rec, "s_000000000001", config)
+    d.start()
+    d.turn("t1", "one")
+    d.begin("t2", "dies after a search and a parallel group")
+    d.emit(ev.WebAction(turn_id="t2", kind="search", detail="query"))
+    for call_id in ("p1", "p2"):
+        d.emit(ev.ToolStarted(turn_id="t2", call_id=call_id, name="read_file", group=2, target="b.py", args={}))
+    rec.close()
+
+    s, _, _ = open_session([], resume="s_000000000001", web_search_fee_usd=0.05)   # recovers t2
+    live = s.usage_totals()
+    assert (live["parallel_groups"], live["web_searches"], live["web_cost_usd"]) == (1, 1, 0.05)
+    s.close()
+    meta_path = store.session_dir("s_000000000001") / "meta.json"
+    recorded = store.load("s_000000000001")
+    meta_path.unlink()
+    rebuilt = store.load("s_000000000001")
+    assert rebuilt.totals == recorded.totals and same_totals(rebuilt.totals, live)
+    assert rebuilt.info.cost_usd == recorded.info.cost_usd == pytest.approx(0.001 + 0.001 + 0.05)
 
 
 def test_resume_errors_are_raised_before_anything_is_emitted(open_session, ws, store, monkeypatch):

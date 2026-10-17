@@ -56,6 +56,7 @@ The five open questions from the first draft are settled. The rest of this spec 
 agent_v3/
   jsonl.py             NEW   append_line(), read_jsonl() (skips a torn last line), repair_tail()
   sessions.py          NEW   SessionStore, SessionRecorder, SessionInfo, SavedSession, errors, locking
+  stats.py             NEW   TurnStats and StatsCounter, shared by session.py and sessions.py (S1–S2 review)
   events.py            +     SessionResumed and ConfigChanged events, event_from_dict()
   session.py           +     store=/resume= parameters, recorder hooks, restore, interrupted-turn recovery, update_config()
   model.py             +     ModelAdapter.set_config()
@@ -96,7 +97,7 @@ The core (`sessions.py`, `jsonl.py`) imports nothing from `frontends/`. `read_ev
 |---|---|---|---|
 | `events.jsonl` | Appended per event, flushed per line (no fsync). | Every event's `to_dict()` **except `text_delta`**, which `turn_completed.text` already contains. The deltas would make the file about 10× larger, and replay does not need them. So `seq` has gaps on disk; on the wire it has none. | yes: transcript, turn summaries, interrupted-turn activity |
 | `history.jsonl` | One line per commit, flushed and **fsync'd** before the turn's terminal event is emitted. | §4.3 | yes: what the model is given on resume |
-| `meta.json` | Replaced atomically (`os.replace`) at `turn_started` and at each terminal event. | §4.4 | **no**: a listing cache, rebuilt from the two logs if it is missing or unreadable |
+| `meta.json` | Replaced atomically (`os.replace`) at `open()` (new `owner_pid`), at `turn_started`, at each terminal event, and when an interrupted turn is recovered. | §4.4 | **no**: a listing cache, rebuilt from the two logs if it is missing or unreadable |
 | `lock` | Created on open. Its content is unused. | §4.6 | — |
 | `transcript.md` | Only by `/export` with no path. | Markdown | no |
 
@@ -109,6 +110,7 @@ The core (`sessions.py`, `jsonl.py`) imports nothing from `frontends/`. `read_ev
 
 ```json
 {"v": 1, "kind": "turn", "turn_id": "t2", "outcome": "completed", "ts": "2026-10-16T14:03:09.120+00:00",
+ "model": "gpt-6-luna", "prune_history": true, "web_search_fee_usd": 0.01,
  "user_message": "Now add a clear() method with a test.", "text": "Added Store.clear() and test_clear.",
  "items": [{"role": "user", "content": "Now add..."}, {"role": "assistant", "content": "Added..."},
            {"role": "developer", "content": "Turn record: read store.py; edited store.py (+3 −0) ..."}],
@@ -117,6 +119,10 @@ The core (`sessions.py`, `jsonl.py`) imports nothing from `frontends/`. `read_ev
 ```
 
 - `outcome` is one of `completed`, `cancelled`, `failed` or `interrupted`. `items` is exactly what `Session` appended to `self.history` at that commit.
+- **Per-line settings** (S2 and the S1–S2 review). Each turn line records the settings it was made under:
+  - `model` decides on restore whether this line's `items` may go back in full (§5.2).
+  - `prune_history` and `web_search_fee_usd` let a `meta.json` rebuilt from the logs report the right setting and price searches with the session's fee.
+  - A line without these fields falls back to `SessionInfo.model`, `prune_history=True` and `AgentConfig`'s default fee.
 - `record` is the pruned triple (user / assistant / turn-record developer note). It is `null` when it equals `items`, which is always the case with `prune_history=True` and for cancel, fail and interrupted. With `prune_history=False`, `items` holds the whole turn: reasoning items with `encrypted_content`, `function_call`/`function_call_output` pairs and `web_search_call` items. `record` then holds the pruned form, so a resume can fall back to it (§5.2).
 - `reset` is written by `new_conversation()`, and only if a turn line exists since the last reset. A resume restores only the lines after the last `reset`. Export shows everything.
 
@@ -125,7 +131,8 @@ The core (`sessions.py`, `jsonl.py`) imports nothing from `frontends/`. `read_ev
 ```json
 {"v": 1, "session_id": "s_3f9a1c0b7d2e", "title": "Fix the failing test in test_store.py",
  "workspace": "C:\\work\\app", "created": "2026-10-15T16:58:02.114+00:00", "updated": "2026-10-15T17:20:41.530+00:00",
- "turns": 3, "cost_usd": 0.0123, "model": "gpt-6-luna", "reasoning": "medium", "prune_history": true,
+ "turns": 3, "cost_usd": 0.0123, "model": "gpt-6-luna", "reasoning": "medium", "approval": "ask",
+ "prune_history": true, "web_search_fee_usd": 0.01,
  "turn_no": 3, "last_seq": 214, "active_turn": null, "owner_pid": 41236,
  "totals": {"rounds": 14, "tool_calls": 22, "...": "every TurnStats key"}}
 ```
@@ -154,7 +161,9 @@ CLI listing format (non-TTY uses ASCII and no colour, as everywhere else):
 
 **Decision:** a session can be open in at most one process.
 - `SessionStore.open()` and `create()` open `<id>/lock` and take a non-blocking exclusive OS lock: `msvcrt.locking(fd, LK_NBLCK, 1)` on Windows, `fcntl.flock(fd, LOCK_EX | LOCK_NB)` on POSIX. The handle is kept until `Session.close()`.
-- Failure raises `SessionInUse(owner_pid)`, where `owner_pid` comes from `meta.json` and is shown only for information.
+- **Retry.** `open()` and `delete()` try the lock 5 times, 25 ms apart (about 100 ms), before giving up. This outlasts a momentary status probe from `list()` or `load()` in another process (below). A session that really is open therefore takes about 100 ms to report.
+- Failure raises `SessionInUse(session_id, owner_pid)`, where `owner_pid` comes from `meta.json` and is shown only for information.
+- **Status probes are read-only.** `list()` and `load()` find `in_use` by briefly locking an *existing* `lock` file; a missing `lock` file means "not in use", and nothing is created.
 
 **Why OS locks rather than a pid file:** the OS releases the lock when the process dies, even on a hard kill, so there is never a stale lock to clean up. Checking whether a pid is alive is unsafe on Windows, where `os.kill(pid, 0)` calls `TerminateProcess`. Both lock kinds also conflict between two handles in the *same* process (Windows locks are per handle; `flock` is per open file description), so the conflict can be tested in-process.
 
@@ -162,7 +171,9 @@ CLI listing format (non-TTY uses ASCII and no colour, as everywhere else):
 - Two new sessions in one workspace never conflict, because they have different folders.
 - `--continue` when the latest session is in use exits with "session s_… is open in another agent_v3 process (pid N); use --resume to pick another". It does not quietly pick an older session.
 - `list`, `export` and `load` read without the lock. The logs are append-only, so a reader sees a consistent prefix.
-- `delete` takes the lock first, so an in-use session cannot be deleted, then closes the handle and removes the folder (Windows cannot delete an open file).
+- **`delete` order.** It takes the lock, so an in-use session cannot be deleted. It removes every file except `lock` *while still holding the lock*, so no other process can open the session halfway through. Then it releases the lock and removes `lock` and the folder.
+  - That last step is best effort: a folder left holding only `lock` has no logs, so it is neither listed nor loadable.
+  - A failure while the lock is held raises `SessionStoreError` naming the session, not a raw `OSError`.
 
 ---
 
@@ -174,31 +185,37 @@ CLI listing format (non-TTY uses ASCII and no colour, as everywhere else):
 class SessionStoreError(Exception): ...
 class SessionNotFound(SessionStoreError): ...
 class AmbiguousSession(SessionStoreError): ...        # .matches: list[str]
-class SessionInUse(SessionStoreError): ...            # .owner_pid: int | None
+class SessionInUse(SessionStoreError): ...            # (session_id, owner_pid: int | None)
 
 @dataclass(frozen=True)
 class SessionInfo:                                    # one listing row
     session_id: str; title: str; created: str; updated: str; turns: int; cost_usd: float
-    model: str; status: str                           # idle | in_use | interrupted | current
+    model: str; reasoning: str                        # reasoning: needed by config_for_resume (S1)
+    status: str                                       # idle | in_use | interrupted | current
 
 @dataclass
 class SavedSession:                                   # what a resume needs
     info: SessionInfo
     turn_lines: list[dict]                            # history.jsonl "turn" lines after the last reset
     all_turn_lines: int
-    turn_no: int; last_seq: int; totals: dict; prune_history: bool; model: str
+    turn_no: int; last_seq: int; totals: dict         # totals: TurnStats.to_dict() shape
     interrupted: "InterruptedTurn | None"             # turn_id, user_message, events: list[dict]
+    saved_config: dict                                # {model, reasoning, approval, prune_history} at the last save
+    # The model lives in info.model and saved_config only (S1–S2 review removed the duplicate fields).
 
 class SessionStore:
-    def __init__(self, root: Path): ...               # .../.agent_v3/sessions
+    def __init__(self, root: Path, *, gitignore: Path | None = None): ...  # for_workspace passes .agent_v3/.gitignore
     @classmethod
     def for_workspace(cls, workspace: Path) -> "SessionStore": ...
     def list(self, limit: int | None = None) -> list[SessionInfo]: ...
     def resolve(self, ref: str) -> str: ...           # id | unique prefix | "latest" -> full id
-    def load(self, session_id: str) -> SavedSession: ...           # read-only, no lock
+    def load(self, session_id: str) -> SavedSession: ...           # read-only, no lock, creates no files
     def create(self, session_id: str, config: AgentConfig) -> "SessionRecorder": ...   # folder + lock at first turn_started
-    def open(self, session_id: str) -> tuple[SavedSession, "SessionRecorder"]: ...    # takes the lock
-    def delete(self, session_id: str) -> None: ...    # SessionInUse if locked
+    def open(self, session_id: str, config: AgentConfig | None = None
+             ) -> tuple[SavedSession, "SessionRecorder"]: ...      # takes the lock (with retry, §4.6); `config` is
+                                                                   # the resumed config, saved from the next turn on
+    def delete(self, session_id: str) -> None: ...    # SessionInUse if locked; order in §4.6
+    def session_dir(self, session_id: str) -> Path: ...
     def events_path(self, session_id: str) -> Path: ...
     def read_events(self, session_id: str, after_seq: int = 0,
                     limit: int | None = None) -> tuple[list[dict], bool]: ...  # saved events with seq > after_seq; (events, done)
@@ -210,10 +227,14 @@ def config_for_resume(launch: AgentConfig, info: SessionInfo, explicit: set[str]
 
 class SessionRecorder:                                # every call arrives under the Session lock
     def on_event(self, event: Event) -> None: ...     # skips text_delta; updates meta at turn start/end
-    def on_commit(self, *, turn_id, outcome, user_message, text, items, record) -> None: ...
+    def on_commit(self, *, turn_id, outcome, user_message, text, items, record,
+                  stats: dict | None = None) -> None: ...  # stats: only for a recovered interrupted turn (§5.3)
     def on_reset(self) -> None: ...
     def close(self) -> None: ...                      # flush, close files, release the lock
+    error: str | None; healthy: bool                  # how Session learns of a failure (§5.4)
 ```
+
+`agent_v3/stats.py` holds `TurnStats` (with `from_dict()` and a `cost_usd` property) and `StatsCounter(web_fee_usd).observe(event)`. `session._Turn` subclasses `StatsCounter`, and the meta rebuild replays logged events through the same counter, so live and rebuilt totals are identical. `from agent_v3.session import TurnStats` still works.
 
 ```python
 class Session:
@@ -239,7 +260,7 @@ class Session:
 | state | on resume | why |
 |---|---|---|
 | `session_id` | restored | The same folder and log continue. |
-| history | **Restored** from the turn lines after the last reset: `[fresh system message] + items…`. If the saved session used `prune_history=False` and the current config uses `prune_history=True`, **or** the model differs, `record` is used instead of `items`. | Pruned items (user/assistant/developer) are plain messages, valid for any model. Encrypted reasoning items are tied to a model. Mixing them across models, or re-entering full traffic into a pruning session, is the risky case, and the pruned form is always valid. |
+| history | **Restored** from the turn lines after the last reset: `[fresh system message] + items…`. Decided **per line** (S2): a line's `items` go back only when the current config has `prune_history=False` **and** the line's `model` equals the current model; otherwise its `record` is used. | Pruned items (user/assistant/developer) are plain messages, valid for any model. Encrypted reasoning items are tied to a model. Mixing them across models, or re-entering full traffic into a pruning session, is the risky case, and the pruned form is always valid. |
 | system prompt | **rebuilt** (`build_system_prompt(config)`) | The Environment block has the date, approval mode, git status and the `python -m` hint, and all of these can change between runs. A stale prompt that claims `full-auto` while running `ask` would mislead the model. |
 | `prompt_cache_key` | **rebuilt** from the new prompt | It is a hash of workspace + prompt + tools (v3 Phase 5b). The same day and config give the same key and a warm cache for the restored prefix. A new day gives a cold first round, about one cold round's cost, the same as any new session. |
 | `_turn_no` | restored (`turn_no`, including an interrupted turn) | Turn ids stay unique within the log (t4 follows t3). The transcript and the interrupted-turn detection rely on this. |
@@ -268,7 +289,8 @@ class Session:
 
 - `_emit`: after stamping and `turn.observe`, call `recorder.on_event(event)` **before** `on_event`, so an event the frontend has seen is already on disk.
 - `_commit`, `_fail`, `cancel()`: compute `new_items` once, `self.history += new_items`, call `recorder.on_commit(...)`, **then** emit the terminal event (§4.2 order). `new_conversation()` calls `recorder.on_reset()`; `close()` calls `recorder.close()`.
-- **Failure policy.** Any `OSError` from the recorder is caught inside `SessionRecorder`. It disables the recorder, and `Session` emits one `notice` (`warning`, code `session_save_failed`, message names the path and error). `saved` becomes False. A failing disk never fails a turn (the CLI's sink rule in v3 Phase 3, applied to the core).
+- **Failure policy.** Any exception from the recorder (not only `OSError`, S2) is caught inside `SessionRecorder`. It disables the recorder and sets `error`, and `Session` emits one `notice` (`warning`, code `session_save_failed`, "Saving stopped: … The session continues unsaved."). `saved` becomes False. A failing disk never fails a turn (the CLI's sink rule in v3 Phase 3, applied to the core).
+- **Where the notice appears** (S1–S2 review). `_emit` is the only place that reports it, right after the event being delivered. So a failed history line is reported just **after** the turn's terminal event. On resume, a failure at `open()` or during recovery is held until after `session_started`, `session_resumed` and any `turn_interrupted` notice, so those stay adjacent (§5.5, §7.3).
 - **Cost under the lock.** One `write` + `flush` per event and one `fsync` per turn. This happens under the session lock, like the server's pipe write. A slow disk slows event delivery, which is accepted (§13).
 
 ### 5.5 New events `session_resumed` and `config_changed`
@@ -684,3 +706,26 @@ Nothing else changes. `test_session.py`, `test_approvals.py`, `test_executor.py`
 **Notes for S3.**
 - Build the store with `SessionStore.for_workspace(config.workspace)` and pass `resume=` a full id (`store.resolve(ref)` first). Catch `SessionStoreError` around `Session(...)`; nothing has been emitted when it is raised.
 - Frontends that ignore unknown event types already cope with `session_resumed`. The CLI renderer and `TranscriptWriter` will need a case for it (and for the `turn_interrupted` and `session_save_failed` notices).
+
+### S1–S2 review (2026-10-17)
+
+A `/code-review high` of `agent-v3-sessions` against `master` found 8 issues. All 8 are fixed, and one owner addition (an `open()` retry) is built. Each regression test below was run against the S2 code (HEAD `session.py` and `sessions.py`) and failed there for the reason given.
+
+**Findings.**
+1. **Rebuilt totals dropped a committed turn that had no terminal event** (`_meta_from_logs`). Only `interrupted` lines had their logged stats added, so a crash between the history line's fsync and `turn_completed` lost that turn's billed rounds from the totals for good. *Fix:* the rebuild now walks the turn lines in commit order. Each line adds its terminal event's stats, or `_logged_stats` when it has none. This is also the order the live recorder adds them in. *Test:* `test_a_commit_without_its_terminal_event_keeps_its_costs_when_meta_is_rebuilt` (old: `rounds, tool_calls == (2, 2)`, not `(3, 3)`).
+2. **`delete()` released the lock before `rmtree`.** *Fix:* every file except `lock` is removed while the lock is held (each unlink retried on Windows `PermissionError`). Then the lock is released, and `lock` and the folder are removed best-effort: a folder left with only `lock` has no logs, so it is not listed and not loadable. A failure while the lock is held raises `SessionStoreError` naming the session, not a raw `OSError`. *Test:* `test_delete_removes_the_logs_before_it_releases_the_lock` opens the session at the moment the lock is released and expects `SessionNotFound` (old: the open succeeded, and on Windows `rmtree` then failed with `PermissionError` on `events.jsonl`).
+3. **`prune_history` was guessed when meta.json was rebuilt.** *Fix (owner decision):* every turn line now records `prune_history`, the same way as the per-line `model` from S2. The rebuild takes it from the last turn line, or `True` if no line has it (no turn line yet, or a line written before this change). `session_started.config` and `config.summary()` are unchanged. This replaces S1 deviation 10. *Test:* `test_a_rebuilt_meta_takes_prune_history_from_the_last_turn_line`: a `prune_history=False` session whose only turn failed rebuilds as `False`, and after a resume with pruning on and one more turn it rebuilds as `True` (old: `True` in the first case).
+4. **and 7. Save-failure notice placement.** *Fix (owner decision):* `_emit` is now the only caller of `_report_save_failure`; the calls in `_save_commit` and `new_conversation` are gone. On resume, `Session.__init__` emits `session_started`, `session_resumed` and the `turn_interrupted` notice with `_hold_save_failure` set, and clears it for the last of them. So a failure at `open()` or during recovery is reported after the whole group (§5.5, §7). *Test:* `test_a_save_failure_on_resume_is_reported_after_the_resume_events` covers a failing fsync during recovery (`started, resumed, notice(turn_interrupted), notice(session_save_failed)`) and a lock file that cannot be opened (`started, resumed, notice(session_save_failed)`). Old order: `started, notice(save_failed), resumed`. **Behaviour change:** when a turn's history line fails, the notice now comes right *after* its terminal event, not before. This replaces S2 deviation 4. `test_a_failing_fsync_is_reported_before_the_terminal_event` is renamed `…_right_after_the_terminal_event` and its expected order is swapped.
+5. **`_logged_stats` re-implemented the stat counting.** *Fix:* new `agent_v3/stats.py` (88 lines) holds `TurnStats`, which gains `from_dict()` and a `cost_usd` property, and `StatsCounter(web_fee_usd).observe(event)`. `_Turn` subclasses `StatsCounter` and adds only its activity tracking. `_logged_stats(events, turn_id, web_fee_usd)` replays the turn's logged dicts through `event_from_dict` and a `StatsCounter`, the same way recovery does, so `parallel_groups` is counted. `meta["totals"]` is now a `TurnStats` in memory and `to_dict()` on disk, which removes `_add_stats`, `_rounded` and `_cost`. `session.py` imports `TurnStats` from `stats`, so `from agent_v3.session import TurnStats` still works. **The web fee is saved:** each turn line also records `web_search_fee_usd` (from `meta`, which now stores it with the other settings), and the rebuild prices a line's searches with that fee. Without it a rebuild cannot know a non-default fee, because `config.summary()` does not include it. Lines without the fee fall back to `AgentConfig`'s default. This replaces S1 deviation 8 and S2 deviation 6. *Test:* `test_totals_rebuilt_from_the_logs_equal_the_live_ones` recovers a turn with a search at fee 0.05 and a two-call parallel group, then deletes meta.json and expects identical totals (old: `web_cost_usd` 0.01, and no `parallel_groups`).
+6. **Listing created `lock` files.** *Fix:* `_FileLock(path, create=False)` is used by `_status`. A missing lock file means "not in use", and nothing is written. `open()` still creates it. *Test:* `test_listing_and_loading_never_create_a_lock_file` checks `list()`, `load()` and `resolve("latest")` on a folder without `lock` (old: the file was recreated).
+8. **`SavedSession.model` and `.prune_history` removed.** Only `info` and `saved_config` remain. `_restore` falls back to `saved.info.model` for a turn line without a `model` tag. The one test that read the removed fields now reads `info.model` (`saved_config` was already checked).
+
+**Owner addition: `open()` retries a lock conflict.** `_take_lock` tries `_FileLock` 5 times, 25 ms apart (about 100 ms), before `SessionInUse`. This outlasts a `list()`/`load()` status probe from another process, so S1 deviation 16's spurious `SessionInUse` is fixed. `delete()` uses the same retry. A session that really is open now takes about 100 ms to report `SessionInUse`. *Test:* `test_open_waits_out_a_momentary_status_probe` holds a probe lock released after 30 ms, then checks that a held lock still fails after ≥ 70 ms (old: `SessionInUse` at once).
+
+**Tests.** `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python -m pytest tests -q`: **315 passed, 1 skipped** (was 308; +7 new: 5 in `test_sessions_store.py`, now 30, and 2 in `test_session_resume.py`, now 16; the skip is still the POSIX-only permissions test). Changed existing tests: the fsync notice-order test (finding 4), `test_load_restores_counters_and_turn_lines` (finding 8), and `test_missing_or_corrupt_meta_is_rebuilt_from_the_logs`, which passes the fee to `_logged_stats`.
+
+**Size.** `sessions.py` is **661 lines** (was 645): stats helpers moved out, while the delete, lock-retry and line-tag code came in. `session.py` is 486 (was 537), and `stats.py` is new at 88.
+
+**Files.** `agent_v3/session.py`, `agent_v3/sessions.py`, the new `agent_v3/stats.py`, `tests/test_sessions_store.py`, `tests/test_session_resume.py`. `events.py` and `jsonl.py` needed no change. Not committed.
+
+**Spec text now out of date** (left as written; this entry overrides it): §4.3's line example lacks `model`, `prune_history` and `web_search_fee_usd`. §4.6 says `delete` "closes the handle and removes the folder". §5.1's `SavedSession` lists `prune_history` and `model`. *(Updated 2026-10-17: §3, §4.2, §4.3, §4.4, §4.6, §5.1, §5.2 and §5.4 now describe the code as built after S1, S2 and this review.)*
