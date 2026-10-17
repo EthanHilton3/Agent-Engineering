@@ -113,7 +113,7 @@ bench/
 
 The package is **self-contained**. It does not import `usage.py`, `tools.py`, or `ui.py` from the homework folder, so it can later be moved into an app unchanged. Dependencies: `openai`, `pydantic` (both installed), and `rich` (CLI only, already used by v2). No new dependencies.
 
-Run from the homework folder: `python -m agent_v3 --workspace <path> --transcript transcript4.md`.
+Run from the homework folder: `python -m agent_v3 --workspace <path>`. (`--transcript` was removed; sessions are saved and exported on demand, see `agent_v3_sessions_plan.md` §6.)
 
 ---
 
@@ -150,7 +150,7 @@ class AgentConfig:
     output_dir: Path | None = None          # default: <workspace>/.agent_v3/outputs
 ```
 
-CLI flags map one-to-one (`--model`, `--reasoning`, `--approval`, `--workspace`, `--no-web`, `--search-context-size`, `--allow-domain` (repeatable), `--max-rounds`, `--max-turn-cost`, `--no-parallel-reads`, `--no-prune-history`, `--no-dedupe-reads`, `--no-lenient-edit`, `--prompt`), plus frontend-only flags `--transcript PATH`, `--events-log PATH`, `--verbose`.
+CLI flags map one-to-one (`--model`, `--reasoning`, `--approval`, `--workspace`, `--no-web`, `--search-context-size`, `--allow-domain` (repeatable), `--max-rounds`, `--max-turn-cost`, `--no-parallel-reads`, `--no-prune-history`, `--no-dedupe-reads`, `--no-lenient-edit`, `--prompt`), plus frontend-only flags `--events-log PATH`, `--verbose`. (`--transcript` is removed, and `--resume`, `--continue`, `--no-save` are added: see `agent_v3_sessions_plan.md` §6.1.)
 
 ---
 
@@ -638,6 +638,7 @@ The CLI keeps **v2's look**: `You ›` prompt, one line per tool with `↳ name 
 - Driven entirely by events. Copy the helpers from `ui.py` (`_style`, TTY detection, symbols, spinner) and do not import `ui.py` itself.
 - **Single output thread:** the main thread owns stdout. The worker's `on_event` only does `queue.put(event)`. The main loop is `while session.busy or not q.empty(): handle(q.get(timeout=0.1))`. The spinner stops before any line is printed and before any approval prompt.
 - Tool lines are printed at `tool_completed`, one line per call: `↳ read_file  store.py  ✓ lines 1–80`. For parallel groups, print a dim header `parallel ×3` before the group's lines. This halves v2's line count.
+- Saved sessions add `/sessions`, `/resume`, `/export`, a new meaning for `/new` and an exit hint: see `agent_v3_sessions_plan.md` §6.2.
 - `text_delta` is ignored (the final Markdown render is unchanged). `model_retry` prints a dim notice.
 - **Approval prompt** (on `approval_requested`):
   ```text
@@ -736,6 +737,8 @@ An event consumer that writes v2-compatible Markdown (`**USER:**`, `> TOOL: ...`
 ```text
 > ROUND 3 · 41.2k in (39.0k cached) · 812 out (240 reasoning) · 4.1s · $0.0213
 ```
+
+The transcript is no longer a CLI flag: it is rebuilt from the saved event log by `/export` and `python -m agent_v3 export` (`agent_v3_sessions_plan.md` §6.3).
 
 ### 10.4 Event log (`frontends/eventlog.py`)
 

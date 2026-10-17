@@ -16,17 +16,21 @@ import threading
 import time
 from collections import Counter, deque
 from contextlib import suppress
+from datetime import datetime
 from itertools import cycle
 from pathlib import Path
 from typing import Callable
 
 from ..approvals import Decision
+from ..config import AgentConfig
 from ..events import Event
 from ..session import Session
-from .args import add_config_args, config_from_args
+from ..sessions import SessionInUse, SessionNotFound, SessionStore, SessionStoreError, config_for_resume
+from .args import add_config_args, add_session_args, config_from_args, explicit_settings
+from .commands import COMMANDS, format_sessions, reconfigure_utf8
 from .eventlog import EventLogWriter
-from .formatting import completion_line, format_usage, round_summary
-from .transcript import TranscriptWriter
+from .formatting import completion_line, fmt_cost, format_usage, round_summary
+from .transcript import export_transcript
 
 # Enable ANSI escape-sequence handling in supported Windows terminals.
 if os.name == "nt":
@@ -46,7 +50,10 @@ _MINUS = "−" if _TTY else "-"
 
 DOUBLE_INTERRUPT_S = 2.0
 DIFF_PREVIEW_LINES = 40
-SLASH_COMMANDS = ("/new", "/usage", "/quit")
+SLASH_COMMANDS = ("/new", "/sessions", "/resume", "/export", "/usage", "/quit")
+ARG_COMMANDS = re.compile(r"/(resume|export|sessions)(?:\s+(.+))?", re.IGNORECASE)   # these take an argument (§6.2)
+LIST_RECENT = 10                                  # how many sessions a bare /sessions shows
+RECAP_ANSWER_LINES = 15
 
 
 def _style(text: str, code: str) -> str:
@@ -55,6 +62,13 @@ def _style(text: str, code: str) -> str:
 
 def _dim(text: str) -> str:
     return _style(text, "2")
+
+
+def _short_when(iso: str) -> str:
+    try:
+        return datetime.fromisoformat(iso).astimezone().strftime("%Y-%m-%d %H:%M")
+    except ValueError:
+        return iso[:16]
 
 
 def _clip(text: str, n: int) -> str:
@@ -164,14 +178,39 @@ def _file_summary(req: dict) -> list[tuple[str, int, int]]:
 # -- the frontend ------------------------------------------------------------------------------
 
 
+class SessionOpener:
+    """Builds the `Session` for `/new` (ref None) and for a resume (a full session id), with the right config:
+    a new session gets the launch config; a resumed one gets its saved model and reasoning unless they were
+    typed (option C, §5.1). `model_of` supplies the model adapter to reuse (None: build a fresh one)."""
+
+    def __init__(self, store: SessionStore | None, on_event: Callable[[Event], None], launch: AgentConfig,
+                 explicit: set[str] | frozenset = frozenset(), model_of: Callable[[], object] | None = None):
+        self.store, self.on_event, self.launch, self.explicit, self.model_of = store, on_event, launch, explicit, model_of
+
+    def __call__(self, resume_id: str | None) -> Session:
+        config = self.launch
+        if resume_id is not None:
+            config = config_for_resume(self.launch, self.store.load(resume_id).info, set(self.explicit))
+        model = self.model_of() if self.model_of is not None else None
+        return Session(config, self.on_event, model=model, store=self.store, resume=resume_id)
+
+
 class Cli:
     def __init__(self, session: Session, events: "queue.Queue[Event]", *, verbose: bool = False,
-                 input_fn: Callable[[str], str] = input, sinks: tuple[Callable, ...] = ()):
+                 input_fn: Callable[[str], str] = input, sinks: tuple[Callable, ...] = (),
+                 store: SessionStore | None = None, open_session: Callable[[str | None], Session] | None = None,
+                 launch_config: AgentConfig | None = None, explicit: set[str] | frozenset = frozenset()):
         self.session = session
         self.q = events
         self.verbose = verbose
         self.input_fn = input_fn
         self.sinks = list(sinks)
+        self.store = store
+        self.explicit = set(explicit)
+        # /new and the default factory use the launch settings, never values a resume restored from disk.
+        self.open_session = open_session or SessionOpener(
+            store, events.put, launch_config or session.config, self.explicit, lambda: self.session.model)
+        self._listed: list[str] = []              # session ids in the order the last listing showed them
         self._buffer: deque = deque()             # events pulled from the queue ahead of dispatch
         self._spinner = _Spinner()
         self._spin_message = "Thinking…"
@@ -181,6 +220,7 @@ class Cli:
         self._group_count: Counter = Counter()
         self._headed: set[int] = set()
         self._sink_error_shown = False
+        self._was_saved = False
 
     # -- main loop -----------------------------------------------------------------------------
 
@@ -195,8 +235,10 @@ class Cli:
                     break
                 if not text:
                     continue
-                if re.fullmatch(r"/[A-Za-z]+", text):
-                    if not self._command(text.lower()):
+                match = ARG_COMMANDS.fullmatch(text)
+                if match or re.fullmatch(r"/[A-Za-z]+", text):
+                    cmd, arg = (f"/{match.group(1).lower()}", (match.group(2) or "").strip()) if match else (text.lower(), "")
+                    if not self._command(cmd, arg):
                         break
                     continue
                 self._run_turn(text)
@@ -206,18 +248,132 @@ class Cli:
             self._shutdown()
         return 0
 
-    def _command(self, cmd: str) -> bool:
+    def _command(self, cmd: str, arg: str = "") -> bool:
         """Run a slash command. False means quit."""
         if cmd == "/quit":
             return False
         if cmd == "/new":
-            self.session.new_conversation()
-            self._pump()
+            self._switch(None)
+        elif cmd == "/sessions":
+            self._cmd_sessions(arg)
+        elif cmd == "/resume":
+            self._cmd_resume(arg)
+        elif cmd == "/export":
+            self._cmd_export(arg)
         elif cmd == "/usage":
             print(format_usage(self.session.config.model, self.session.usage_totals()))
         else:
             print(_dim(f"Unknown command {cmd}. Commands: {', '.join(SLASH_COMMANDS)}"))
         return True
+
+    # -- sessions (§6.2) -----------------------------------------------------------------------
+
+    def _note(self, text: str) -> None:
+        self._say(_dim(f"  {text}"))
+
+    def _switch(self, resume_id: str | None) -> bool:
+        """Open a new session (None) or resume one, then close the current one. The new one is built first,
+        so a failed resume leaves the current session untouched."""
+        try:
+            new = self.open_session(resume_id)
+        except SessionStoreError as e:
+            self._say(_style(f"  {e}", "33"))
+            return False
+        old, self.session = self.session, new
+        old.close()
+        self._calls.clear()
+        self._group_count.clear()
+        self._headed.clear()
+        self._pump()                              # the new session's opening events: banner and recap
+        return True
+
+    def _need_store(self) -> SessionStore | None:
+        if self.store is None or not self.session.saved:
+            self._note("Sessions are not being saved (--no-save, or saving stopped), so there is nothing to list.")
+            return None
+        return self.store
+
+    def _show_sessions(self, rows) -> None:
+        self._listed = [r.session_id for r in rows]
+        self._say(*format_sessions(rows, current=self.session.session_id, ascii_only=not _TTY))
+
+    def _cmd_sessions(self, arg: str) -> None:
+        if arg.lower() not in ("", "all"):
+            self._note("Usage: /sessions [all]")
+            return
+        store = self._need_store()
+        if store is None:
+            return
+        rows = store.list()
+        if not rows:
+            self._note("No saved sessions yet.")
+            return
+        shown = rows if arg else rows[:LIST_RECENT]
+        self._show_sessions(shown)
+        if len(shown) < len(rows):
+            self._note(f"{_ELLIPSIS} {len(rows) - len(shown)} more: /sessions all")
+
+    def _cmd_resume(self, arg: str) -> None:
+        store = self._need_store()
+        if store is None:
+            return
+        try:
+            if not arg:
+                rows = store.list()
+                if not rows:
+                    self._note("No saved sessions yet.")
+                    return
+                self._show_sessions(rows)
+                try:
+                    arg = self.input_fn(f"Resume which? [1-{len(rows)}, Enter = stay here] ").strip()
+                except EOFError:
+                    print()
+                    return
+                if not arg:
+                    return
+            sid = self._resolve_choice(store, arg)
+        except SessionStoreError as e:
+            self._say(_style(f"  {e}", "33"))
+            return
+        if sid == self.session.session_id:
+            self._note(f"Already in session {sid}.")
+            return
+        self._switch(sid)
+
+    def _resolve_choice(self, store: SessionStore, arg: str) -> str:
+        """A list number from the last /sessions (or the full list), else an id, prefix or 'latest'."""
+        if arg.isdigit():
+            ids = self._listed or [r.session_id for r in store.list()]
+            if 1 <= int(arg) <= len(ids):
+                return ids[int(arg) - 1]
+            if len(arg) < 4:
+                raise SessionNotFound(f"There is no session number {arg} (the list has {len(ids)}).")
+        return store.resolve(arg)
+
+    def _cmd_export(self, arg: str) -> None:
+        store = self._need_store()
+        if store is None:
+            return
+        events = store.events_path(self.session.session_id)
+        if not events.is_file():
+            self._note("Nothing to export yet: the session is saved from its first message on.")
+            return
+        out = Path(arg).expanduser() if arg else events.with_name("transcript.md")
+        try:
+            self._say(_dim(f"  Transcript written to {export_transcript(events, out)}"))
+        except OSError as e:
+            self._say(_style(f"  could not write the transcript: {e}", "33"))
+
+    def _saved_hint(self) -> str | None:
+        """The exit line for a session that was saved and has something in it."""
+        if self.store is None or not self._was_saved:
+            return None
+        sid = self.session.session_id
+        if not self.store.events_path(sid).is_file():
+            return None
+        workspace = self.session.config.workspace
+        where = f" --workspace {workspace}" if workspace.resolve() != Path.cwd().resolve() else ""
+        return f"Session saved: {sid}{_SEP}resume with: python -m agent_v3{where} --resume {sid[2:]}"
 
     def _run_turn(self, text: str) -> None:
         self._last_interrupt = None
@@ -251,10 +407,13 @@ class Cli:
         self._turn_active = False
         self._spinner.stop()
         with suppress(KeyboardInterrupt):
+            self._was_saved = self.session.saved
             self.session.close()                  # cancels a running turn; its event is drained below
             self._pump()
             print()
             print(format_usage(self.session.config.model, self.session.usage_totals()))
+            if (hint := self._saved_hint()) is not None:
+                print(_dim(hint))
 
     # -- event intake --------------------------------------------------------------------------
 
@@ -287,7 +446,7 @@ class Cli:
             except Exception as e:                # a full disk must not kill the session
                 if not self._sink_error_shown:
                     self._sink_error_shown = True
-                    self._say(_style(f"  warning: could not write the transcript or event log: {e}", "33"))
+                    self._say(_style(f"  warning: could not write the event log: {e}", "33"))
         handler = getattr(self, f"_on_{ev.type}", None)
         if handler is not None:
             handler(ev)
@@ -315,8 +474,33 @@ class Cli:
         self._say(_dim(f"agent_v3{_SEP}{c['model']}{_SEP}reasoning {c['reasoning']}{_SEP}approval {c['approval']}"
                        f"{_SEP}web search {'on' if c['web_search'] else 'off'}"),
                   _dim(f"workspace {c['workspace']}"),
-                  _dim("Enter a task. /new = new conversation, /usage = totals, /quit = exit. "
-                       "Ctrl+C cancels a running turn."))
+                  _dim("Enter a task. /new = new session, /sessions, /resume, /export, /usage = totals, /quit = exit. "
+                       "Ctrl+C cancels a running turn."),
+                  *([_dim(f"Saving this session in {self.store.root} (git-ignored). --no-save turns saving off.")]
+                    if self.store is not None and self.session.saved else []))
+
+    def _on_session_resumed(self, ev) -> None:
+        cost = ev.totals.get("model_cost_usd", 0.0) + ev.totals.get("web_cost_usd", 0.0)
+        last = ev.turns[-1] if ev.turns else None
+        active = _short_when(last["ts"]) if last and last.get("ts") else _short_when(ev.created)
+        n = ev.turns_total
+        lines = [_dim(f"Resumed {ev.session_id}{_SEP}\"{ev.title}\"{_SEP}{n} turn{'' if n == 1 else 's'}{_SEP}"
+                      f"{fmt_cost(cost)}{_SEP}last active {active}")]
+        config, saved = self.session.config, ev.saved_config
+        for name in ("model", "reasoning"):
+            if saved.get(name) and getattr(config, name) != saved[name]:
+                lines.append(_dim(f"  {name} {getattr(config, name)} (--{name}; saved with {saved[name]})"))
+        if saved.get("approval") and config.approval != saved["approval"]:
+            lines.append(_dim(f"  approval {config.approval} (saved with {saved['approval']}; "
+                              "approval is never restored)"))
+        if last is not None:
+            lines += [f"\n{YOU} {_PROMPT_MARK} {last['user_message']}"]
+            if last.get("text"):
+                answer = last["text"].splitlines()
+                lines += [f"{AGENT} {_PROMPT_MARK}", *answer[:RECAP_ANSWER_LINES]]
+                if len(answer) > RECAP_ANSWER_LINES:
+                    lines.append(_dim(f"{_ELLIPSIS} {len(answer) - RECAP_ANSWER_LINES} more lines"))
+        self._say(*lines)
 
     def _on_model_round_started(self, ev) -> None:
         self._spin("Thinking…")
@@ -468,17 +652,56 @@ class Cli:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser("agent_v3", description="A local coding agent (terminal frontend).")
+    p = argparse.ArgumentParser(
+        "agent_v3", description="A local coding agent (terminal frontend).",
+        epilog="Every session is saved under <workspace>/.agent_v3/sessions/ (git-ignored, plain text, kept until you "
+               "delete it). Resume with --continue or --resume REF; `python -m agent_v3 sessions` lists them, "
+               "`sessions delete REF` removes one, `export REF` writes a Markdown transcript. --no-save turns saving off.")
     add_config_args(p)
-    p.add_argument("--transcript", type=Path, default=None, help="Append the conversation to this Markdown file.")
+    add_session_args(p)
+    p.add_argument("--transcript", default=None, help=argparse.SUPPRESS)       # removed: kept to explain why
     p.add_argument("--events-log", type=Path, default=None, help="Append every event to this JSONL file.")
     p.add_argument("--verbose", action="store_true", help="Show tool arguments and output, and per-round token lines.")
     return p
 
 
+def _pick_session(store: SessionStore) -> str | None:
+    """`--resume` without REF: list the sessions and ask. None means a new session."""
+    rows = store.list()
+    if not rows:
+        print(_dim("No saved sessions in this workspace; starting a new one."))
+        return None
+    print("\n".join(format_sessions(rows, ascii_only=not _TTY)))
+    while True:
+        try:
+            answer = input(f"Resume which? [1-{len(rows)}, Enter = new session] ").strip()
+        except EOFError:
+            print()
+            return None
+        if not answer:
+            return None
+        try:
+            if answer.isdigit() and 1 <= int(answer) <= len(rows):
+                return rows[int(answer) - 1].session_id
+            return store.resolve(answer)
+        except SessionStoreError as e:
+            print(_style(f"  {e}", "33"))
+
+
 def main(argv: list[str] | None = None) -> int:
+    argv = sys.argv[1:] if argv is None else list(argv)
+    if argv and argv[0] in COMMANDS:
+        from .commands import main as commands_main
+        return commands_main(argv)
     parser = build_parser()
     args = parser.parse_args(argv)
+    if args.transcript is not None:
+        parser.error("--transcript was removed: sessions are saved automatically. "
+                     "Use /export or `python -m agent_v3 export latest -o FILE`.")
+    if args.no_save and (args.resume is not None or args.continue_):
+        parser.error("--no-save cannot be combined with --resume or --continue.")
+    if args.resume is not None and args.continue_:
+        parser.error("--resume and --continue cannot be combined.")
     try:
         config = config_from_args(args)
     except ValueError as e:
@@ -488,20 +711,33 @@ def main(argv: list[str] | None = None) -> int:
     if config.prompt_path is not None and not config.prompt_path.is_file():
         parser.error(f"prompt file not found: {config.prompt_path}")
 
-    # Piped output on Windows defaults to a legacy code page; answers and summaries contain Unicode.
-    for stream in (sys.stdout, sys.stderr):
-        if hasattr(stream, "reconfigure") and (stream.encoding or "").lower().replace("-", "") != "utf8":
-            stream.reconfigure(encoding="utf-8", errors="replace")
-
-    writers = []
-    if args.transcript:
-        writers.append(TranscriptWriter(args.transcript))
-    if args.events_log:
-        writers.append(EventLogWriter(args.events_log))
+    reconfigure_utf8()
+    store = None if args.no_save else SessionStore.for_workspace(config.workspace)
+    explicit = explicit_settings(args)
     events: queue.Queue = queue.Queue()
-    session = Session(config, events.put)         # on_event runs under the session lock: only queue.put
+    # on_event runs under the session lock: only queue.put. A fresh model adapter per session (model_of=None).
+    opener = SessionOpener(store, events.put, config, explicit)
     try:
-        return Cli(session, events, verbose=args.verbose, sinks=tuple(writers)).run()
+        resume_id = None
+        if store is not None and args.continue_:
+            try:
+                resume_id = store.resolve("latest")
+            except SessionNotFound:
+                print(_dim("No saved sessions in this workspace; starting a new one."))
+        elif store is not None and args.resume == "":
+            resume_id = _pick_session(store)
+        elif store is not None and args.resume is not None:
+            resume_id = store.resolve(args.resume)
+        session = opener(resume_id)               # nothing has been emitted if this raises
+    except SessionStoreError as e:
+        hint = "; use --resume to pick another" if args.continue_ and isinstance(e, SessionInUse) else ""
+        print(f"{e}{hint}", file=sys.stderr)
+        return 2
+
+    writers = [EventLogWriter(args.events_log)] if args.events_log else []
+    try:
+        return Cli(session, events, verbose=args.verbose, input_fn=input, sinks=tuple(writers), store=store,
+                   open_session=opener, launch_config=config, explicit=explicit).run()
     finally:
         for w in writers:
             w.close()

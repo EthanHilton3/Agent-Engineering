@@ -330,7 +330,7 @@ def test_cli_survives_a_failing_sink(tmp_path, capsys):
         raise OSError("disk full")
     run_cli(s, q, ["hi"], sinks=[broken])
     out = capsys.readouterr().out
-    assert out.count("could not write the transcript") == 1 and "Still works" in out
+    assert out.count("could not write the event log") == 1 and "Still works" in out
 
 
 def test_main_rejects_bad_workspace(tmp_path, capsys):
