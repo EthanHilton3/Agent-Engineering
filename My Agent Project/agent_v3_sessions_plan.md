@@ -764,3 +764,14 @@ A `/code-review high` of `agent-v3-sessions` against `master` found 8 issues. Al
 **Not tested here (needs a person at a console):** TTY colour and spinner behaviour with the new lines, Ctrl+C during a resumed turn, and killing the terminal mid-turn. See the manual checklist in the hand-over message.
 
 **Files.** `agent_v3/frontends/args.py`, `cli.py`, `transcript.py`, new `commands.py`, new `tests/test_cli_sessions.py`, `tests/test_frontends.py` (one string), `agent_v3_claude_plan.md` (four one-line pointers), and this log. Not committed.
+
+### S3 follow-up fixes (2026-10-17)
+
+Found while running the S3 manual checklist (piped and in a real console; all checks passed, about $0.003 of API calls). Three fixes in `frontends/cli.py` and `frontends/commands.py`:
+1. **`/sessions` under `--no-save` lists the saved sessions** instead of "nothing to list". `--no-save` only stops writing, as the server's `list_sessions` does (§7.2). The CLI builds a read-only `SessionStore.for_workspace(...)` for listing when it has no saving store; listing creates no files. `/resume` and `/export` still refuse under `--no-save`.
+2. **The `--continue` "in use" error** no longer reads "…(pid N).; use --resume…"; it is now "…(pid N); use --resume to pick another."
+3. **The listing's cost column** uses `fmt_cost` (4 decimals below $0.01, so `$0.0003` instead of `$0.000`) and is one character wider; the header moved with it.
+
+Tests: `test_commands_without_saving_say_so` no longer expects `/sessions` to refuse; the header assertion in `test_listing_format_flags_and_ascii` and the in-use message test were updated; 3 tests added. Each new or changed assertion fails on the S3 code. **352 passed, 1 skipped.**
+
+Not changed, noted for later: subcommands must come first (`python -m agent_v3 sessions --workspace X`; `--workspace X sessions` is rejected, as §6.1 specifies). Every reopen of a session, even one only to export it, adds a `> RESUMED` line to its transcript. Rich Markdown joins single line breaks in answers (pre-existing v3 behaviour).

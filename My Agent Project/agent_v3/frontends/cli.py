@@ -293,6 +293,10 @@ class Cli:
             return None
         return self.store
 
+    def _list_store(self) -> SessionStore:
+        """Listing only reads saved files, so it works under --no-save too (as the server's list_sessions does)."""
+        return self.store or SessionStore.for_workspace(self.session.config.workspace)
+
     def _show_sessions(self, rows) -> None:
         self._listed = [r.session_id for r in rows]
         self._say(*format_sessions(rows, current=self.session.session_id, ascii_only=not _TTY))
@@ -301,10 +305,7 @@ class Cli:
         if arg.lower() not in ("", "all"):
             self._note("Usage: /sessions [all]")
             return
-        store = self._need_store()
-        if store is None:
-            return
-        rows = store.list()
+        rows = self._list_store().list()
         if not rows:
             self._note("No saved sessions yet.")
             return
@@ -730,8 +731,10 @@ def main(argv: list[str] | None = None) -> int:
             resume_id = store.resolve(args.resume)
         session = opener(resume_id)               # nothing has been emitted if this raises
     except SessionStoreError as e:
-        hint = "; use --resume to pick another" if args.continue_ and isinstance(e, SessionInUse) else ""
-        print(f"{e}{hint}", file=sys.stderr)
+        message = str(e)
+        if args.continue_ and isinstance(e, SessionInUse):
+            message = f"{message.rstrip('.')}; use --resume to pick another."
+        print(message, file=sys.stderr)
         return 2
 
     writers = [EventLogWriter(args.events_log)] if args.events_log else []

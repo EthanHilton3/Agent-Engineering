@@ -18,7 +18,7 @@ from agent_v3.frontends.commands import format_sessions
 from agent_v3.frontends.eventlog import EventLogWriter
 from agent_v3.frontends.transcript import TranscriptWriter
 from agent_v3.session import Session
-from agent_v3.sessions import SessionStore, config_for_resume
+from agent_v3.sessions import SessionInfo, SessionStore, config_for_resume
 
 
 # --- helpers -----------------------------------------------------------------------------------
@@ -216,6 +216,7 @@ def test_continue_reports_a_session_open_elsewhere(tmp_path, capsys):
         holder.close()
     err = capsys.readouterr().err
     assert holder.session_id in err and "open in another agent_v3 process" in err and "use --resume to pick another" in err
+    assert ".;" not in err and err.strip().endswith("use --resume to pick another.")
 
 
 # --- slash commands ----------------------------------------------------------------------------
@@ -329,9 +330,27 @@ def test_resume_shows_the_interrupted_notice(tmp_path, capsys):
 
 def test_commands_without_saving_say_so(tmp_path, capsys):
     s, q, fake, _ = open_cli(workspace(tmp_path), [], saved=False)
-    run_cli(s, q, ["/sessions", "/resume 1", "/export"])
+    run_cli(s, q, ["/resume 1", "/export"])
     out = capsys.readouterr().out
-    assert out.count("Sessions are not being saved") == 3 and "Saving this session" not in out
+    assert out.count("Sessions are not being saved") == 2 and "Saving this session" not in out
+
+
+def test_sessions_still_lists_saved_sessions_without_saving(tmp_path, capsys):
+    # --no-save only stops writing; listing reads the saved files (like the server's list_sessions).
+    root = workspace(tmp_path)
+    sid = save_session(root, "an older saved session")
+    s, q, fake, _ = open_cli(root, [], saved=False)
+    run_cli(s, q, ["/sessions"])
+    out = capsys.readouterr().out
+    assert sid[:12] in out and "an older saved session" in out and "not being saved" not in out
+    assert [p.name for p in SessionStore.for_workspace(root).root.iterdir()] == [sid]   # nothing new written
+
+
+def test_sessions_without_saving_and_nothing_saved(tmp_path, capsys):
+    s, q, fake, _ = open_cli(workspace(tmp_path), [], saved=False)
+    run_cli(s, q, ["/sessions"])
+    out = capsys.readouterr().out
+    assert "No saved sessions yet." in out and not (tmp_path / "ws" / ".agent_v3").exists()
 
 
 def test_sessions_lists_ten_then_all(tmp_path, capsys):
@@ -355,9 +374,21 @@ def test_listing_format_flags_and_ascii(tmp_path):
     sid = save_session(root, "x" * 100)
     rows = SessionStore.for_workspace(root).list()
     plain = format_sessions(rows, ascii_only=True)
-    assert plain[0] == "  #  id            updated           turns    cost  title"
+    assert plain[0] == "  #  id            updated           turns     cost  title"
     assert plain[1].startswith(f"  1  {sid[:12]}  ") and plain[1].endswith("...") and "…" not in plain[1]
     assert format_sessions(rows, current=sid)[1].startswith(f"* 1  {sid[:12]}")
+
+
+def test_listing_cost_uses_four_decimals_below_a_cent():
+    base = dict(session_id="s_0123456789ab", title="t", created="2026-10-17T10:00:00+00:00",
+                updated="2026-10-17T10:00:00+00:00", turns=1, model="m", reasoning="low", status="idle")
+    small, big = SessionInfo(cost_usd=0.0002, **base), SessionInfo(cost_usd=0.031, **base)
+    header, row_small = format_sessions([small])
+    row_big = format_sessions([big])[1]
+    assert "$0.0002" in row_small and "$0.000 " not in row_small and "$0.031" in row_big
+    # the cost column lines up under its header
+    assert row_small.index("$0.0002") + len("$0.0002") == header.index("cost") + len("cost")
+    assert row_big.index("$0.031") + len("$0.031") == header.index("cost") + len("cost")
 
 
 # --- /export -----------------------------------------------------------------------------------

@@ -9,6 +9,7 @@ from datetime import datetime
 from pathlib import Path
 
 from ..sessions import SessionInfo, SessionStore, SessionStoreError
+from .formatting import fmt_cost
 from .transcript import export_transcript
 
 COMMANDS = ("sessions", "export")
@@ -31,7 +32,7 @@ def _when(iso: str) -> str:
 
 def format_sessions(rows: list[SessionInfo], *, current: str | None = None, ascii_only: bool = False) -> list[str]:
     """The §4.5 listing, one string per line, header first. `current` is marked with `*`."""
-    lines = ["  #  id            updated           turns    cost  title"]
+    lines = ["  #  id            updated           turns     cost  title"]
     for n, info in enumerate(rows, 1):
         title = info.title or "(no title)"
         if ascii_only:
@@ -40,7 +41,7 @@ def format_sessions(rows: list[SessionInfo], *, current: str | None = None, asci
         if info.session_id != current:           # the open session always looks "in use" to its own process
             flag = {"interrupted": "  (interrupted)", "in_use": "  (in use)"}.get(info.status, "")
         lines.append(f"{'*' if info.session_id == current else ' '}{n:>2}  {info.session_id[:_ID_SHOWN]:<{_ID_SHOWN}}  "
-                     f"{_when(info.updated):<16}  {info.turns:>5}  {'$%.3f' % info.cost_usd:>6}  {title}{flag}")
+                     f"{_when(info.updated):<16}  {info.turns:>5}  {fmt_cost(info.cost_usd):>7}  {title}{flag}")
     return lines
 
 
