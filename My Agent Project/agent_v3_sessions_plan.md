@@ -1,0 +1,612 @@
+# Agent V3 — Saved Sessions Spec
+
+*Written 2026-10-16. Extends `agent_v3_claude_plan.md` (called "the v3 spec" below). Section numbers like v3 §8.4 refer to it.*
+
+**How to use this document.** Read the owner decisions and §1–§3 first. Then read only the section for the phase you are implementing (§10). If you are an AI agent implementing this, do one phase per session and run the whole suite before you stop (`PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python -m pytest tests -q`). Do not build anything listed in §12. Do not change `PROTOCOL_VERSION`.
+
+---
+
+## Owner decisions (2026-10-16)
+
+The five open questions from the first draft are settled. The rest of this spec follows them.
+
+- **Retention (was Q1).** Sessions are kept and never deleted automatically or in bulk. There is no `prune` command. The only deletion paths are explicit, one session at a time (`sessions delete REF`, `delete_session`), plus removing the folder by hand. They stay because sessions can contain secrets, so a user must be able to remove one (§9).
+- **`--no-save` (was Q2).** Added on both the CLI and the server.
+- **`/new` (was Q3).** `/new` always starts a new session (new id and banner), saved unless `--no-save` is set. The CLI has no command that clears history inside a session; there is no `/clear`. The server's `new_conversation` keeps its frozen v1 meaning (clear history, same id, reset line §4.3), and the new `new_session` message gives apps the CLI behaviour.
+- **GUI-readiness additions (2026-10-16).** Listing shows every session by default (§4.5). Model, reasoning and approval can be changed between turns without losing the conversation (§5.6, D8). Apps can fetch a saved session's full event log to redraw it (`get_session_events`, §7.2). Listing across workspaces stays out of scope (§12).
+- **Settings on resume (was Q4, option C).** A resumed session gets back its saved `model` and `reasoning` unless they are passed on the command line. The approval mode is **never** restored: it is always the launch flag or the default (§5.1).
+- **Tool output on disk (was Q5).** Saved in full: every `tool_completed.output`, every tool's arguments and every approval diff, including `metadata.full_content`. The log then shows exactly what the model saw, for debugging and UI replay. Accepted cost: anything sensitive the agent reads, or a command prints, is kept in plain text inside `.agent_v3/sessions/` (§9), which is git-ignored and can be deleted per session, or avoided with `--no-save`.
+
+---
+
+## 1. Goals and non-goals
+
+1. **Every session is saved automatically.** The CLI and the stdio server save every session to disk as it runs. No flag is needed, and a crash loses at most a torn last line.
+2. **List and resume.** A user can list past sessions for a workspace and resume one. The model then continues with the same conversation history it would have had if the process had never stopped.
+3. **Transcripts on demand.** `--transcript` is removed. A Markdown transcript is rebuilt from the saved event log whenever it is asked for (`/export` and `python -m agent_v3 export`), using `TranscriptWriter`'s existing replay ability.
+4. **The core stays UI-agnostic.** Storage lives in a new core module, `agent_v3/sessions.py`, which `Session` uses. Frontends only choose which store to pass in. `cli.py` contains no file-format code.
+5. **The protocol changes only additively.** `PROTOCOL_VERSION` stays 1. A v1 client that never sends the new messages, and does not start the server with `--resume` or `--continue`, sees the same event sequence as today. The only difference is the new files on disk.
+6. **Settings change mid-session.** `/model`, `/reasoning` and `/approval` (and the server's `set_config`) change the open session between turns. The conversation, session id and log stay the same.
+7. **Ready for a GUI.** Everything above is reachable through the stdio protocol, including a saved session's full event log, so an app can list, open, redraw and reconfigure sessions without the CLI.
+
+**Non-goals:** syncing sessions between machines, search inside sessions, branching or forking, model-written titles, and server-side state (`previous_response_id`; v3 §13 still applies). See §12.
+
+---
+
+## 2. Decisions at a glance
+
+| # | topic | decision | where |
+|---|---|---|---|
+| D1 | location and format | `<workspace>/.agent_v3/sessions/<id>/` holding `events.jsonl` (append-only), `history.jsonl` (append-only, one line per commit) and `meta.json` (a cache, replaced atomically). `.agent_v3/.gitignore` contains `*`. | §4 |
+| D2 | restored vs rebuilt | Restored: history, turn counter, `seq`, usage totals. Rebuilt fresh: system prompt, cache key, `FileState`, approval allowances. | §5.2 |
+| D3 | interrupted turn | Recovered on resume. The user message plus an "interrupted after: <activity>" note go into history, with the activity rebuilt from the logged events. Logged round costs are added to the totals, and a `notice` is shown. | §5.3 |
+| D4 | ids, titles, listing | Ids keep the existing `s_<12 hex>` format, and any unique prefix is accepted. The title is the first user message. Listing reads `meta.json`. Sessions are kept indefinitely. | §4.4, §4.5 |
+| D5 | concurrency | One OS-level lock per session (`msvcrt.locking` / `fcntl.flock`) on `<id>/lock`, held while the `Session` is open. The OS releases it when the process dies, so there are no stale lock files. | §4.6 |
+| D6 | bench | `Session` saves only when it is given a store. The bench passes none, so it writes nothing, and the workdir and the session list stay clean. | §8 |
+| D7 | secrets | Everything the model saw or did is stored as plain text in the workspace and ignored by git. It is never deleted automatically; it is deleted one session at a time with `sessions delete` / `delete_session`, or by removing the folder. `--no-save` turns saving off. | §9 |
+| D8 | settings mid-session | `Session.update_config(model=, reasoning=, approval=)`, between turns, **in place**: same id, history, log and lock. It rebuilds the system prompt and cache key when the approval mode changes, clears "allow for session" approvals on an approval change, and emits `config_changed`. | §5.6 |
+
+---
+
+## 3. Architecture and file layout
+
+`Session` writes through a `SessionRecorder`. `_emit` calls `on_event`; `_commit`, `_fail` and `cancel()` call `on_commit` before their terminal event; `new_conversation` calls `on_reset`. The frontends (`cli.py`, `commands.py`, `stdio_server.py`) use `SessionStore` to list, resolve, export and delete sessions, and pass it to `Session`. New and changed files:
+
+```text
+agent_v3/
+  jsonl.py             NEW   append_line(), read_jsonl() (skips a torn last line), repair_tail()
+  sessions.py          NEW   SessionStore, SessionRecorder, SessionInfo, SavedSession, errors, locking
+  events.py            +     SessionResumed and ConfigChanged events, event_from_dict()
+  session.py           +     store=/resume= parameters, recorder hooks, restore, interrupted-turn recovery, update_config()
+  model.py             +     ModelAdapter.set_config()
+  frontends/
+    eventlog.py        ~     read_events re-exported from jsonl.read_jsonl (EventLogWriter unchanged)
+    transcript.py      +     export_transcript(); a repeated session_started becomes a "RESUMED" line
+    args.py            +     add_session_args(): --resume [REF], --continue/-c, --no-save
+    cli.py             ~     --transcript removed; /sessions [all] /resume /export /model /reasoning /approval; /new = new session; exit hint
+    commands.py        NEW   `sessions` and `export` subcommands (dispatched from cli.main)
+    stdio_server.py    +     new messages (§7), including set_config and get_session_events; the session object is swappable
+tests/
+  test_sessions_store.py NEW, test_session_resume.py NEW, test_session_settings.py NEW, test_cli_sessions.py NEW; additions in test_stdio_server.py
+```
+
+The core (`sessions.py`, `jsonl.py`) imports nothing from `frontends/`. `read_events` moves to the core as `jsonl.read_jsonl`, and `frontends/eventlog.py` re-exports it under the old name, so existing imports keep working. No new dependencies.
+
+---
+
+## 4. Storage
+
+### 4.1 Location (D1)
+
+**Decision:** sessions live in `<workspace>/.agent_v3/sessions/<session_id>/`.
+
+**Why not a per-user folder** (`~/.agent_v3/sessions/<workspace hash>/`):
+- "This workspace" comes for free: `--continue` and `/sessions` are per workspace by construction, with no path hashing or Windows case/symlink normalisation.
+- It sits next to `<workspace>/.agent_v3/outputs/` (the full command logs), so one folder holds everything the agent wrote, and deleting the workspace deletes its sessions.
+- `.agent_v3` is already in `IGNORED_DIRS`, so `glob_files`, `search_text` and the other walks never surface the agent's own logs.
+
+**Costs and mitigations:**
+- **Git.** `.agent_v3/` is ignored only in *this* repo. On first save the store creates `.agent_v3/.gitignore` containing `*`, as `.pytest_cache` does (`O_EXCL`; an existing file is never overwritten).
+- **Read-only workspaces.** Saving switches off with one `notice` (§5.4), and the session continues.
+- **No listing across workspaces.** Out of scope (§12).
+
+### 4.2 Files in a session folder
+
+| file | written | content | source of truth? |
+|---|---|---|---|
+| `events.jsonl` | Appended per event, flushed per line (no fsync). | Every event's `to_dict()` **except `text_delta`**, which `turn_completed.text` already contains. The deltas would make the file about 10× larger, and replay does not need them. So `seq` has gaps on disk; on the wire it has none. | yes: transcript, turn summaries, interrupted-turn activity |
+| `history.jsonl` | One line per commit, flushed and **fsync'd** before the turn's terminal event is emitted. | §4.3 | yes: what the model is given on resume |
+| `meta.json` | Replaced atomically (`os.replace`) at `turn_started` and at each terminal event. | §4.4 | **no**: a listing cache, rebuilt from the two logs if it is missing or unreadable |
+| `lock` | Created on open. Its content is unused. | §4.6 | — |
+| `transcript.md` | Only by `/export` with no path. | Markdown | no |
+
+**Crash safety.**
+- Both logs are append-only, so a crash leaves at most a torn last line, which `read_jsonl` skips (already tested for `read_events`). Before appending to an existing log, `repair_tail(path)` truncates it after its last `\n`; otherwise the next line would be glued onto the fragment and corrupted too.
+- **Commit order:** history line (fsync) → terminal event → `meta.json`. If the history line is torn or missing, the turn counts as interrupted on resume (§5.3), which is the right outcome. If a history line exists without its `turn_completed`, the turn counts as committed, and its answer comes from the history line.
+- **Windows:** `os.replace` onto `meta.json` can fail with `PermissionError` while another process reads it. Retry 5× with a 20 ms pause, then skip; the cache is rebuilt later.
+
+### 4.3 `history.jsonl` lines
+
+```json
+{"v": 1, "kind": "turn", "turn_id": "t2", "outcome": "completed", "ts": "2026-10-16T14:03:09.120+00:00",
+ "user_message": "Now add a clear() method with a test.", "text": "Added Store.clear() and test_clear.",
+ "items": [{"role": "user", "content": "Now add..."}, {"role": "assistant", "content": "Added..."},
+           {"role": "developer", "content": "Turn record: read store.py; edited store.py (+3 −0) ..."}],
+ "record": null}
+{"v": 1, "kind": "reset", "ts": "2026-10-16T14:10:00.000+00:00"}
+```
+
+- `outcome` is one of `completed`, `cancelled`, `failed` or `interrupted`. `items` is exactly what `Session` appended to `self.history` at that commit.
+- `record` is the pruned triple (user / assistant / turn-record developer note). It is `null` when it equals `items`, which is always the case with `prune_history=True` and for cancel, fail and interrupted. With `prune_history=False`, `items` holds the whole turn: reasoning items with `encrypted_content`, `function_call`/`function_call_output` pairs and `web_search_call` items. `record` then holds the pruned form, so a resume can fall back to it (§5.2).
+- `reset` is written by `new_conversation()`, and only if a turn line exists since the last reset. A resume restores only the lines after the last `reset`. Export shows everything.
+
+### 4.4 `meta.json`, ids and titles (D4)
+
+```json
+{"v": 1, "session_id": "s_3f9a1c0b7d2e", "title": "Fix the failing test in test_store.py",
+ "workspace": "C:\\work\\app", "created": "2026-10-15T16:58:02.114+00:00", "updated": "2026-10-15T17:20:41.530+00:00",
+ "turns": 3, "cost_usd": 0.0123, "model": "gpt-6-luna", "reasoning": "medium", "prune_history": true,
+ "turn_no": 3, "last_seq": 214, "active_turn": null, "owner_pid": 41236,
+ "totals": {"rounds": 14, "tool_calls": 22, "...": "every TurnStats key"}}
+```
+
+- **Id.** The existing `s_` + 12 hex (48 bits) is kept, and the folder is created with `exist_ok=False`. Users type any unique prefix of at least 4 characters after `s_` (e.g. `--resume 3f9a`), the literal `latest`, or a list number from `/sessions` (CLI only). Why not a timestamp id: listings sort by `updated` anyway, and short random prefixes are easier to type.
+- **Title.** Taken from the first `turn_started.user_message`: the first non-empty line, whitespace collapsed, clipped to 60 characters with `…`. It is never changed. Model-written titles would cost a request (§12).
+- **Created lazily** at the first `turn_started`; until then the recorder buffers events (normally just `session_started`), so opening the CLI and quitting leaves nothing on disk. `cost_usd` = `model_cost_usd + web_cost_usd`; `turns` counts every turn line, across resets.
+
+### 4.5 Listing and retention
+
+`SessionStore.list()` reads each `meta.json` (O(sessions) small files), sorts by `updated`, newest first, and returns **every** session unless a `limit` is given. `status` is `in_use` if the lock cannot be taken, else `interrupted` if `active_turn` is set, else `idle`. In the server, the open session reports `current`.
+
+CLI listing format (non-TTY uses ASCII and no colour, as everywhere else):
+
+```text
+  #  id            updated           turns    cost  title
+  1  s_3f9a1c0b7d  2026-10-15 17:20      3  $0.012  Fix the failing test in test_store.py
+  2  s_77e0d41a9c  2026-10-14 09:02      1  $0.003  What's the default timeout?  (interrupted)
+```
+
+**Listing everything.** `/sessions` shows the 10 most recent and ends with `… 14 more: /sessions all` when there are more. `/sessions all` and the `sessions` subcommand show every session (`--limit N` caps the subcommand). The server's `list_sessions` without `limit` returns all of them, and its reply carries `total`.
+
+**Retention:** sessions are kept indefinitely. Nothing is deleted automatically, and there is no bulk or age-based delete. A typical session is 50 KB–2 MB, so growth is slow. Deletion is explicit and per session (§9).
+
+### 4.6 Concurrency (D5)
+
+**Decision:** a session can be open in at most one process.
+- `SessionStore.open()` and `create()` open `<id>/lock` and take a non-blocking exclusive OS lock: `msvcrt.locking(fd, LK_NBLCK, 1)` on Windows, `fcntl.flock(fd, LOCK_EX | LOCK_NB)` on POSIX. The handle is kept until `Session.close()`.
+- Failure raises `SessionInUse(owner_pid)`, where `owner_pid` comes from `meta.json` and is shown only for information.
+
+**Why OS locks rather than a pid file:** the OS releases the lock when the process dies, even on a hard kill, so there is never a stale lock to clean up. Checking whether a pid is alive is unsafe on Windows, where `os.kill(pid, 0)` calls `TerminateProcess`. Both lock kinds also conflict between two handles in the *same* process (Windows locks are per handle; `flock` is per open file description), so the conflict can be tested in-process.
+
+**Other cases:**
+- Two new sessions in one workspace never conflict, because they have different folders.
+- `--continue` when the latest session is in use exits with "session s_… is open in another agent_v3 process (pid N); use --resume to pick another". It does not quietly pick an older session.
+- `list`, `export` and `load` read without the lock. The logs are append-only, so a reader sees a consistent prefix.
+- `delete` takes the lock first, so an in-use session cannot be deleted, then closes the handle and removes the folder (Windows cannot delete an open file).
+
+---
+
+## 5. Core changes
+
+### 5.1 `sessions.py` and `Session` interfaces
+
+```python
+class SessionStoreError(Exception): ...
+class SessionNotFound(SessionStoreError): ...
+class AmbiguousSession(SessionStoreError): ...        # .matches: list[str]
+class SessionInUse(SessionStoreError): ...            # .owner_pid: int | None
+
+@dataclass(frozen=True)
+class SessionInfo:                                    # one listing row
+    session_id: str; title: str; created: str; updated: str; turns: int; cost_usd: float
+    model: str; status: str                           # idle | in_use | interrupted | current
+
+@dataclass
+class SavedSession:                                   # what a resume needs
+    info: SessionInfo
+    turn_lines: list[dict]                            # history.jsonl "turn" lines after the last reset
+    all_turn_lines: int
+    turn_no: int; last_seq: int; totals: dict; prune_history: bool; model: str
+    interrupted: "InterruptedTurn | None"             # turn_id, user_message, events: list[dict]
+
+class SessionStore:
+    def __init__(self, root: Path): ...               # .../.agent_v3/sessions
+    @classmethod
+    def for_workspace(cls, workspace: Path) -> "SessionStore": ...
+    def list(self, limit: int | None = None) -> list[SessionInfo]: ...
+    def resolve(self, ref: str) -> str: ...           # id | unique prefix | "latest" -> full id
+    def load(self, session_id: str) -> SavedSession: ...           # read-only, no lock
+    def create(self, session_id: str, config: AgentConfig) -> "SessionRecorder": ...   # folder + lock at first turn_started
+    def open(self, session_id: str) -> tuple[SavedSession, "SessionRecorder"]: ...    # takes the lock
+    def delete(self, session_id: str) -> None: ...    # SessionInUse if locked
+    def events_path(self, session_id: str) -> Path: ...
+    def read_events(self, session_id: str, after_seq: int = 0,
+                    limit: int | None = None) -> tuple[list[dict], bool]: ...  # saved events with seq > after_seq; (events, done)
+
+RESTORABLE_SETTINGS = ("model", "reasoning")       # never "approval"
+
+def config_for_resume(launch: AgentConfig, info: SessionInfo, explicit: set[str]) -> AgentConfig:
+    """`launch` with each RESTORABLE_SETTINGS field taken from the saved session unless it is in `explicit`."""
+
+class SessionRecorder:                                # every call arrives under the Session lock
+    def on_event(self, event: Event) -> None: ...     # skips text_delta; updates meta at turn start/end
+    def on_commit(self, *, turn_id, outcome, user_message, text, items, record) -> None: ...
+    def on_reset(self) -> None: ...
+    def close(self) -> None: ...                      # flush, close files, release the lock
+```
+
+```python
+class Session:
+    def __init__(self, config, on_event, model=None, *, registry=None,
+                 store: SessionStore | None = None,   # None: nothing is saved (bench, tests, embedding)
+                 resume: str | None = None): ...      # a full id (frontends resolve refs first); needs store
+    @property
+    def saved(self) -> bool: ...                      # True while a recorder is attached and healthy
+    def update_config(self, *, model: str | None = None, reasoning: str | None = None,
+                      approval: str | None = None) -> dict: ...  # between turns (Busy otherwise); §5.6
+```
+
+- `Session(..., store=s, resume=id)` raises `SessionNotFound` or `SessionInUse` **before emitting anything**, so a frontend can report the error and fall back without a stray `session_started`.
+- **A `Session` object belongs to one saved session for its whole life.** `/resume`, `/new` and `new_session` close the current object and build a new one. This keeps `session_id` immutable inside `Session`, so existing code and tests that assume it is fixed stay correct.
+- **Settings on resume (option C).**
+  - Frontends call `config_for_resume(launch_config, info, explicit)` before `Session(..., resume=id)`, so `Session` itself still uses the config it is given. `explicit` is the set of `--model` / `--reasoning` flags typed on the command line (§6.1), plus any setting changed with `/model`, `/reasoning` or `set_config` earlier in this process.
+  - Saved `model` and `reasoning` come back unless typed. Every other setting, **approval mode included**, comes from the launch flags or the defaults. So a session saved in `full-auto` resumes in `ask` unless `--approval full-auto` is typed again; nothing from disk can make the agent more permissive.
+  - The workspace must match the store's. `session_resumed.saved_config` reports the saved `model`, `reasoning`, `approval` and `prune_history`, so a frontend can point out differences.
+  - `/new` and `new_session` use the **working config**: the launch flags and defaults plus any settings changed by command in this process (§5.6), but never values restored from disk by a resume.
+
+### 5.2 What is restored and what is rebuilt (D2)
+
+| state | on resume | why |
+|---|---|---|
+| `session_id` | restored | The same folder and log continue. |
+| history | **Restored** from the turn lines after the last reset: `[fresh system message] + items…`. If the saved session used `prune_history=False` and the current config uses `prune_history=True`, **or** the model differs, `record` is used instead of `items`. | Pruned items (user/assistant/developer) are plain messages, valid for any model. Encrypted reasoning items are tied to a model. Mixing them across models, or re-entering full traffic into a pruning session, is the risky case, and the pruned form is always valid. |
+| system prompt | **rebuilt** (`build_system_prompt(config)`) | The Environment block has the date, approval mode, git status and the `python -m` hint, and all of these can change between runs. A stale prompt that claims `full-auto` while running `ask` would mislead the model. |
+| `prompt_cache_key` | **rebuilt** from the new prompt | It is a hash of workspace + prompt + tools (v3 Phase 5b). The same day and config give the same key and a warm cache for the restored prefix. A new day gives a cold first round, about one cold round's cost, the same as any new session. |
+| `_turn_no` | restored (`turn_no`, including an interrupted turn) | Turn ids stay unique within the log (t4 follows t3). The transcript and the interrupted-turn detection rely on this. |
+| `_seq` | restored (`last_seq` = max `seq` in `events.jsonl`, not the meta cache) | `seq` stays strictly increasing per `session_id`, on disk and on the wire (§7.3). |
+| usage totals | **restored** from `meta.totals`, or summed from the terminal events if the meta is missing | `usage_totals()`, `/usage` and the exit block describe the session, and the session continues. The listing's cost uses the same numbers. |
+| `FileState` (read hashes) | **reset to empty** | Files may have changed between runs, and the model only has a record of what it read, not the content. `write_file(overwrite=true)` already returns `CONFLICT "Read the current file before overwriting it."` without a hash. `edit_files` matches against the current text. This matches `new_conversation()` (v3 Phase 2 log). |
+| approval allowances (`ALLOW_SESSION`) | **not restored** | v3 §8.6: they "never persist across sessions". A resume is a new process and a new trust decision. |
+| model, reasoning | **restored** unless typed on the command line (option C) | The session continues the way it was running. A typed flag still wins. |
+| approval mode | **launch flag or default, never restored** | A permissive mode is never re-enabled from disk without the user typing it. |
+| executor guard memory, read dedupe | fresh | They are per turn already. |
+| approval request ids (`ap_N`), tool group ids | restart at 1 | They are per process. On disk, `ap_1` can occur once per attach. The transcript pops each id at its `approval_resolved`, so repeats are harmless. |
+
+### 5.3 A turn that was running when the process died (D3)
+
+**Detection.** A turn is interrupted if its `turn_started` is in `events.jsonl` but `history.jsonl` has no turn line with that `turn_id`. `meta.active_turn` is only a hint, used for the `interrupted` status in listings.
+
+**Recovery**, done in `Session.__init__` when resuming, before `session_started`:
+1. Rebuild the turn's activity by replaying its logged events through a fresh `_Turn` (`_Turn.observe` already consumes events; `events.event_from_dict(d)` turns a dict back into an `Event` with `EVENT_TYPES[d["type"]]`). This gives `activity()`, such as "read store.py; edited store.py (+3 −1); ran `python -m pytest` (exit 1)", and the turn's stats from its logged `model_round_completed` events.
+2. Append to history `{"role": "user", ...}` and `{"role": "developer", "content": "Turn interrupted (the agent process stopped) after: <activity>. Files may have changed since; re-read before editing."}` (capped at 600 characters, like the other notes). Write it as a turn line with `outcome: "interrupted"`.
+3. Add the turn's logged round and web costs to the totals. They were billed, so they are not dropped.
+4. After `session_started` and `session_resumed`, emit `notice` (`warning`, code `turn_interrupted`): "Turn t4 was interrupted when the agent stopped. Its partial work is noted in the history." Because it is a normal event, it also goes into `events.jsonl` and therefore into exported transcripts.
+
+**Side effects that were in flight:** a write that was in progress completed atomically or not at all (`os.replace`). An edit that finished without a logged `tool_completed` is missing from the note, which the "re-read" wording covers. On Windows, a running command's process tree died with the agent (the Job Object has `KILL_ON_JOB_CLOSE`); on POSIX its children can survive (§13). A pending approval was never answered, so its action never ran. The turn is not retried automatically; the user decides what to do next.
+
+### 5.4 Recorder hooks inside `Session`
+
+- `_emit`: after stamping and `turn.observe`, call `recorder.on_event(event)` **before** `on_event`, so an event the frontend has seen is already on disk.
+- `_commit`, `_fail`, `cancel()`: compute `new_items` once, `self.history += new_items`, call `recorder.on_commit(...)`, **then** emit the terminal event (§4.2 order). `new_conversation()` calls `recorder.on_reset()`; `close()` calls `recorder.close()`.
+- **Failure policy.** Any `OSError` from the recorder is caught inside `SessionRecorder`. It disables the recorder, and `Session` emits one `notice` (`warning`, code `session_save_failed`, message names the path and error). `saved` becomes False. A failing disk never fails a turn (the CLI's sink rule in v3 Phase 3, applied to the core).
+- **Cost under the lock.** One `write` + `flush` per event and one `fsync` per turn. This happens under the session lock, like the server's pipe write. A slow disk slows event delivery, which is accepted (§13).
+
+### 5.5 New events `session_resumed` and `config_changed`
+
+Emitted once, right after `session_started`, only when a `Session` was built with `resume=`. `session_started` itself is unchanged, and `EVENT_TYPES` gains `session_resumed`.
+```python
+@dataclass(frozen=True, kw_only=True)
+class SessionResumed(Event):
+    type: ClassVar[str] = "session_resumed"
+    title: str
+    created: str
+    turns_total: int                 # every turn line, across resets
+    turns: list                      # last ≤20 restored turns: {turn_id, user_message, outcome, text, ts}
+    totals: dict                     # restored usage totals (TurnStats shape)
+    history: str                     # "full" | "pruned": which form was restored (§5.2)
+    restored_items: int              # history items given to the model, excluding the system message
+    interrupted_turn: str | None     # turn_id recovered by §5.3, else null
+    saved_config: dict               # {model, reasoning, approval, prune_history} at the last save
+
+@dataclass(frozen=True, kw_only=True)
+class ConfigChanged(Event):          # §5.6; EVENT_TYPES gains "config_changed"
+    type: ClassVar[str] = "config_changed"
+    changes: dict                    # {"approval": {"from": "ask", "to": "auto-edit"}}; {} if nothing changed
+    config: dict                     # config.summary() + tools after the change, same shape as session_started.config
+    history: str                     # "unchanged" | "pruned" (step 4 of §5.6 applied)
+```
+
+### 5.6 Changing settings mid-session (D8)
+
+**Decision:** `Session.update_config` changes the **open** session in place, between turns only. The session id, history, log and lock stay the same.
+
+**Why in place rather than closing and resuming:**
+- A GUI gets one small `config_changed` event instead of a second `session_started` and `session_resumed` to redraw.
+- `seq` simply continues, and the lock is never released, so another process can't grab the session in between.
+
+**`update_config(model=, reasoning=, approval=)`**, under the session lock:
+- **Preconditions.** It raises `Busy` while a turn runs and `ValueError` for an invalid reasoning level or approval mode. Model names are not validated; an unknown price already triggers the existing "cost is not tracked" notice.
+- **Return value.** `{field: [old, new]}` for each field that changed; `{}` if nothing changed.
+
+Steps:
+1. `self.config = dataclasses.replace(self.config, **changes)`. `__post_init__` validates it.
+2. `self.model.set_config(self.config)`. This is a new `ModelAdapter` method: `model`, `reasoning` and the cost lookup read it from the next request on. If the adapter built its own OpenAI client, the client is rebuilt when the reasoning level's timeout tier changes (`request_timeout`). `dropped_params` is kept. `FakeModelAdapter` inherits the method.
+3. **If the approval mode changed:**
+   - The gateway gets a new `ApprovalPolicy(mode)`, which clears "allow for session" approvals. A new mode is a new trust decision, the same rule as a resume.
+   - The system prompt names the approval mode, so it is rebuilt (`build_system_prompt`), `history[0]` is replaced, and `cache_key` is recomputed.
+4. **If the model changed and history holds full turns** (`prune_history=False`): history becomes `[system] + pruned records`, because encrypted reasoning items belong to the old model (§5.2). To make this possible, `Session` keeps `_pruned_history` in step with `history` at every commit and on restore.
+5. Emit `config_changed`. The recorder updates `meta.json` (`model`, `reasoning`, `approval`), so a later resume restores the last-used model and reasoning (option C). It still never restores the approval mode.
+
+**Cache effects:**
+- A model change always starts cold, since the server's cache is per model.
+- An approval change alters the prompt and key, so the next round starts cold (about $0.02 at sol rates).
+- A reasoning-only change keeps the prompt and key. Whether the server reuses the cache across effort levels is unverified; the Phase S5 smoke test measures it.
+
+**Safety.** Switching to `full-auto` is an explicit user action. The CLI prints a yellow line: "Edits and commands now run without asking, except risky commands and anything outside the workspace." The always-ask patterns and the outside-workspace rule apply in every mode, as before.
+
+**Not changeable mid-session:** `workspace`, `web_search`, `prune_history` and the remaining fields. They change the tool list or the shape of history; use `/new` with flags instead. The executor keeps its original config reference; it reads only the limit fields, which never change.
+
+---
+
+## 6. CLI (`frontends/cli.py`, `frontends/commands.py`)
+
+### 6.1 Flags and subcommands
+
+- **Removed:** `--transcript`, kept as a hidden argument that exits 2 with "--transcript was removed: sessions are saved automatically. Use /export or `python -m agent_v3 export latest -o FILE`." **Kept:** `--events-log` (the only log with `text_delta`, for UI development) and `--verbose`.
+- **New, from `add_session_args`, shared with the server:** `--resume [REF]` (an id, prefix or `latest`; without REF the CLI prints the list and asks "Resume which? [1–N, Enter = new session]", while the server requires REF); `--continue` / `-c`, the same as `--resume latest`, which starts a new session with a dim note if there are none; and `--no-save`, which cannot be combined with either (exit 2).
+- **Detecting typed flags (option C).** In `add_config_args`, `--model` and `--reasoning` get `default=None`, and their help text names the real default. `config_from_args` fills `AgentConfig`'s defaults when they are None, so its result is unchanged. A new `explicit_settings(args) -> set[str]` returns the names that were typed. Both frontends keep that set for `config_for_resume`.
+- `cli.main(argv)` sends `argv[0] in {"sessions", "export"}` to `commands.main`. Everything else parses as today, so `python -m agent_v3 --workspace X` is unchanged.
+
+```text
+python -m agent_v3 sessions [--workspace W] [--limit N]               list (§4.5 format)
+python -m agent_v3 sessions delete REF [REF ...] [--workspace W]       refuses in-use sessions
+python -m agent_v3 export REF [-o PATH] [--workspace W]                Markdown to stdout, or to PATH
+```
+
+Errors (`SessionNotFound`, `AmbiguousSession` listing the matches, `SessionInUse`) print to stderr and exit 2.
+
+### 6.2 Slash commands
+
+- **Matching.** `^/(resume|export|sessions|model|reasoning|approval)(?:\s+(.+))?$` takes an optional argument. The bare-word rule `^/[A-Za-z]+$` is unchanged for `/new`, `/usage`, `/quit` and unknown words (hint). So `/new file please` still goes to the model.
+- `/sessions` prints the 10 most recent sessions (the current one marked `*`), plus `… N more: /sessions all` if there are more. `/sessions all` prints every session.
+- **Settings (§5.6).**
+  - `/model [NAME]`, `/reasoning [LEVEL]` and `/approval [MODE]` work between turns.
+  - Without an argument, each prints the current value and the choices: models from `PRICING`, the reasoning levels, and the approval modes with their one-line meanings.
+  - With an argument, each calls `session.update_config` and prints a dim confirmation, e.g. `model gpt-5.6-sol (was gpt-6-luna); the next request starts with a cold cache`.
+  - `/approval full-auto` also prints the yellow warning. An invalid value prints the choices and changes nothing.
+  - The change carries over to `/new` (working config, §5.1).
+- `/resume [N|REF]` works only between turns (the only time the prompt is shown); without an argument it behaves like `--resume` without REF. It closes the current `Session`, drains its queue, and builds the resumed one through `Cli`'s `open_session` factory. The recap is one dim line, `Resumed s_3f9a1c0b7d · "Fix the failing test…" · 3 turns · $0.012 · last active 2026-10-15 17:20`, plus a dim line for each setting that differs from the saved one (e.g. `model gpt-6-luna (--model; saved with gpt-5.6-sol)`, `approval ask (saved with full-auto; approval is never restored)`), then the last exchange (`You ›` message, `Agent ›` answer clipped to 15 lines). Resuming the current session is a no-op with a note.
+- `/export [PATH]` writes the transcript to PATH, or to `<session folder>/transcript.md` by default, and prints the path. The file is always rebuilt from scratch from `events.jsonl` (§6.3).
+- `/new` closes the session and opens a new one (new id, new banner), saved unless `--no-save` is set. It never clears history in place, and there is no `/clear`. The CLI no longer calls `Session.new_conversation()`; the method stays for the server's v1 `new_conversation`.
+- **Exit.** After the usage block, when the session was saved and had at least one turn, print `Session saved: s_3f9a1c0b7d · resume with: python -m agent_v3 --resume 3f9a1c0b7d`.
+- **Sink warning text.** The CLI's sink-failure warning becomes "could not write the event log". Only `--events-log` is a sink now; session saving reports through the core's `session_save_failed` notice.
+- `Cli.__init__` gains `store: SessionStore | None = None` and `open_session: Callable[[str | None], Session] | None = None`. When `open_session` is None, the default builds `Session(current.config, queue.put, model=current.model, store=store)`, with `resume=` for `/resume`. So `run_cli(...)` in the tests keeps working, and `/new` starts a new session there too.
+
+### 6.3 Export (`frontends/transcript.py`)
+
+```python
+def export_transcript(events_path: Path, out_path: Path) -> Path:
+    """Replay events.jsonl through a TranscriptWriter into a temp file, then os.replace onto out_path."""
+```
+
+A second `session_started` (a later attach) writes `> RESUMED 2026-10-16 09:12 (model=…, reasoning=…, approval=…)` instead of another `# Transcript` header. `session_resumed` is ignored, and the interrupted-turn notice shows as `> NOTICE (warning, turn_interrupted): …`. An interrupted turn shows its `**USER:**` and tool lines with no footer, which is accurate. The usage block sums every terminal event, so it covers the whole session. `config_changed` writes `> SETTINGS: model gpt-6-luna → gpt-5.6-sol; approval ask → auto-edit`.
+
+---
+
+## 7. stdio server (additive protocol changes)
+
+### 7.1 Startup
+
+The server takes `--resume REF`, `--continue` and `--no-save` (§6.1). It saves by default. Saved `model`/`reasoning` are restored unless passed as flags, and approval never is (§5.1); the same applies to `resume_session`. With `--resume` or `--continue`, the first line is still `session_started`, with the saved `session_id` and `seq = last_seq + 1`, followed by `session_resumed`. `--resume` with an unknown or in-use REF exits 2 with an empty stdout, like the existing startup errors.
+
+### 7.2 New client → server messages
+
+All of these except `list_sessions`, `export_session` and `get_session_events` need an idle session (otherwise `error`/`busy`). Replies that are not events (`sessions`, `transcript`, `session_deleted`, `session_events`) have no `seq`, like `usage`.
+
+| type | fields | effect and replies |
+|---|---|---|
+| `list_sessions` | `limit` (int, optional; omitted = all) | Reply `sessions`: `{current, total, sessions: [SessionInfo…]}`, newest first. Allowed at any time. |
+| `resume_session` | `session_id` (id or prefix), **or** `latest: true` | Closes the current session (it is already saved), then emits `session_started` and `session_resumed` for the chosen one, plus `notice turn_interrupted` if §5.3 applied. Errors: `not_found`, `ambiguous`, `in_use`, `saving_disabled`. Resuming the current session gives `error`/`bad_request`. |
+| `new_session` | none | Closes the current session and starts a new one (`session_started`, new id, `seq` 1). `new_conversation` keeps its v1 meaning (reset line, same id). |
+| `export_session` | `session_id` (optional; default current) | Reply `transcript`: `{session_id, markdown}`. Allowed at any time (the log is append-only). Errors: `not_found`, `ambiguous`, `saving_disabled` (current session, `--no-save`). |
+| `delete_session` | `session_id` (id or prefix; required) | Reply `session_deleted`: `{session_id}`. Deleting the current or another process's session gives `in_use`. |
+| `set_config` | `model`, `reasoning`, `approval` (each an optional string; at least one) | §5.6. Emits the event `config_changed`, even when nothing changed (`changes: {}`), so a client always gets an answer. Errors: `busy`, `bad_request` (no fields, wrong type, invalid level or mode). |
+| `get_session_events` | `session_id` (optional; default current), `after_seq` (int, default 0), `limit` (int, default 500, max 2000) | Reply `session_events`: `{session_id, events, next_after_seq, done}`. These are the saved events with `seq > after_seq`, in order, without `text_delta`; page by passing `next_after_seq` back. Allowed at any time. Errors: `not_found`, `ambiguous`, `saving_disabled`. |
+
+New `error` codes: `not_found`, `ambiguous`, `in_use`, `saving_disabled`. v1 already requires clients to treat unknown codes generically.
+
+```json
+{"type": "list_sessions"}
+{"type": "sessions", "current": "s_9c1d2e3f4a5b", "total": 2, "sessions": [{"session_id": "s_9c1d2e3f4a5b", "title": "Rename Store.remove", "created": "2026-10-16T09:00:01.002+00:00", "updated": "2026-10-16T09:04:40.311+00:00", "turns": 1, "cost_usd": 0.0011, "model": "gpt-6-luna", "status": "current"}, {"session_id": "s_3f9a1c0b7d2e", "title": "Fix the failing test in test_store.py", "created": "2026-10-15T16:58:02.114+00:00", "updated": "2026-10-15T17:20:41.530+00:00", "turns": 3, "cost_usd": 0.0123, "model": "gpt-6-luna", "status": "interrupted"}]}
+
+{"type": "resume_session", "session_id": "3f9a"}
+{"type": "session_started", "session_id": "s_3f9a1c0b7d2e", "turn_id": null, "seq": 215, "ts": "2026-10-16T09:05:12.480+00:00", "protocol_version": 1, "config": {"model": "gpt-6-luna", "reasoning": "medium", "approval": "ask", "workspace": "C:\\work\\app", "web_search": true, "tools": ["list_dir", "..."]}}
+{"type": "session_resumed", "session_id": "s_3f9a1c0b7d2e", "turn_id": null, "seq": 216, "ts": "...", "title": "Fix the failing test in test_store.py", "created": "2026-10-15T16:58:02.114+00:00", "turns_total": 4, "turns": [{"turn_id": "t3", "user_message": "Run the tests again", "outcome": "completed", "text": "All 18 tests pass.", "ts": "2026-10-15T17:19:58.000+00:00"}, {"turn_id": "t4", "user_message": "Now refactor report.py", "outcome": "interrupted", "text": "", "ts": "2026-10-16T09:05:12.470+00:00"}], "totals": {"rounds": 14, "tool_calls": 22, "model_cost_usd": 0.0113, "web_cost_usd": 0.01, "...": "..."}, "history": "pruned", "restored_items": 11, "interrupted_turn": "t4", "saved_config": {"model": "gpt-6-luna", "reasoning": "medium", "approval": "ask", "prune_history": true}}
+{"type": "notice", "session_id": "s_3f9a1c0b7d2e", "turn_id": null, "seq": 217, "ts": "...", "level": "warning", "code": "turn_interrupted", "message": "Turn t4 was interrupted when the agent stopped. Its partial work is noted in the history."}
+
+{"type": "resume_session", "latest": true}
+{"type": "error", "code": "in_use", "message": "Session s_3f9a1c0b7d2e is open in another agent_v3 process (pid 41236)."}
+
+{"type": "new_session"}
+{"type": "session_started", "session_id": "s_51be09d7c3aa", "turn_id": null, "seq": 1, "...": "..."}
+
+{"type": "export_session"}
+{"type": "transcript", "session_id": "s_51be09d7c3aa", "markdown": "\n---\n\n# Transcript 2026-10-16 09:06 (model=gpt-6-luna, ...)\n\n**USER:** ..."}
+
+{"type": "delete_session", "session_id": "s_77e0"}
+{"type": "session_deleted", "session_id": "s_77e0d41a9c55"}
+
+{"type": "set_config", "model": "gpt-5.6-sol", "approval": "auto-edit"}
+{"type": "config_changed", "session_id": "s_51be09d7c3aa", "turn_id": null, "seq": 42, "ts": "...", "changes": {"model": {"from": "gpt-6-luna", "to": "gpt-5.6-sol"}, "approval": {"from": "ask", "to": "auto-edit"}}, "config": {"model": "gpt-5.6-sol", "reasoning": "medium", "approval": "auto-edit", "workspace": "C:\\work\\app", "web_search": true, "tools": ["list_dir", "..."]}, "history": "unchanged"}
+
+{"type": "get_session_events", "session_id": "3f9a", "after_seq": 0, "limit": 500}
+{"type": "session_events", "session_id": "s_3f9a1c0b7d2e", "events": [{"type": "session_started", "seq": 1, "...": "..."}, {"type": "turn_started", "turn_id": "t1", "seq": 2, "user_message": "Fix the failing test in test_store.py", "...": "..."}], "next_after_seq": 214, "done": true}
+```
+
+### 7.3 Rules added to the Protocol v1 reference (v3 §10.2)
+
+- **More than one `session_started`.** A `session_started` line may appear again, but **only** in response to `resume_session` or `new_session`. It opens a new session context: later events carry its `session_id`. A client that never sends those messages never sees a second one.
+- **`seq` per session.** `seq` is strictly increasing with no gaps per `session_id` on the wire. A resumed session continues its saved numbering, so its first `seq` is greater than 1 (§5.2). A client that tracks `seq` should reset its expectation at each `session_started`.
+- **Recap event.** `session_resumed` directly follows the `session_started` of a resumed session.
+- **Settings changes.** `config_changed` appears only between turns, in reply to `set_config`. Its `config` replaces what the client learned from `session_started.config`.
+- **Redrawing a saved session.** `get_session_events` returns saved events with their original `seq` (with gaps where `text_delta` was dropped). To open the current session, fetch pages until `done`, then apply live events with a higher `seq`. Live events and fetched events share the numbering, so duplicates are easy to drop.
+- **Usage after a resume.** `get_usage` after a resume returns totals for the whole saved session, including earlier processes.
+
+**Implementation.** `StdioServer` gains `store` and `resume` keyword arguments that default to None, so the existing in-process tests construct it unchanged. Replacing `self.session` happens on the reader thread while the session is idle. The old session is closed first, which releases its lock and file handles, so its events cannot interleave with the new session's.
+
+---
+
+## 8. Benchmark harness (D6)
+
+**Decision:** the bench does not change. `run_v3` builds `Session(config, on_event)` with no store, so nothing is saved, and it keeps writing its own `bench/results/events/*.jsonl` (with `text_delta`, as today).
+
+**Why not save bench runs**, in the workdir or a separate store: `bench/tasks.py` `SKIPPED_DIRS` does not include `.agent_v3`, so session files in the workdir would show up in `files_changed` and fail T2's "only `store.py` changed" check. Fixed workdirs are deleted after each run anyway, and the bench's event logs already hold everything a saved session would. If it is ever wanted, `store=SessionStore(RESULTS / "sessions")` works, which is why `SessionStore` takes a root folder rather than a workspace.
+
+**Guard:** a test asserts that a store-less `Session` creates no `.agent_v3/sessions`, and one T6 run on luna (about $0.001) confirms that `files_changed` is unchanged.
+
+---
+
+## 9. Secrets and deletion (D7)
+
+**Stored, as plain UTF-8 under `<workspace>/.agent_v3/sessions/`:**
+- every user message, answer and turn record (paths read and edited, commands with exit codes);
+- every tool's arguments (including the full `content` of `write_file` and every `old_text`/`new_text`), every tool's model-facing output (file contents up to the read caps, command output up to 12k characters), and approval diffs with `metadata.full_content` (owner decision: full output is kept);
+- web search queries and URLs;
+- with `prune_history=False`, whole turns in `history.jsonl`, including reasoning as `encrypted_content` (only OpenAI can decrypt it);
+- metadata: model, approval mode, workspace path, timestamps, costs, owner pid.
+
+**Not stored:** the API key and environment variables (the config summary never includes them; a test checks that `meta.json` and `session_started.config` hold no key), and approval allowances. Nothing new goes to OpenAI: `store=False` is unchanged.
+
+**Protections:** `.agent_v3/.gitignore` = `*` (§4.1). On POSIX, files are created `0o600` and folders `0o700`; on Windows they inherit the workspace ACL. `IGNORED_DIRS` keeps session files out of `glob_files` and `search_text`, though an explicit `read_file` still works. `--no-save` turns saving off.
+
+**Deletion** (never automatic, never in bulk): `python -m agent_v3 sessions delete REF…` in the CLI, `delete_session` in the server, or by hand: delete `<workspace>/.agent_v3/sessions/<id>/` or the whole `.agent_v3/` folder. Nothing else references a session, so deleting by hand is safe while no agent is running. Deletion removes files; it does not securely overwrite them.
+
+v3 §13's "no secret redaction" still applies. The CLI `--help` epilog and the banner's third line say where sessions are saved.
+
+---
+
+## 10. Implementation phases
+
+Each phase ends with the whole suite green on Windows and a log entry at the bottom (date, what was done, deviations).
+
+**Files.** Each phase lists the files it may create or change. Paths are relative to `My Agent Project/`, and `tests/` files are always allowed for that phase's own tests. If a phase seems to need a file outside its list, stop and record why in the log entry rather than editing it. The bench (`bench/`) is never changed.
+
+### Phase S1 — Storage (~350 LOC + ~300 LOC tests)
+- `jsonl.py`, `sessions.py` (store, recorder, `SavedSession` loading, locking, delete), `events.event_from_dict`, and the `read_events` re-export. No `Session` change yet. Tests: `tests/test_sessions_store.py`.
+- **Files:** new `agent_v3/jsonl.py` and `agent_v3/sessions.py` (including `config_for_resume`); `agent_v3/events.py` (`event_from_dict` only); `agent_v3/frontends/eventlog.py` (the re-export only); new `tests/test_sessions_store.py`. **Not** `session.py` or any other frontend.
+- **Exit:** store tests green, including a subprocess that holds a lock and is killed, after which `open()` succeeds.
+
+### Phase S2 — Core integration (~200 LOC + ~350 LOC tests)
+- `Session(store=, resume=)`, recorder hooks (§5.4), restore (§5.2), interrupted-turn recovery (§5.3), `SessionResumed`. Tests: `tests/test_session_resume.py` and the `test_core_misc.py` update.
+- **Files:** `agent_v3/session.py`, `agent_v3/events.py` (`SessionResumed`), `agent_v3/sessions.py` (fixes found while integrating), new `tests/test_session_resume.py`, `tests/test_core_misc.py` (event-type set only). **Not** `frontends/` (no CLI or server wiring yet) or `model.py`. The smoke script goes in the scratchpad, not the repo.
+- **Live smoke test** (luna, about $0.01, a scratch script as in v3 Phase 2). (1) Run a two-turn session with `prune_history=True`, close it, resume it in a **new process**, and ask "what did I ask first?". (2) Do the same with `prune_history=False`, web search on and a tool call in each turn. This checks that encrypted reasoning items and `msg_`/`fc_`/`ws_` ids from an earlier process are accepted. If (2) is rejected, change §5.2 to always restore `record` and log the deviation.
+- **Exit:** tests green, smoke test recorded, and one bench T6 run with `files_changed` unchanged.
+
+### Phase S3 — CLI and export (~250 LOC + ~250 LOC tests)
+- `args.add_session_args`, `cli.py` (§6.1, §6.2), `commands.py`, `transcript.export_transcript` and the `RESUMED` line (`__main__.py` unchanged). Point v3 §4 (flag list) and §10.1/§10.3 at this spec in one line each.
+- **Files:** `agent_v3/frontends/args.py` (`add_session_args`, `explicit_settings`, `--model`/`--reasoning` defaults), `agent_v3/frontends/cli.py`, new `agent_v3/frontends/commands.py`, `agent_v3/frontends/transcript.py`, new `tests/test_cli_sessions.py`, `tests/test_frontends.py` (the one warning string), and `agent_v3_claude_plan.md` (the one-line pointers). Includes the listing behaviour of §4.5 for the CLI. **Not** `session.py`, `sessions.py` (beyond small bug fixes, which must be logged) or `stdio_server.py`.
+- Manual checks (needs a person at a console): quit, then `--continue` continues the conversation; kill the terminal mid-turn, then `--continue` shows the interrupted notice; with two terminals, `--continue` in the second reports `in use`; `/export` output reads like the old `--transcript`; non-TTY `/sessions` has no ANSI.
+- **Exit:** tests green, manual checklist handed over.
+
+### Phase S4 — stdio server (~120 LOC + ~200 LOC tests)
+- §7 messages, startup flags, swappable session, error codes. Append the §7.3 rules and the message table to v3 §10.2 "Protocol v1 reference" (additive; `PROTOCOL_VERSION` stays 1).
+- **Files:** `agent_v3/frontends/stdio_server.py`, `tests/test_stdio_server.py` (additions only; the 19 existing tests stay byte-for-byte unchanged), and `agent_v3_claude_plan.md` §10.2 (append only). Includes `list_sessions` returning all with `total` (§4.5). `args.py` only if S3 left a server flag unwired. **Not** `session.py`, `sessions.py` or `cli.py`.
+- **Exit:** the new protocol tests pass, and **all 19 existing `test_stdio_server.py` tests pass unmodified**. That is the compatibility proof.
+
+### Phase S5 — Settings mid-session and GUI additions (~200 LOC + ~300 LOC tests)
+- Core: `Session.update_config`, `_pruned_history`, `ModelAdapter.set_config`, `ConfigChanged`, `SessionStore.read_events`.
+- CLI: `/model`, `/reasoning`, `/approval`, and the transcript `SETTINGS` line.
+- Server: `set_config`, `get_session_events`.
+- The "list everything" behaviour (§4.5) belongs with S3/S4, which build the listing.
+- **Files:** `agent_v3/session.py`, `agent_v3/model.py` (`set_config` only), `agent_v3/events.py` (`ConfigChanged`), `agent_v3/sessions.py` (`read_events`, meta update), `agent_v3/frontends/cli.py`, `agent_v3/frontends/transcript.py` (`SETTINGS` line), `agent_v3/frontends/stdio_server.py`, new `tests/test_session_settings.py`, additions to `tests/test_cli_sessions.py` and `tests/test_stdio_server.py`, `tests/test_core_misc.py` (event-type set), and `agent_v3_claude_plan.md` §10.2 (append only). **Not** `approvals.py` (a new `ApprovalPolicy` object is enough) or the tools.
+- Tests: `tests/test_session_settings.py` and the additions in §11.2.
+- **Live smoke test** (about $0.01):
+  - On one session, change reasoning `medium` → `low` and record `cached_tokens` on the next round (does the cache survive an effort change?).
+  - Change approval `ask` → `auto-edit`.
+  - Change the model between two cheap models, with `prune_history` on and then off.
+  - Each next turn must be accepted and must still answer "what did I ask first?".
+- **Exit:** tests green, smoke test recorded, the 19 original stdio tests unmodified, and v3 §10.2 updated with `set_config`, `get_session_events` and their rules.
+
+Estimated total: about 1,120 LOC of implementation and 1,400 of tests.
+
+---
+
+## 11. Tests
+
+### 11.1 Existing tests that change
+
+| test | change |
+|---|---|
+| `test_core_misc.py::test_event_types_cover_the_protocol` | Add `"session_resumed"` (S2) and `"config_changed"` (S5) to the expected set. |
+| `test_frontends.py::test_cli_survives_a_failing_sink` | The expected text becomes "could not write the event log" (§6.2). |
+
+Nothing else changes. `test_session.py`, `test_approvals.py`, `test_executor.py` and the tool tests build sessions without a store, so they save nothing. The other `test_frontends.py` tests build `Cli` without a factory; none of them uses `/new`, and the `eventlog` imports work through the re-export. The `test_stdio_server.py` subprocesses now save into their temp workspaces, but those tests only check named files and never list the folder. The bench passes no store. `test_config_from_args_maps_flags` is unchanged: `config_from_args` still returns the defaults when `--model`/`--reasoning` are omitted.
+
+### 11.2 New tests
+
+**`test_sessions_store.py` (S1):**
+- Lazy creation: no folder before the first `turn_started`; `.agent_v3/.gitignore` created once, never overwritten.
+- `text_delta` is not written; lines are readable while the file is open. The history line exists before the terminal event reaches a recording sink.
+- A torn last line in either log is skipped on load, and `repair_tail` makes the next append valid.
+- A missing or corrupt `meta.json` is rebuilt from the logs (title, turns, cost, totals, last_seq match).
+- Listing order, `limit`, and the `idle` / `in_use` / `interrupted` statuses.
+- Refs: full id, unique prefix, `latest`, ambiguous (lists matches), not found, prefix under 4 characters rejected.
+- Locks: a second `open()` in-process and a lock held by a subprocess both give `SessionInUse`; after the subprocess is killed, `open()` succeeds.
+- `delete` refuses an in-use session and removes only the named session's folder.
+- A reset line is written only after a turn line, and `load` returns only the turn lines after it. An unwritable folder disables the recorder without raising.
+
+**`test_session_resume.py` (S2)**, using `FakeModelAdapter.requests`:
+- A store-less `Session` creates no `.agent_v3/sessions` (the bench guarantee).
+- Two turns, close, resume: same `session_id`; `session_started` then `session_resumed`; `seq` continues from the log's maximum; the next turn is `t3`; `usage_totals()` includes the earlier turns; the next request's input is `[new system, u1, a1, rec1, u2, a2, rec2, u3]`.
+- Resuming with another approval mode gives a prompt naming the new mode and the same cache key as a fresh session with that config.
+- An overwrite of a file read before the resume gets `CONFLICT` until it is re-read. An `ALLOW_SESSION` command is asked again after the resume.
+- With `prune_history=False` on both sides and the same model, the full items are restored (`history == "full"`); with a different model, the record is restored (`"pruned"`). Cancelled and failed turns come back with their notes.
+- Interrupted turn (t3 has `turn_started`, tool events and a round, but no history line): the note lists the edit and command; `notice turn_interrupted` follows `session_resumed`; the totals include t3's cost; a second resume does not recover it again.
+- After `new_conversation()`, a resume restores only the turns after the reset.
+- A recorder raising `OSError` gives exactly one `session_save_failed`, the turn still completes, and `saved` is False.
+- Resuming an in-use session raises `SessionInUse` with `on_event` never called. `SessionResumed` survives `json.dumps`. No `meta.json` field or `session_started.config` value contains `OPENAI_API_KEY`'s value.
+
+**`test_cli_sessions.py` (S3):**
+- `--transcript` exits 2 with the hint, and so does `--no-save` with `--resume`.
+- Option C: a session saved with `gpt-5.6-sol`/`high`/`full-auto` resumed with no flags runs on sol/high in `ask`; with `--model X` it runs on X and keeps `high`; with `--approval full-auto` it runs in `full-auto`. The recap names each difference. `/new` after that resume uses the launch config. `explicit_settings` and `config_for_resume` also get direct unit tests.
+- `/resume 2` and `/export out.md` are commands; `/new file please` goes to the model. `/sessions` marks the current session.
+- `/resume N` prints the recap, and the next request carries the history. `/new` starts a new id with or without a factory (the default factory reuses the fake model), never calls `new_conversation()`, and `/clear` prints the unknown-command hint.
+- `/export` writes to the session folder by default, and its output equals a direct `TranscriptWriter` replay. A log with two `session_started` lines gives one header and one `> RESUMED` line.
+- Subcommands: `export latest` (stdout and `-o`), `sessions` (lists all by default; `--limit`), `sessions delete`. The exit hint appears only for a saved session with turns.
+- `/sessions` with 14 sessions shows 10 and the `… 4 more` line; `/sessions all` shows 14.
+- (S5) `/model`, `/reasoning` and `/approval` without an argument print the current value and the choices. With one they confirm the change, and `/approval full-auto` warns. An invalid value changes nothing. `/new` after `/model X` runs on X.
+
+**`test_session_settings.py` (S5):**
+- `update_config` raises `Busy` during a turn and `ValueError` for an invalid level or mode; unchanged values return `{}` and still emit `config_changed` with `changes: {}`.
+- Model change: the next request uses the new model and its cost uses the new rates. With `prune_history=False`, history becomes the pruned form (`history: "pruned"`); with pruning on it is untouched.
+- Approval change: the prompt names the new mode, `cache_key` changes, an earlier `ALLOW_SESSION` is asked again, and `auto-edit` stops asking for workspace edits.
+- Reasoning change: the request's effort changes while the prompt and `cache_key` do not; an injected client is not rebuilt.
+- `config_changed` is logged and `meta.json` updated; a later resume restores the changed model/reasoning but not the approval.
+- `read_events` paging: `after_seq`, `limit`, `done`, no `text_delta`, and a torn last line skipped.
+
+**`test_stdio_server.py` additions (S4, S5):**
+- `list_sessions` after a turn shows one `current` row.
+- Server A runs a turn and shuts down; server B with `--resume <id>` sends `session_started` with the same id and `seq` > 1, then `session_resumed`.
+- Runtime `resume_session` (in-process, requests checked through the fake). Errors: `busy` during a turn, `not_found`, `ambiguous`, `in_use` (held by another live server), and `bad_request` for the current session.
+- `new_session` gives a new id with `seq` 1. `export_session` returns markdown with the `**USER:**` line. `delete_session` gives `in_use` for the current session, otherwise `session_deleted`, and the session leaves the list.
+- With `--no-save` there is no sessions folder; `resume_session` gives `saving_disabled`; `list_sessions` still works.
+- `list_sessions` without `limit` returns every session, with `total`.
+- (S5) `set_config` gives `config_changed`, and the next turn's request uses the new model. It gives `busy` during a turn, and `bad_request` with no fields or an invalid mode.
+- (S5) `get_session_events` pages through another saved session (`next_after_seq`, `done`), defaults to the current session, gives `not_found` for an unknown ref, and gives `saving_disabled` under `--no-save`.
+
+---
+
+## 12. Out of scope
+
+- Listing or resuming across workspaces, and a per-user session folder. A GUI with a project picker would need a per-user index; revisit when the GUI is designed. Saving bench runs (§8).
+- Changing settings during a running turn, and changing `workspace`, `web_search` or `prune_history` mid-session (§5.6).
+- Model-written or editable titles, search, tags; forking, rewinding or undoing file changes; retrying an interrupted turn automatically.
+- Automatic, age-based or bulk deletion (owner decision), secure overwrite on delete, encryption at rest, secret redaction (v3 §13).
+- Server-side state (`previous_response_id`, the Conversations API) and `store=True`.
+- Cleaning up `.agent_v3/outputs/` logs. `sessions delete` does not touch them; a later spec can tie them to sessions by `call_id`.
+- A writer thread for disk writes (§13 says when it would be needed).
+
+---
+
+## 13. Known risks
+
+| risk | mitigation |
+|---|---|
+| The API rejects encrypted reasoning items or item ids from an earlier process or day (`prune_history=False` resume). | The S2 live smoke test checks it. The fallback is to always restore the pruned `record`, which is already stored on every line. Pruning is on by default, so normal use never hits this. |
+| Disk I/O under the session lock stalls event delivery on a slow or network disk. | One flush per event and one fsync per turn. If a user reports it, move the recorder behind a queue and writer thread (the order stays the same because the queue is FIFO). |
+| `os.replace` on `meta.json` fails on Windows while another process reads it. | 5 retries; the meta is only a cache and is rebuilt from the logs. |
+| A torn tail glues the next append onto a fragment. | `repair_tail` before the first append, with a test. |
+| POSIX: an interrupted turn's command children survive the agent process. | Documented. The interrupted note tells the model files may have changed. The POSIX path is untested, as in v3 Phase 1. |
+| Clients that assume the first `seq` is 1, or that there is one `session_id` per connection. | This only happens after a client opts in (`--resume`/`--continue` flags or the new messages). The §7.3 rules document it, and the 19 existing protocol tests must pass unmodified. |
+| Session files contain secrets and live inside the project folder. | `.gitignore` = `*`, POSIX `0o600`, `IGNORED_DIRS`, per-session delete, `--no-save`, and the banner says where sessions go (§9). |
+| A resumed session's first round is a cold cache miss because the date in the prompt changed. | Accepted: one cold round per resume (about $0.02 at gpt-5.6-sol rates, per v3 Phase 3b). Same-day resumes with the same config get the same cache key. |
+| Users run `--continue` while the session is open elsewhere and expect it to work. | A clear `in use` error names the pid and suggests `--resume`. |
+| A mid-session change makes the next round cold (model or approval change; maybe reasoning). | Accepted; the CLI says so. Phase S5 measures the reasoning case. |
+| A mid-session model change with `prune_history=False` loses the full turn detail from history. | Documented in `config_changed.history = "pruned"`. The event log still has everything. |
+| `get_session_events` re-reads the log for each page (O(log size) per page). | Logs are a few MB at most. Add a seq→offset index only if a GUI reports slow loading. |
+
+---
+
+## Implementation log
+
+*(Append one entry per phase: date, summary, deviations from spec.)*
