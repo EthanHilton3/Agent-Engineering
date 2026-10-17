@@ -1,0 +1,801 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Talk Past the Guard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IM+Fell+English:ital@0;1&family=IM+Fell+English+SC&family=VT323&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --leather: #2a1d14;
+    --leather-2: #3a2819;
+    --parchment: #ecdcb4;
+    --parchment-2: #e0cb98;
+    --ink: #3b2a1a;
+    --ink-soft: #6b5136;
+    --gold: #c9a24a;
+    --gold-dark: #8a6a26;
+    --frame: #5a3d22;
+    --red: #8e2a2a;
+    --green: #3f6b2f;
+    --blue: #2f5aa8;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    min-height: 100vh;
+    background:
+      radial-gradient(ellipse at 20% 0%, #4a3220 0%, transparent 60%),
+      radial-gradient(ellipse at 80% 100%, #3a2617 0%, transparent 60%),
+      var(--leather);
+    color: var(--ink);
+    font-family: "IM Fell English", Georgia, serif;
+    font-size: 18px;
+  }
+
+  /* ---------- top bar ---------- */
+  .topbar {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px;
+    padding: 12px 20px;
+    background: linear-gradient(#3f2a1a, #2a1c12);
+    border-bottom: 3px solid var(--gold-dark);
+    box-shadow: 0 2px 0 #000;
+    color: var(--parchment);
+  }
+  .topbar h1 {
+    margin: 0 auto 0 0;
+    font-family: "IM Fell English SC", Georgia, serif;
+    font-weight: normal; font-size: 28px; letter-spacing: 1px;
+    color: var(--gold);
+    text-shadow: 0 2px 0 #000;
+  }
+  .control { display: flex; align-items: center; gap: 8px; font-size: 16px; }
+  select, .seg button, .btn {
+    font-family: inherit; font-size: 16px;
+    background: var(--parchment); color: var(--ink);
+    border: 2px solid var(--gold-dark); border-radius: 3px;
+    padding: 4px 10px; cursor: pointer;
+  }
+  .seg { display: inline-flex; }
+  .seg button { border-radius: 0; }
+  .seg button:first-child { border-radius: 3px 0 0 3px; }
+  .seg button:last-child { border-radius: 0 3px 3px 0; border-left: 0; }
+  .seg button[aria-pressed="true"] { background: var(--gold); font-weight: bold; }
+  .seg button:disabled { opacity: .45; cursor: not-allowed; }
+  .btn:hover, .seg button:not(:disabled):hover, select:hover { background: #f6ead0; }
+  .seg button[aria-pressed="true"]:hover { background: #d8b45c; }
+
+  /* ---------- layout ---------- */
+  .layout {
+    display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 20px;
+    max-width: 1280px; margin: 0 auto; padding: 20px;
+  }
+  .stage { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+
+  .frame {
+    border: 4px solid var(--frame);
+    outline: 2px solid var(--gold-dark);
+    box-shadow: 0 0 0 6px #1a110b, 0 10px 30px rgba(0,0,0,.6);
+  }
+  /* Sized from the viewport height so the scene, dialogue, and input fit on one screen. */
+  .scene-wrap { position: relative; background: #000; line-height: 0; width: min(100%, calc(40vh * 16 / 9)); margin: 0 auto; }
+  canvas#scene {
+    width: 100%; aspect-ratio: 16 / 9; display: block;
+    image-rendering: pixelated; image-rendering: crisp-edges;
+  }
+  .hud {
+    position: absolute; top: 10px; left: 10px; right: 10px;
+    display: flex; justify-content: space-between; align-items: flex-start;
+    line-height: 1; pointer-events: none;
+  }
+  .hud-box {
+    background: rgba(26, 17, 11, .75); border: 2px solid var(--gold-dark);
+    padding: 6px 10px; color: var(--parchment);
+    font-family: "VT323", monospace; font-size: 20px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .eyes { display: flex; gap: 4px; }
+  .eye { width: 28px; height: 18px; }
+  .eye path.lid { fill: #2a1d14; stroke: var(--gold); stroke-width: 1.5; }
+  .eye circle { fill: #2a1d14; transition: fill .3s; }
+  .eye.on circle { fill: #ff5a3a; }
+  .eye.on path.lid { stroke: #ff8a6a; }
+  .scene-title {
+    position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%);
+    background: rgba(26, 17, 11, .75); border: 2px solid var(--gold-dark);
+    color: var(--gold); padding: 4px 14px; line-height: 1.2;
+    font-family: "IM Fell English SC", serif; font-size: 20px; white-space: nowrap;
+    pointer-events: none;
+  }
+
+  .ending {
+    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    background: rgba(10, 6, 3, .72); line-height: 1.3;
+  }
+  .ending[hidden] { display: none; }
+  .ending-card {
+    background: var(--parchment); border: 4px double var(--frame);
+    padding: 22px 30px; text-align: center; max-width: 80%;
+    box-shadow: 0 10px 40px #000;
+  }
+  .ending-card h2 { margin: 0 0 6px; font-family: "IM Fell English SC", serif; font-weight: normal; font-size: 32px; }
+  .ending-card p { margin: 0 0 16px; color: var(--ink-soft); }
+  .ending.passed h2 { color: var(--green); }
+  .ending.arrested h2 { color: var(--red); }
+  .ending.turned_away h2 { color: var(--ink-soft); }
+
+  /* ---------- dialogue ---------- */
+  .dialogue {
+    background:
+      linear-gradient(rgba(255,255,255,.18), transparent 30%),
+      var(--parchment);
+    padding: 0;
+  }
+  .speaker {
+    text-align: center; padding: 8px 12px 6px;
+    font-family: "IM Fell English SC", serif; font-size: 24px; color: var(--ink);
+    border-bottom: 2px solid var(--parchment-2);
+  }
+  .log {
+    height: clamp(120px, 20vh, 210px); overflow-y: auto; padding: 12px 22px 14px;
+    display: flex; flex-direction: column; gap: 10px;
+    scrollbar-color: var(--gold-dark) var(--parchment-2);
+  }
+  .msg { margin: 0; line-height: 1.4; }
+  .msg.guard::before { content: "\201C"; }
+  .msg.guard::after { content: "\201D"; }
+  .msg.guard.typing::after { content: ""; }
+  .msg.you { color: var(--ink-soft); font-style: italic; padding-left: 18px; border-left: 3px solid var(--parchment-2); }
+  .msg.you b { font-style: normal; font-family: "IM Fell English SC", serif; font-weight: normal; margin-right: 6px; }
+  .msg.system { color: var(--ink-soft); font-size: 15px; text-align: center; }
+  .msg.error { color: var(--red); font-size: 15px; text-align: center; }
+  .msg.thinking { color: var(--ink-soft); font-style: italic; }
+  .msg.thinking span { animation: blink 1.2s infinite; }
+  .msg.thinking span:nth-child(2) { animation-delay: .2s; }
+  .msg.thinking span:nth-child(3) { animation-delay: .4s; }
+  @keyframes blink { 0%, 100% { opacity: .2; } 50% { opacity: 1; } }
+
+  .chat { display: flex; align-items: flex-end; gap: 10px; background: var(--leather-2); padding: 10px; }
+  .chat textarea {
+    flex: 1; min-width: 0; display: block;
+    font-family: inherit; font-size: 18px; line-height: 1.35;
+    background: var(--parchment); color: var(--ink);
+    border: 2px solid var(--gold-dark); padding: 10px 12px; border-radius: 3px;
+    resize: none; overflow-y: hidden; max-height: 170px;
+  }
+  .chat textarea:focus { outline: 2px solid var(--gold); }
+  .chat button { font-size: 18px; height: 48px; padding: 0 22px; font-family: "IM Fell English SC", serif; }
+  .chat :disabled { opacity: .6; cursor: not-allowed; }
+
+  details.debug {
+    background: rgba(236, 220, 180, .1); border: 1px solid var(--gold-dark);
+    color: var(--parchment); font-family: "VT323", monospace; font-size: 19px;
+    padding: 6px 12px;
+  }
+  details.debug summary { cursor: pointer; color: var(--gold); }
+  .debug-grid { display: grid; grid-template-columns: max-content 1fr; gap: 2px 14px; margin-top: 8px; }
+  .debug-grid dt { color: #bfa77a; }
+  .debug-grid dd { margin: 0; }
+  .bar { display: flex; align-items: center; gap: 8px; }
+  .bar i { display: block; height: 10px; background: var(--gold); min-width: 1px; }
+  .rationale { margin-top: 8px; font-family: "IM Fell English", serif; font-size: 16px; color: #e6d6b0; font-style: italic; }
+
+  /* ---------- notes scroll ---------- */
+  .scroll { position: relative; padding: 22px 0; align-self: start; position: sticky; top: 16px; }
+  .scroll::before, .scroll::after {
+    content: ""; position: absolute; left: -10px; right: -10px; height: 26px;
+    border-radius: 13px;
+    background: linear-gradient(#a9824a, #e2c690 40%, #a9824a 70%, #6e4f26);
+    box-shadow: 0 3px 6px rgba(0,0,0,.5);
+    z-index: 2;
+  }
+  .scroll::before { top: 0; }
+  .scroll::after { bottom: 0; }
+  .scroll-inner {
+    background:
+      linear-gradient(90deg, rgba(120,80,30,.25), transparent 8%, transparent 92%, rgba(120,80,30,.25)),
+      var(--parchment);
+    padding: 26px 22px 24px;
+    max-height: calc(100vh - 120px); overflow-y: auto;
+    scrollbar-color: var(--gold-dark) var(--parchment-2);
+  }
+  .scroll h2 {
+    margin: 0 0 10px; text-align: center;
+    font-family: "IM Fell English SC", serif; font-weight: normal; font-size: 26px;
+  }
+  .scroll h3 {
+    margin: 16px 0 6px; font-family: "IM Fell English SC", serif; font-weight: normal; font-size: 19px;
+    color: var(--ink-soft); border-bottom: 1px solid var(--parchment-2);
+  }
+  .scroll p, .scroll li { font-size: 16px; line-height: 1.4; }
+  .scroll p { margin: 0; }
+  .scroll ul { margin: 0; padding-left: 18px; }
+  .scroll li { margin: 4px 0; }
+  .scroll li::marker { content: "\2766  "; color: var(--gold-dark); }
+  #hints li { font-style: italic; }
+  #hints li.new { animation: ink 1.4s ease-out; }
+  @keyframes ink { from { background: rgba(201, 162, 74, .45); } to { background: transparent; } }
+  .empty { color: var(--ink-soft); font-style: italic; font-size: 15px; }
+
+  @media (max-width: 900px) {
+    .layout { grid-template-columns: 1fr; padding: 16px; }
+    .scroll { position: relative; top: 0; }
+    .scroll-inner { max-height: none; }
+    .topbar h1 { font-size: 24px; width: 100%; }
+    .log { height: 180px; }
+  }
+</style>
+</head>
+<body>
+<header class="topbar">
+  <h1>Talk Past the Guard</h1>
+  <label class="control">Scene
+    <select id="scenario"><option value="">Random</option></select>
+  </label>
+  <div class="control">Judge
+    <div class="seg" id="judgeSeg">
+      <button type="button" data-judge="gpt" aria-pressed="true">GPT</button>
+      <button type="button" data-judge="jev" aria-pressed="false">Jev</button>
+    </div>
+  </div>
+  <button class="btn" id="newGame" type="button">New game</button>
+</header>
+
+<main class="layout">
+  <section class="stage">
+    <div class="scene-wrap frame">
+      <canvas id="scene" width="160" height="90" aria-label="Pixel-art scene"></canvas>
+      <div class="hud">
+        <div class="hud-box" title="Suspicion">
+          <div class="eyes" id="eyes"></div>
+        </div>
+        <div class="hud-box" id="turns">Turn 1/5</div>
+      </div>
+      <div class="scene-title" id="sceneTitle"></div>
+      <div class="ending" id="ending" hidden>
+        <div class="ending-card">
+          <h2 id="endingTitle"></h2>
+          <p id="endingText"></p>
+          <button class="btn" id="playAgain" type="button">Play again</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="dialogue frame">
+      <div class="speaker" id="speaker">&nbsp;</div>
+      <div class="log" id="log" aria-live="polite"></div>
+    </div>
+
+    <form class="chat frame" id="chat" autocomplete="off">
+      <textarea id="line" rows="1" maxlength="600" placeholder="Say something to the guard... (Shift+Enter for a new line)" aria-label="Your line"></textarea>
+      <button class="btn" type="submit" id="speak">Speak</button>
+    </form>
+
+    <details class="debug" id="debug">
+      <summary>The judge's verdict</summary>
+      <div id="debugBody"><p>No verdict yet.</p></div>
+    </details>
+  </section>
+
+  <aside class="scroll">
+    <div class="scroll-inner">
+      <h2>Notes</h2>
+      <h3>Your goal</h3>
+      <p id="goal"></p>
+      <h3>What you know</h3>
+      <ul id="clues"></ul>
+      <h3>What the guard let slip</h3>
+      <ul id="hints"></ul>
+      <p class="empty" id="hintsEmpty">Nothing yet. Listen closely to what the guard says.</p>
+    </div>
+  </aside>
+</main>
+
+<script>
+/* =====================================================================
+   Pixel-art scenes (160x90, redrawn ~10 fps)
+   ===================================================================== */
+const canvas = document.getElementById("scene");
+const ctx = canvas.getContext("2d");
+const W = 160, H = 90;
+
+function R(x, y, w, h, c) { ctx.fillStyle = c; ctx.fillRect(Math.round(x), Math.round(y), Math.round(w), Math.round(h)); }
+function P(x, y, c) { R(x, y, 1, 1, c); }
+function disc(cx, cy, r, c) {
+  for (let y = -r; y <= r; y++) for (let x = -r; x <= r; x++)
+    if (x * x + y * y <= r * r + r * 0.6) P(cx + x, cy + y, c);
+}
+function glow(cx, cy, r, c, a) {
+  ctx.globalAlpha = a;
+  for (let y = -r; y <= r; y++) for (let x = -r; x <= r; x++) {
+    const d = x * x + y * y;
+    if (d <= r * r && ((x + y) & 1 || d < r * r * 0.3)) P(cx + x, cy + y, c);
+  }
+  ctx.globalAlpha = 1;
+}
+function rng(seed) {
+  return () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
+}
+function bands(colors, y0, h) {
+  const bh = h / colors.length;
+  colors.forEach((c, i) => {
+    R(0, y0 + i * bh, W, bh + 1, c);
+    if (i > 0) for (let x = (i & 1); x < W; x += 2) P(x, y0 + i * bh - 1, c);  // dithered seam
+  });
+}
+function hills(base, amp, freq, phase, c) {
+  for (let x = 0; x < W; x++) {
+    const h = base + Math.sin(x / freq + phase) * amp + Math.sin(x / (freq * 0.37) + phase * 2) * amp * 0.35;
+    R(x, h, 1, H - h, c);
+  }
+}
+function cloud(x, y, s) {
+  disc(x, y, 4 * s, "#f6f9ff"); disc(x + 5 * s, y - 2 * s, 5 * s, "#f6f9ff");
+  disc(x + 11 * s, y, 4 * s, "#f6f9ff"); R(x - 3 * s, y, 18 * s, 4 * s, "#f6f9ff");
+  R(x - 3 * s, y + 3 * s, 18 * s, 1, "#d7e5f5");
+}
+function torch(x, y, t) {
+  R(x, y + 3, 2, 5, "#4a2f1d"); R(x - 1, y + 3, 4, 1, "#2b1b10");
+  const f = (t >> 1) % 3;
+  glow(x + 1, y + 1, 11, "#ffb24a", 0.16);
+  const flames = [["#ffe27a", "#ff9a2e", "#e8501f"], ["#ff9a2e", "#ffe27a", "#e8501f"], ["#ffe27a", "#e8501f", "#ff9a2e"]][f];
+  P(x, y, flames[0]); P(x + 1, y, flames[1]); P(x, y + 1, flames[2]); P(x + 1, y + 1, flames[0]);
+  P(x + (f & 1), y - 1, "#ffe27a"); P(x, y + 2, "#e8501f"); P(x + 1, y + 2, "#ff9a2e");
+}
+function stoneWall(x0, y0, w, h, base, mortar, light, seed) {
+  R(x0, y0, w, h, base);
+  const r = rng(seed);
+  for (let y = y0, row = 0; y < y0 + h; y += 4, row++) {
+    R(x0, y, w, 1, mortar);
+    for (let x = x0 - (row & 1) * 4; x < x0 + w; x += 8) {
+      if (x >= x0) R(x, y, 1, 4, mortar);
+      if (r() < 0.35) R(Math.max(x + 1, x0), y + 1, 3, 1, light);
+    }
+  }
+}
+
+/* Guard sprite: 16 x 25 */
+const GUARD = [
+  "......KKKK......",
+  ".....KHHHHK.....",
+  "....KHHHHHHK....",
+  "....KHhHHhHK....",
+  "....KHSSSShK....",
+  "....KHSKSKhK....",
+  "....KhSSSShK....",
+  ".....KSssSK.....",
+  "...KKKMMMMKKK...",
+  "..KMMMTTTTMMMK..",
+  "..KMmTTGGTTmMK..",
+  "..KMmTTTTTTmMK..",
+  "..KMKTTTTTTKMK..",
+  "..KSKTTGGTTKSK..",
+  "..KSKBBGGBBKSK..",
+  "...K.TTTTTT.K...",
+  "....KTtTTtTK....",
+  "....KTtTTtTK....",
+  "....KTtKKtTK....",
+  "....KMMK.KMMK...",
+  "....KMmK.KmMK...",
+  "....KMmK.KmMK...",
+  "....KBBK.KBBK...",
+  "...KBBBK.KBBBK..",
+  "...KKKKK.KKKKK..",
+];
+function guard(x, y, tabard, tabardDark, weapon, t) {
+  const bob = ((t >> 3) & 1) && 1;  // gentle breathing
+  const pal = { K: "#1b1410", H: "#b8c0c8", h: "#7a828c", S: "#d9a27a", s: "#b07a56",
+    T: tabard, t: tabardDark, M: "#8d95a0", m: "#5f6670", B: "#4a2f1d", G: "#d8b14a" };
+  // shadow
+  ctx.globalAlpha = 0.3; R(x + 2, y + 24, 13, 2, "#000"); ctx.globalAlpha = 1;
+  // weapon in the right hand (viewer's left)
+  const wx = x + 2;
+  R(wx, y - 8, 1, 33, "#5a3b22");
+  if (weapon === "halberd") {
+    R(wx - 3, y - 7, 3, 5, "#c9d0d8"); R(wx - 3, y - 7, 1, 5, "#8d95a0"); R(wx + 1, y - 6, 2, 2, "#c9d0d8");
+    P(wx, y - 10, "#c9d0d8"); P(wx, y - 9, "#c9d0d8");
+  } else {
+    P(wx, y - 11, "#e3e8ee"); R(wx - 1, y - 10, 3, 2, "#c9d0d8"); P(wx, y - 8, "#8d95a0");
+  }
+  GUARD.forEach((row, ry) => {
+    for (let rx = 0; rx < row.length; rx++) {
+      const c = pal[row[rx]];
+      if (c) P(x + rx, y + ry + (ry < 9 ? bob : 0), c);
+    }
+  });
+}
+
+const SCENES = {
+  gate(t) {
+    bands(["#1b1838", "#211d45", "#282352", "#302a60", "#3a326e", "#453b78"], 0, 48);
+    const r = rng(11);
+    for (let i = 0; i < 46; i++) {
+      const x = r() * W | 0, y = r() * 40 | 0, tw = (t + i * 7) % 40 < 3;
+      P(x, y, tw ? "#ffffff" : (i % 3 ? "#bfb8ec" : "#e8e2ff"));
+    }
+    disc(128, 13, 7, "#efe3cf"); disc(126, 11, 2, "#ddd0b8"); P(131, 16, "#ddd0b8"); P(124, 15, "#ddd0b8");
+    glow(128, 13, 12, "#efe3cf", 0.08);
+    disc(108, 9, 3, "#c7b3e6"); P(107, 8, "#d9cbef");
+    hills(46, 3, 13, 0.5, "#24402c");
+    // towers + wall
+    stoneWall(0, 10, 22, 64, "#8a7656", "#5e4f39", "#a38d68", 2);
+    stoneWall(138, 10, 22, 64, "#8a7656", "#5e4f39", "#a38d68", 3);
+    for (let x = 0; x < 22; x += 6) R(x, 6, 4, 4, "#8a7656");
+    for (let x = 138; x < 160; x += 6) R(x, 6, 4, 4, "#8a7656");
+    stoneWall(22, 26, 116, 48, "#7d6c50", "#5a4c37", "#958262", 5);
+    for (let x = 22; x < 138; x += 10) { R(x, 21, 6, 5, "#7d6c50"); R(x, 21, 6, 1, "#958262"); }
+    R(8, 24, 2, 6, "#1b1410"); R(146, 24, 2, 6, "#1b1410");  // arrow slits
+    // great gate
+    for (let y = 26; y < 74; y++) for (let x = 56; x <= 104; x++) {
+      const d = (x - 80) ** 2 + (y - 50) ** 2;
+      if (y >= 50 ? Math.abs(x - 80) <= 24 : d <= 24 * 24) {
+        const inner = y >= 50 ? Math.abs(x - 80) <= 20 : d <= 20 * 20;
+        if (!inner) P(x, y, (x + y) % 5 ? "#a08b66" : "#8a7656");
+        else P(x, y, (x - 60) % 5 === 0 ? "#45291a" : "#5d3c23");
+      }
+    }
+    R(79, 31, 2, 43, "#2b1b10");
+    for (const by of [46, 58, 68]) { R(61, by, 38, 2, "#2c2c33"); for (let x = 63; x < 98; x += 5) P(x, by, "#8d95a0"); }
+    // postern door
+    R(114, 56, 10, 18, "#5d3c23"); R(114, 55, 10, 1, "#a08b66"); R(113, 56, 1, 18, "#a08b66"); R(124, 56, 1, 18, "#a08b66");
+    R(114, 62, 10, 1, "#2c2c33"); P(122, 65, "#d8b14a");
+    torch(50, 40, t); torch(108, 40, t);
+    // ground + road
+    R(0, 74, W, 16, "#2c4127");
+    for (let y = 74; y < H; y++) { const half = 22 + (y - 74) * 2.2; R(80 - half, y, half * 2, 1, "#6d5f49"); }
+    const g = rng(4);
+    for (let i = 0; i < 70; i++) { const x = g() * W | 0, y = 75 + g() * 15 | 0; P(x, y, g() < .5 ? "#3a5432" : "#7e6f56"); }
+    guard(110, 61, "#8e2a2a", "#651c1c", "spear", t);
+  },
+
+  archive(t) {
+    stoneWall(0, 0, W, 76, "#57493c", "#3a3029", "#665748", 8);
+    // stained glass window
+    for (let y = 8; y < 42; y++) for (let x = 18; x <= 36; x++) {
+      const d = (x - 27) ** 2 + (y - 17) ** 2;
+      if (y >= 17 ? Math.abs(x - 27) <= 9 : d <= 81) {
+        const edge = y >= 17 ? Math.abs(x - 27) >= 8 : d >= 64;
+        P(x, y, edge ? "#2a221c" : ((x + (y >> 2)) % 6 < 3 ? "#5c7fd0" : ((y >> 2) % 2 ? "#9a62c8" : "#d8b14a")));
+      }
+    }
+    R(27, 10, 1, 32, "#2a221c"); R(19, 25, 17, 1, "#2a221c");
+    glow(27, 30, 14, "#9ab6ff", 0.07);
+    // tapestry
+    R(118, 10, 14, 34, "#4b2a6b"); R(118, 10, 14, 2, "#d8b14a"); R(118, 42, 14, 2, "#d8b14a");
+    for (let x = 118; x < 132; x += 2) P(x, 44, "#d8b14a");
+    disc(125, 24, 3, "#d8b14a"); disc(125, 24, 1, "#4b2a6b"); R(124, 31, 2, 6, "#d8b14a");
+    // floor + spiral stair
+    R(0, 76, W, 14, "#3b2f25");
+    for (let x = 0; x < W; x += 9) R(x, 76, 1, 14, "#2c231b");
+    for (let i = 0; i < 7; i++) {
+      R(i * 7 - 4, 76 - i * 6, 16, 6, "#776a5b"); R(i * 7 - 4, 76 - i * 6, 16, 1, "#9a8c7a");
+      R(i * 7 - 4, 81 - i * 6, 16, 1, "#4a3f34");
+    }
+    // archive door with stone frame
+    for (let y = 26; y < 76; y++) for (let x = 62; x <= 98; x++) {
+      const d = (x - 80) ** 2 + (y - 44) ** 2;
+      if (y >= 44 ? Math.abs(x - 80) <= 18 : d <= 18 * 18) {
+        const inner = y >= 44 ? Math.abs(x - 80) <= 14 : d <= 14 * 14;
+        P(x, y, inner ? ((x - 66) % 5 === 0 ? "#3b2416" : "#4e311d") : ((x + y) % 4 ? "#857766" : "#6e6253"));
+      }
+    }
+    for (const by of [42, 56, 68]) R(66, by, 29, 2, "#26262b");
+    // pulsing ward glyph
+    const pulse = (Math.sin(t / 4) + 1) / 2;
+    const ward = pulse > 0.5 ? "#a8dcff" : "#5fb8ff";
+    glow(80, 52, 12, "#5fb8ff", 0.12 + pulse * 0.12);
+    for (let a = 0; a < 32; a++) { const ang = a / 32 * Math.PI * 2; P(80 + Math.round(Math.cos(ang) * 6), 52 + Math.round(Math.sin(ang) * 6), ward); }
+    R(80, 47, 1, 11, ward); R(75, 52, 11, 1, ward); P(77, 49, ward); P(83, 49, ward); P(77, 55, ward); P(83, 55, ward);
+    torch(56, 36, t); torch(102, 36, t);
+    guard(102, 62, "#4b2a6b", "#341c4b", "halberd", t);
+  },
+
+  amulet(t) {
+    bands(["#4f9de8", "#62aaee", "#78b8f2", "#90c6f5", "#a9d4f8"], 0, 44);
+    disc(140, 10, 5, "#fff6c8"); glow(140, 10, 10, "#fff6c8", 0.18);
+    const drift = (t * 0.25) % 220;
+    cloud((20 + drift) % 220 - 30, 10, 1); cloud((110 + drift) % 220 - 30, 18, 0.8);
+    // distant white-gold tower
+    R(116, 4, 6, 36, "#ece4cc"); R(116, 4, 1, 36, "#fffaf0"); R(121, 4, 1, 36, "#c9bf9f");
+    for (let i = 0; i < 6; i++) R(119 - (i >> 1), -2 + i * 1, 1 + (i >> 1) * 2, 1, "#ece4cc");
+    hills(36, 3, 16, 1.2, "#7bbd5c"); hills(42, 2, 9, 2.5, "#5c9a44");
+    // houses
+    const houses = [[0, 26], [26, 30], [52, 24], [100, 28], [130, 26]];
+    houses.forEach(([x, y], i) => {
+      const w = 26;
+      R(x, y + 8, w, 62 - y - 8, "#dcc69a");
+      R(x, y + 8, 1, 62 - y - 8, "#6b4a2b"); R(x + w - 1, y + 8, 1, 62 - y - 8, "#6b4a2b"); R(x, y + 18, w, 1, "#6b4a2b");
+      for (let r = 0; r < 9; r++) R(x - 2 + r, y + 8 - r, w + 4 - r * 2, 1, r % 3 ? "#b0472f" : "#8f3624");
+      R(x + 5, y + 11, 4, 4, "#3c4a6a"); R(x + 17, y + 11, 4, 4, "#3c4a6a");
+      if (i % 2) R(x + 10, y + 22, 6, 40 - y - 22 + 22, "#6b4a2b");
+    });
+    // cobbled plaza
+    R(0, 60, W, 30, "#a89a80");
+    const c = rng(21);
+    for (let y = 61; y < H; y += 3) for (let x = (y % 2) * 3; x < W; x += 6) {
+      R(x, y, 4, 2, c() < .5 ? "#b8ab90" : "#9a8c72");
+    }
+    // stalls
+    const stall = (x, a, b, goods) => {
+      R(x, 50, 2, 24, "#5a3b22"); R(x + 28, 50, 2, 24, "#5a3b22");
+      for (let s = 0; s < 30; s += 3) R(x + s, 46, 3, 6, (s / 3) % 2 ? a : b);
+      for (let s = 0; s < 30; s += 6) P(x + s + 1, 52, (s / 3) % 2 ? a : b);
+      R(x, 64, 30, 3, "#7a5432"); R(x, 67, 30, 7, "#5a3b22");
+      goods(x);
+    };
+    stall(4, "#c23b2b", "#f2ece0", x => { for (let i = 0; i < 12; i++) P(x + 3 + i * 2, 63 - (i % 2), i % 3 ? "#d23b2b" : "#7cb342"); });
+    stall(52, "#6a3d91", "#d8b14a", x => {
+      for (let i = 0; i < 6; i++) { R(x + 4 + i * 4, 62, 2, 2, "#c9d0d8"); }
+      for (let i = 0; i < 4; i++) if ((t + i * 5) % 14 < 3) P(x + 5 + i * 6, 61, "#fffbe0");
+    });
+    stall(126, "#2f5aa8", "#f2ece0", x => { for (let i = 0; i < 5; i++) R(x + 3 + i * 5, 60, 4, 4, ["#8e2a2a", "#3f6b2f", "#d8b14a", "#2f5aa8", "#6a3d91"][i]); });
+    guard(96, 62, "#2f5aa8", "#1f3d78", "spear", t);
+  },
+
+  checkpoint(t) {
+    bands(["#6fb0e8", "#8ec0ea", "#b6d2e2", "#e2dcc0", "#f3d29a"], 0, 44);
+    disc(28, 22, 6, "#fff1b8"); glow(28, 22, 13, "#ffe08a", 0.2);
+    cloud(((t * 0.2) % 220) - 30, 9, 0.7);
+    hills(34, 4, 18, 0.2, "#7aa75a"); hills(42, 3, 10, 1.8, "#5f8f43");
+    const tree = (x, y, s) => { R(x, y, 2, 6 * s, "#4a2f1d"); disc(x + 1, y - 2, 4 * s, "#3f7a34"); disc(x, y - 3, 2 * s, "#56973f"); };
+    tree(140, 40, 1); tree(150, 44, 1.2); tree(6, 42, 1);
+    // river
+    R(0, 58, W, 14, "#3f7fbf");
+    for (let i = 0; i < 18; i++) { const x = (i * 37 + t * 1.5) % W, y = 60 + (i * 7) % 11; R(x, y, 3, 1, "#9fd3ff"); }
+    R(0, 72, W, 18, "#6f9a4a");
+    // bridge
+    R(36, 50, 92, 4, "#a39478"); R(36, 49, 92, 1, "#c4b596");
+    for (let x = 36; x < 128; x += 6) { R(x, 45, 4, 4, "#a39478"); P(x, 45, "#c4b596"); }
+    for (let y = 54; y < 72; y++) for (let x = 36; x < 128; x++) {
+      const d = ((x - 82) / 34) ** 2 + ((y - 72) / 15) ** 2;
+      if (d >= 1) P(x, y, (x + y) % 7 ? "#958668" : "#7d7058");
+    }
+    // road to the bridge
+    for (let y = 72; y < H; y++) { const w = 26 + (y - 72) * 1.6; R(40 - w / 2 + (y - 72) * 0.8, y, w, 1, "#b59a6a"); }
+    // guard post and barrier
+    R(128, 32, 18, 22, "#7a5432"); R(126, 30, 22, 3, "#5a3b22"); R(132, 38, 6, 6, "#2b1b10");
+    for (let x = 100; x < 128; x += 4) R(x, 46, 4, 2, (x / 4) % 2 ? "#c23b2b" : "#f2ece0");
+    // the player's cart (and the line behind it)
+    R(2, 76, 10, 4, "#6b4a2b"); R(1, 74, 2, 2, "#5a3b22");
+    R(10, 66, 36, 8, "#7a5432"); R(10, 66, 36, 1, "#946a42");
+    for (let i = 0; i < 3; i++) {
+      const cx = 12 + i * 11; R(cx, 58, 10, 8, "#946a42"); R(cx, 58, 10, 1, "#b3875a"); R(cx + 4, 58, 1, 8, "#6b4a2b");
+      for (let a = 0; a < 4; a++) P(cx + 1 + a * 2, 57, a % 2 ? "#d23b2b" : "#b82e22");
+    }
+    // the sweet smell drifting from crate three
+    for (let k = 0; k < 3; k++) {
+      const ph = (t * 0.6 + k * 4) % 12;
+      P(37 + Math.round(Math.sin((ph + k) / 2) * 2), 56 - ph, k % 2 ? "#c58fd9" : "#b6e07a");
+    }
+    for (const wx of [16, 38]) { disc(wx, 76, 5, "#4a2f1d"); disc(wx, 76, 3, "#6b4a2b"); P(wx, 76, "#2b1b10"); R(wx - 3, 76, 7, 1, "#4a2f1d"); R(wx, 73, 1, 7, "#4a2f1d"); }
+    guard(104, 62, "#b86b1e", "#8a4f14", "spear", t);
+  },
+};
+
+let sceneKey = "gate", tick = 0;
+function frame() {
+  ctx.clearRect(0, 0, W, H);
+  (SCENES[sceneKey] || SCENES.gate)(tick);
+  // soft vignette
+  ctx.globalAlpha = 0.18;
+  for (let i = 0; i < 4; i++) { R(i, 0, 1, H, "#000"); R(W - 1 - i, 0, 1, H, "#000"); R(0, i, W, 1, "#000"); R(0, H - 1 - i, W, 1, "#000"); }
+  ctx.globalAlpha = 1;
+}
+setInterval(() => { tick++; frame(); }, 100);
+
+/* =====================================================================
+   Game UI
+   ===================================================================== */
+const $ = id => document.getElementById(id);
+const els = {
+  scenario: $("scenario"), judgeSeg: $("judgeSeg"), newGame: $("newGame"),
+  eyes: $("eyes"), turns: $("turns"), sceneTitle: $("sceneTitle"),
+  ending: $("ending"), endingTitle: $("endingTitle"), endingText: $("endingText"), playAgain: $("playAgain"),
+  speaker: $("speaker"), log: $("log"), chat: $("chat"), line: $("line"), speak: $("speak"),
+  debugBody: $("debugBody"), goal: $("goal"), clues: $("clues"), hints: $("hints"), hintsEmpty: $("hintsEmpty"),
+};
+let config = null, game = null, judge = "gpt", busy = false;
+try { judge = localStorage.getItem("guard.judge") || "gpt"; } catch {}
+
+async function api(path, body) {
+  const res = await fetch(path, body ? { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) } : {});
+  const data = await res.json().catch(() => ({ error: `Server returned ${res.status}` }));
+  if (!res.ok) throw new Error(data.error || `Server returned ${res.status}`);
+  return data;
+}
+
+function eyeSvg() {
+  return `<svg class="eye" viewBox="0 0 28 18" aria-hidden="true"><path class="lid" d="M1 9 Q14 -3 27 9 Q14 21 1 9 Z"/><circle cx="14" cy="9" r="4.5"/></svg>`;
+}
+function setMeter(suspicion, limit) {
+  els.eyes.innerHTML = Array.from({ length: limit }, eyeSvg).join("");
+  [...els.eyes.children].forEach((e, i) => e.classList.toggle("on", i < suspicion));
+  els.eyes.parentElement.title = `Suspicion ${suspicion}/${limit}`;
+}
+function setTurns(turn, max) { els.turns.textContent = `Turn ${Math.min(turn + 1, max)}/${max}`; }
+
+function addMsg(cls, text) {
+  const p = document.createElement("p");
+  p.className = "msg " + cls;
+  p.textContent = text;
+  els.log.appendChild(p);
+  els.log.scrollTop = els.log.scrollHeight;
+  return p;
+}
+function addYou(text) {
+  const p = addMsg("you", "");
+  const b = document.createElement("b"); b.textContent = "You:";
+  p.append(b, document.createTextNode(text));
+}
+let skipTyping = null;
+function typeGuard(text) {
+  return new Promise(resolve => {
+    const p = addMsg("guard typing", "");
+    let i = 0;
+    const finish = () => { clearInterval(timer); p.textContent = text; p.classList.remove("typing"); skipTyping = null; els.log.scrollTop = els.log.scrollHeight; resolve(); };
+    const timer = setInterval(() => {
+      i += 2; p.textContent = text.slice(0, i); els.log.scrollTop = els.log.scrollHeight;
+      if (i >= text.length) finish();
+    }, 22);
+    skipTyping = finish;
+  });
+}
+els.log.addEventListener("click", () => skipTyping && skipTyping());
+
+function setBusy(b) {
+  busy = b;
+  els.line.disabled = b || !game || !!game.over;
+  els.speak.disabled = els.line.disabled;
+  if (!els.line.disabled) els.line.focus({ preventScroll: true });
+}
+
+function addHint(text) {
+  els.hintsEmpty.hidden = true;
+  const li = document.createElement("li");
+  li.className = "new"; li.textContent = `“${text}”`;
+  els.hints.appendChild(li);
+}
+
+function showDebug(d) {
+  const rows = [
+    ["verdict", d.raw_decision !== d.decision ? `${d.decision} (judge said ${d.raw_decision}; guardrail applied)` : d.decision],
+    ["confidence", d.confidence.toFixed(2)],
+    ["persuasion", `${d.persuasiveness.toFixed(2)} / 3`],
+    ["out of character", d.out_of_character.toFixed(2)],
+    ["latency", `${d.latency_ms} ms`],
+  ];
+  const dl = document.createElement("dl"); dl.className = "debug-grid";
+  for (const [k, v] of rows) { const dt = document.createElement("dt"); dt.textContent = k; const dd = document.createElement("dd"); dd.textContent = v; dl.append(dt, dd); }
+  if (d.probabilities) for (const [k, v] of Object.entries(d.probabilities)) {
+    const dt = document.createElement("dt"); dt.textContent = `p(${k})`;
+    const dd = document.createElement("dd"); dd.className = "bar";
+    const i = document.createElement("i"); i.style.width = `${Math.round(v * 140)}px`;
+    dd.append(i, document.createTextNode(v.toFixed(2))); dl.append(dt, dd);
+  }
+  els.debugBody.replaceChildren(dl);
+  if (d.rationale) { const p = document.createElement("p"); p.className = "rationale"; p.textContent = d.rationale; els.debugBody.append(p); }
+}
+
+const ENDING_TITLES = { passed: "You got through", arrested: "Arrested", turned_away: "Turned away" };
+function showEnding(outcome, text) {
+  els.ending.className = "ending " + outcome;
+  els.endingTitle.textContent = ENDING_TITLES[outcome] || "The end";
+  els.endingText.textContent = text;
+  els.ending.hidden = false;
+  els.playAgain.focus({ preventScroll: true });
+}
+
+function setJudge(kind) {
+  judge = kind;
+  try { localStorage.setItem("guard.judge", kind); } catch {}
+  for (const b of els.judgeSeg.querySelectorAll("button")) b.setAttribute("aria-pressed", String(b.dataset.judge === kind));
+}
+
+async function newGame() {
+  if (busy) return;
+  setBusy(true);
+  els.ending.hidden = true;
+  els.log.replaceChildren();
+  els.hints.replaceChildren(); els.hintsEmpty.hidden = false;
+  els.debugBody.innerHTML = "<p>No verdict yet.</p>";
+  try {
+    const g = await api("/api/new", { scenario: els.scenario.value || null, judge });
+    game = { ...g, over: false };
+    const s = g.scenario;
+    sceneKey = s.key; frame();
+    els.sceneTitle.textContent = s.title;
+    els.speaker.textContent = s.guard;
+    els.goal.textContent = s.goal;
+    els.clues.replaceChildren(...s.clues.map(c => { const li = document.createElement("li"); li.textContent = c; return li; }));
+    setMeter(0, g.suspicion_limit); setTurns(0, g.max_turns);
+    addMsg("system", `${s.setting}  (Judge: ${g.judge === "gpt" ? "GPT" : "Jev"} · ${g.model})`);
+    await typeGuard(s.opening_line);
+  } catch (e) {
+    game = null;
+    addMsg("error", e.message);
+  }
+  setBusy(false);
+}
+
+async function speak(line) {
+  if (busy || !game || game.over) return;
+  setBusy(true);
+  addYou(line);
+  const first = game.scenario.guard.split(" ").pop();
+  const thinking = addMsg("thinking", `${first} weighs your words`);
+  thinking.insertAdjacentHTML("beforeend", "<span>.</span><span>.</span><span>.</span>");
+  try {
+    const d = await api("/api/turn", { id: game.id, line });
+    thinking.remove();
+    showDebug(d);
+    setMeter(d.suspicion, game.suspicion_limit);
+    setTurns(d.turn, game.max_turns);
+    await typeGuard(d.reply);
+    if (d.decision === "suspicious") addHint(d.reply);
+    if (d.closing_line) await typeGuard(d.closing_line);
+    if (d.outcome) { game.over = true; setTimeout(() => showEnding(d.outcome, d.ending), 700); }
+  } catch (e) {
+    thinking.remove();
+    addMsg("error", e.message);
+  }
+  setBusy(false);
+}
+
+// The input keeps its width and grows taller with the text, up to max-height.
+function autosize() {
+  const box = els.line;
+  box.style.height = "auto";
+  box.style.height = `${box.scrollHeight + 4}px`;
+  box.style.overflowY = box.scrollHeight + 4 > parseFloat(getComputedStyle(box).maxHeight) ? "auto" : "hidden";
+}
+els.line.addEventListener("input", autosize);
+els.line.addEventListener("keydown", e => {
+  if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); els.chat.requestSubmit(); }
+});
+els.chat.addEventListener("submit", e => {
+  e.preventDefault();
+  const line = els.line.value.trim();
+  if (!line) return;
+  els.line.value = "";
+  autosize();
+  speak(line);
+});
+els.newGame.addEventListener("click", newGame);
+els.playAgain.addEventListener("click", newGame);
+els.scenario.addEventListener("change", newGame);
+els.judgeSeg.addEventListener("click", e => {
+  const b = e.target.closest("button");
+  if (!b || b.disabled || b.dataset.judge === judge) return;
+  setJudge(b.dataset.judge);
+  newGame();
+});
+
+(async function init() {
+  setMeter(0, 3);
+  frame();
+  try {
+    config = await api("/api/config");
+  } catch (e) {
+    addMsg("error", "Can't reach the game server. Start it with: python server.py");
+    return;
+  }
+  for (const s of config.scenarios) {
+    const o = document.createElement("option"); o.value = s.key; o.textContent = s.title; els.scenario.appendChild(o);
+  }
+  for (const b of els.judgeSeg.querySelectorAll("button")) {
+    const ok = config.judges[b.dataset.judge];
+    b.disabled = !ok;
+    if (!ok) b.title = `No API key set for ${b.dataset.judge}`;
+  }
+  const wanted = new URLSearchParams(location.search).get("scene");
+  if (wanted && config.scenarios.some(s => s.key === wanted)) els.scenario.value = wanted;
+  if (!config.judges[judge]) judge = config.judges.gpt ? "gpt" : "jev";
+  setJudge(judge);
+  newGame();
+})();
+</script>
+</body>
+</html>
