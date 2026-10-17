@@ -58,6 +58,21 @@ class SessionStarted(Event):
 
 
 @dataclass(frozen=True, kw_only=True)
+class SessionResumed(Event):
+    """Sent once, right after `session_started`, when a saved session was resumed (sessions spec §5.5)."""
+    type: ClassVar[str] = "session_resumed"
+    title: str
+    created: str
+    turns_total: int                # every turn line, across resets
+    turns: list = field(default_factory=list)          # last ≤20 restored: {turn_id, user_message, outcome, text, ts}
+    totals: dict = field(default_factory=dict)         # restored usage totals (TurnStats shape)
+    history: str = "pruned"         # full | pruned: which form of the earlier turns the model is given
+    restored_items: int = 0         # history items given to the model, excluding the system message
+    interrupted_turn: str | None = None                # turn_id recovered from a process that died mid-turn
+    saved_config: dict = field(default_factory=dict)   # {model, reasoning, approval, prune_history} at the last save
+
+
+@dataclass(frozen=True, kw_only=True)
 class TurnStarted(Event):
     type: ClassVar[str] = "turn_started"
     user_message: str
@@ -179,9 +194,9 @@ class TurnFailed(Event):
 
 
 EVENT_TYPES: dict[str, type[Event]] = {cls.type: cls for cls in (
-    SessionStarted, TurnStarted, ModelRoundStarted, TextDelta, ModelRetry, ModelRoundCompleted, WebAction,
-    ToolStarted, ToolCompleted, ApprovalRequested, ApprovalResolved, Notice, TurnCompleted, TurnCancelled,
-    TurnFailed)}
+    SessionStarted, SessionResumed, TurnStarted, ModelRoundStarted, TextDelta, ModelRetry, ModelRoundCompleted,
+    WebAction, ToolStarted, ToolCompleted, ApprovalRequested, ApprovalResolved, Notice, TurnCompleted,
+    TurnCancelled, TurnFailed)}
 
 
 def event_from_dict(data: dict) -> Event:

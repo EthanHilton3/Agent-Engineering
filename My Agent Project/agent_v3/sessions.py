@@ -319,8 +319,9 @@ class SessionStore:
 class SessionRecorder:
     """Writes one session's events, history and meta (§4.2). Built by `SessionStore.create` / `open`.
 
-    Every call arrives under the Session lock. An OSError disables the recorder: `error` then names the
-    folder and the problem, and later calls do nothing (§5.4). `Session` reports it once.
+    Every call arrives under the Session lock. An OSError (or any other error, so a recorder bug cannot fail a
+    turn either) disables the recorder: `error` then names the folder and the problem, and later calls do
+    nothing (§5.4). `Session` reports it once.
     """
 
     def __init__(self, store: SessionStore, session_id: str, meta: dict, *, new: bool = False,
@@ -380,10 +381,10 @@ class SessionRecorder:
             return
         try:
             fn(*args)
-        except OSError as e:
+        except Exception as e:
             self._disable(e)
 
-    def _disable(self, e: OSError) -> None:
+    def _disable(self, e: Exception) -> None:
         self.error = f"could not save session {self.session_id} to {self.dir}: {e}"
 
     def _on_event(self, event: Event) -> None:
@@ -398,6 +399,7 @@ class SessionRecorder:
         items = jsonable(items)
         record = None if record is None else jsonable(record)
         line = {"v": FORMAT_VERSION, "kind": "turn", "turn_id": turn_id, "outcome": outcome, "ts": now_iso(),
+                "model": self._meta.get("model") or "",       # the model whose items these are (restore, §5.2)
                 "user_message": user_message, "text": text, "items": items,
                 "record": None if record == items else record}
         self._ensure_files()
