@@ -62,9 +62,9 @@ def cap_output(text: str, ctx: ToolContext) -> tuple[str, dict]:
 
 
 class RunCommandArgs(BaseModel):
-    command: str = Field(description="Shell command to run with bash.")
-    timeout: int | None = Field(default=None, ge=1, le=600, description="Timeout in seconds. Default 60, max 600.")
-    cwd: str | None = Field(default=None, description="Working directory. Default: the workspace root.")
+    command: str = Field(description="Bash command.")
+    timeout: int | None = Field(default=None, ge=1, le=600, description="Timeout in seconds. Default 60.")
+    cwd: str | None = Field(default=None, description="Working directory. Default: workspace root.")
 
 
 def run_command(args: RunCommandArgs, ctx: ToolContext) -> ToolResult:
@@ -147,7 +147,6 @@ def run_command(args: RunCommandArgs, ctx: ToolContext) -> ToolResult:
 
 SHELL_TOOLS = [
     ToolSpec("run_command", RunCommandArgs, run_command, False,
-             "Run a shell command (bash; Git Bash on Windows) for tests, builds, programs, and git operations "
-             "not covered by git_status/git_diff. Not for reading or searching files. Each call is a fresh "
-             "shell; cwd does not persist."),
+             "Run a bash command (Git Bash on Windows) for tests, builds, programs, and git operations "
+             "beyond git_status/git_diff. Each call is a fresh shell; cwd does not persist."),
 ]

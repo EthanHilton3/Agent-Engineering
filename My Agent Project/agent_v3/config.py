@@ -10,8 +10,8 @@ SEARCH_CONTEXT_SIZES = ("low", "medium", "high")
 
 @dataclass
 class AgentConfig:
-    model: str = "gpt-5.6-luna"            # same default as v2; revisit after benchmarking
-    reasoning: str = "none"                 # none|low|medium|high
+    model: str = "gpt-6-luna"              # Phase 5b follow-up: 8/8 on T1-T8 at medium (g6luna run)
+    reasoning: str = "medium"               # none|low|medium|high; every benchmark ran at medium
     workspace: Path = field(default_factory=Path.cwd)
     approval: str = "ask"                   # ask | auto-edit | full-auto
     web_search: bool = True

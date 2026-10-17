@@ -755,7 +755,7 @@ A small, correct Python project (~250 lines plus tests, all passing):
 - `tests/test_models.py`, `tests/test_store.py`, `tests/test_report.py`, and a `README.md`.
 - Use no other `.remove(` calls anywhere in the fixture (use `del`/`pop`), so T3's check is unambiguous.
 
-For each run, the harness copies the fixture to a temp dir, runs `git init`, commits, runs the task's `setup(workdir)`, and runs the agent with the workspace set to that dir.
+For each run, the harness copies the fixture to the task's fixed work dir (`<temp>/agent_bench/<task id>`, emptied first; a per-run random temp dir until Phase 5b), runs `git init`, commits, runs the task's `setup(workdir)`, and runs the agent with the workspace set to that dir.
 
 ### 11.2 Tasks (`bench/tasks.py`)
 
@@ -1140,3 +1140,92 @@ Not cut, by choice: there is little dead code left. The only remaining unused na
 - strict-schema conversion
 
 Removing any of them would cost behavior or test coverage.
+
+### Phase 5b — tuning (2026-10-15)
+
+Three changes, made and measured one at a time with a single T1–T8 run each (`gpt-5.6-sol`, medium), then a 3-run sweep of T1–T8 + T10 after the user's go-ahead. The event protocol is unchanged (`PROTOCOL_VERSION = 1`). **Suite: 270 passed** (267 + 3 new). Spend: $3.81 (three single runs $1.62, warm-cache check $0.05, sweep $1.86, luna $0.03, terra $0.26, live stdio turn $0.001). Token counts came from the free `/v1/responses/input_tokens` endpoint.
+
+**1. Stable prompt cache key.** `prompt.prompt_cache_key(workspace, system_prompt, tools)` returns `agent_v3:` plus the first 32 hex characters of a SHA-256 over the resolved workspace path, the system prompt and the tool schemas. `Session` computes it once, after the prompt and tools are built, and it replaces `agent_v3:<session_id>`. Two sessions on the same workspace with the same prefix now share a key. Any change to the workspace, the prompt (approval mode, web search, date, prompt file) or the tools gives a new key. `bench/run_bench.py` now prepares each run in a fixed `<temp>/agent_bench/<task id>`, emptied first and deleted afterwards unless `--keep-workdirs` is set. So the workspace path, and with it the system prompt and key, is the same across runs of a task, as in real use. Tests:
+- `test_prompt_cache_key_is_stable_and_tracks_the_prefix` (core_misc)
+- `test_cache_key_is_shared_by_sessions_with_the_same_workspace_and_prefix` (session)
+- `test_cache_key_changes_with_workspace_prompt_or_tools` (session)
+- `test_no_tool_answer` now asserts that the key is not session-specific.
+
+Results:
+- Single run (`20261015-101012_v3_c1cachekey.jsonl`): 8/8, **$0.5366**, 46 rounds (Phase 3b: $0.5334 and $0.5476 per run). Round 1 was cold in every task, as it has to be: each task ran once, so no earlier session had used that path.
+- Warm check (`20261015-101247_v3_c1warm.jsonl`, T6 and T7 run once more straight afterwards): round 1 cached **6,321 of 6,324** tokens in both. For comparison, every first round in all the Phase 3b sweeps cached 0. T6 went from $0.0315 to $0.0225 and T7 from $0.0477 to $0.0267.
+
+**2. Smaller fixed prefix.** Token counts from the count endpoint, with web search on as in the bench:
+
+| part | before | after 2 | after 3 |
+|---|---|---|---|
+| system prompt (`prompt.md` + `prompt_web.md` + Environment) | 877 | 833 | 852 |
+| our 9 function schemas | 992 | 788 | 788 |
+| `web_search` tool (server-side text) | 4,436 | 4,436 | 4,436 |
+| **total request with a 2-word user message** | **6,317** | **6,069** | **6,088** |
+
+- **70% of the ~6.3k-token prefix is the hosted `web_search` tool**, not our prompt as the Phase 3b addendum assumed. It costs 4,436 tokens on every `search_context_size`, on both sol and luna, and v2 pays the same. With web search off, the whole request is 1,548 tokens.
+- **Our own text is about 1.6k tokens.** Of the schema tokens, 348 are JSON structure (strict mode's `anyOf`/`required`) and the rest are descriptions.
+- **What was cut (no rule was dropped):**
+  - Tool descriptions lost the sentences that repeat a prompt rule: "put every edit in one call", "not for reading or searching files", "run git_diff before finishing", "prefer narrow ranges via search_text", "locate code before reading".
+  - They also lost the "max N" text, which the schema's `maximum` already enforces.
+  - "Overwriting requires a prior read" moved into `write_file.overwrite`.
+  - "Relative to the workspace or absolute" appeared 4 times; it is now one prompt bullet ("Paths may be relative to the workspace or absolute").
+  - `prompt.md` and `prompt_web.md` were reworded more tightly. Every rule is still there, which is why the prompt shrank only 5%.
+- Single run (`20261015-101525_v3_c2trim.jsonl`): 8/8, **$0.5263**, 47 rounds. Round-1 input went from 6,363 to 6,115, the −248 the count predicted. The −1.9% cost change is within single-run noise; at sol rates, 248 tokens is about $0.001 per cold turn.
+
+**3. Rule 1 checked once per conversation.** Rule 1 now says: *"Before your first change to a project in this conversation, check for instruction files (README, CONTRIBUTING, AGENTS.md, CLAUDE.md); once an earlier turn has changed the project, don't check again."* It is keyed on earlier edits because they survive pruning ("edited …" in the turn record), while an earlier glob that found nothing is not recorded.
+- Single run (`20261015-101919_v3_c3rule1.jsonl`): 8/8, **$0.5564**, 50 rounds. T8 took 12 rounds, but the extra rounds were recovery, not the rule. The model ran bare `pytest`, which exits 127 because pytest is not on PATH in Git Bash. It then listed the directory, read the README and retried with `python -m pytest`. The change-2 run hit the same exit 127. No T1–T8 task has a turn after an edit, so the rule cannot act there.
+- In the T10 sweep runs, turn 3 never checked for instruction files, **but it didn't before the change either**: in the pre-change `_v3_hint` runs, turn 3 had 0 checks in 3 runs and turn 2 had 1–2 globs. Turn 2 still checks once, as the new rule requires. One side effect: turn 1, a read-only question, now globs for the files in all 3 runs (0 of 3 before), batched with its other first-round calls.
+- **Net: no measurable effect.** Kept because it states the intended behaviour and costs 19 tokens; reverting it would also be harmless.
+
+**Final sweep** (`20261015-144842_v3_p5b_final.jsonl`, 3 runs, T1–T8 + T10): **27/27 pass, $1.8558** (T1–T8 $1.2337, T10 $0.6221). From run 2 on, every task's round 1 hit the cache: 27 of 27 first rounds had about 6.1k cached tokens, against 0 of 24 in the Phase 3b sweeps. Gate verdicts from `compare.py` against v2 (`20261009-132937_v2.jsonl` and `20261013-185115_v2.jsonl`, concatenated):
+- **Pass:**
+  - successes 27 ≥ 27; **T5 3/3, T7 3/3**; T6 web actions 0
+  - rounds: T3 0.75, T4 0.88, T5 0.86, T8 0.90 (on the limit)
+  - **cost: T2 0.73, T3 0.60, T4 0.80, T5 0.73, T8 0.90**
+  - **T10 turn-3 input: 52.9k vs 89.8k = 0.59×** (limit 0.6×)
+- **Fail:** rounds T2 (7 vs 7, ratio 1.00 against ≤0.9).
+- Info: wall time 0.49–0.94× on every task; T8 turn-2 input 48.5k vs 49.2k; T10 cost $0.2018 vs $0.2219 (0.91×).
+- **Caveat on the cost gates.** The v2 baseline ran with random paths and no key, so it never got a cross-run cache hit, while v3's runs 2 and 3 do. Comparing only v3's cold run 1 against the v2 medians gives:
+  - gated tasks: T2 0.98, T3 0.89, T4 0.85, T5 0.96, T8 1.02
+  - others: T1 1.14, T6 0.84, T7 1.10
+
+  So the cost gates pass when measured as in real use, and cold v3 is at parity with v2, as in Phase 3b. Giving v2 a stable key would probably close most of the gap. This gain comes from the key, not from v3's other design choices.
+- The T10 turn-3 margin is thin. The three runs were 59.6k, 42.8k and 52.9k, so one more run above 60k would push the median close to the limit.
+
+**Model comparison** (T1–T8 once each, medium; `20261015-145816_v3_p5b_luna.jsonl` and `20261015-150009_v3_p5b_terra.jsonl`; sol is run 1 of the sweep, which was cold like the other two):
+
+| model | pass | cost | $ per successful task | rounds | median wall |
+|---|---|---|---|---|---|
+| gpt-5.6-sol | 8/8 | $0.5062 | $0.0633 | 47 | 15 s |
+| gpt-5.6-terra | 8/8 | $0.2570 | $0.0321 | 42 | 10 s |
+| gpt-5.6-luna | 8/8 | $0.0290 | **$0.0036** | 47 | 12 s |
+
+**Recommendation: default to `gpt-5.6-luna` with reasoning `medium`.** It passed every task, including both safety tasks. Its cost per successful task is 1/17 of sol's and 1/9 of terra's, with the same number of rounds and a similar wall time. `AgentConfig.model` already defaults to luna. `AgentConfig.reasoning` defaults to `none` and should become `medium`, since all the data here is at medium. Keep sol as an opt-in for hard work. Limits of this evidence:
+- one run per model, on a small, easy fixture
+- T10 (the long session) and the other reasoning levels were not run on luna or terra
+- a harder task set might separate the models in a way that 8/8 cannot show.
+
+**Live stdio turn.** A scratch client ran `python -m agent_v3.frontends.stdio_server --model gpt-5.6-luna --reasoning medium --approval ask --no-web` against a scratch workspace containing `greet.py`. This was the first run through the server against the live API.
+- **Sequence:** `session_started` (protocol 1) → glob and read → `approval_requested` (edit) → allow → `approval_requested` (command) → allow → `turn_completed` (`done`).
+- **Checks:** `seq` strictly increasing; one `session_id`; the `get_usage` reply matched the turn stats; `shutdown` exited with 0.
+- **Result:** `greet.py` correctly changed to an f-string, in 5 rounds, for $0.0010.
+
+Not changed: the event protocol, and any interface used by `frontends/` or `bench/`. Not done:
+- changing the code defaults to luna/medium (only the reasoning default would change; this is the owner's decision)
+- giving v2 a cache key for a like-for-like cost gate
+- a T10 run on luna.
+
+Found, not fixed: the model often runs bare `pytest`, which exits 127 in Git Bash on this machine and costs 1–3 recovery rounds. The Environment block could tell the model to use `python -m pytest`, or the fixture could document it.
+
+### Phase 5b follow-up — gpt-6-luna default (2026-10-16)
+
+The default model is now `gpt-6-luna`, and `AgentConfig.reasoning` now defaults to `medium`. **Suite: 270 passed** (no new tests; two updated). Nothing committed.
+
+- **gpt-6-luna T1–T8** (`20261015-222823_v3_g6luna.jsonl`, once, medium): **8/8 pass**.
+- **gpt-6-luna T10** (`20261016-180610_v3_g6luna_t10.jsonl`, once, medium, run with the pytest hint below): **pass**, 18 rounds, 39 tool calls, **$0.0053**, 58 s. Per-turn input (cached): turn 1 30.4k (18.1k), turn 2 78.4k (72.5k), turn 3 **60.5k** (57.1k).
+- **Turn-3 input vs the v3 sol sweep** (`20261015-144842_v3_p5b_final.jsonl`): sol's three runs were 59.6k, 42.8k and 52.9k (median 52.9k), so luna is 1.14× the sol median, inside sol's run-to-run range at the top. Against the v2 baseline of 89.8k it is 0.67×, above the 0.6× gate that the sol sweep met at 0.59×. One run cannot settle this; the gate was thin for sol too. Cost was $0.0053 against sol's $0.19–0.23 per T10 run.
+- **Reasoning default `none` → `medium`**: every benchmark ran at medium. `config.py`'s comment now cites the gpt-6-luna T1–T8 result. `test_config_summary` was updated to expect `medium`. The CLI default follows automatically (`frontends/args.py` reads `AgentConfig.reasoning`). `bench/run_bench.py --reasoning` still defaults to `none`, so bench runs must pass `--reasoning medium` explicitly.
+- **pytest hint**: the Environment block in `prompt.py` has a new line, "Run Python tools via `python -m` (e.g. `python -m pytest`); bare `pytest` may not be on PATH", to remove the exit-127 recovery rounds noted in Phase 5b. `test_prompt_composition` asserts the line. The T10 run above was the first with it, so no controlled before/after exists yet. The prompt cache key changes because the prompt changed.
+- **Check the pricing**: the gpt-6 rates in `pricing.py` (`gpt-6-sol` $2.00 / $0.20 / $10.00, `gpt-6-luna` $0.10 / $0.01 / $0.50 per 1M input / cached / output) were added to the working tree by the owner. I do not know where they came from, and I have not verified them. **Check them against OpenAI's pricing page before relying on any gpt-6 cost figure**, including the costs in this entry. The luna numbers in particular are low enough that a wrong rate would change the cost-per-task conclusion.

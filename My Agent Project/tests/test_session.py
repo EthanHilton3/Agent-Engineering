@@ -59,7 +59,7 @@ def test_no_tool_answer(make_session):
     [req] = fake.requests
     assert req["tool_choice"] == "auto" and req["store"] is False and req["parallel_tool_calls"] is True
     assert req["include"] == ["reasoning.encrypted_content"]           # web search is off in this fixture
-    assert req["prompt_cache_key"] == f"agent_v3:{s.session_id}"
+    assert req["prompt_cache_key"] == s.cache_key and s.session_id not in s.cache_key
     assert [t["type"] for t in req["tools"]] == ["function"] * 9
     assert kinds(req["input"]) == ["msg:system", "msg:user"] and req["input"][0]["content"] == s.system_prompt
     assert not s.busy
@@ -423,7 +423,7 @@ def test_max_rounds_ends_with_summary_request(make_session):
 
 def test_max_cost_stops_before_next_round(make_session):
     s, fake, log = make_session([
-        Round(output=[fn_call("list_dir", path=".")], usage=usage(inp=100_000, out=0)),   # $0.02 on luna
+        Round(output=[fn_call("list_dir", path=".")], usage=usage(inp=200_000, out=0)),   # $0.02 on gpt-6-luna
         [msg("Stopped for budget.")],
     ], max_turn_cost_usd=0.01)
     run(s)
@@ -570,6 +570,29 @@ def test_unrelated_400_mentioning_include_keeps_include(make_session):
     assert fake.requests[1]["include"] == ["reasoning.encrypted_content"]
 
 
+def test_cache_key_is_shared_by_sessions_with_the_same_workspace_and_prefix(make_session):
+    first, fake1, _ = make_session([[msg("a")]])
+    second, fake2, _ = make_session([[msg("b")]])
+    run(first, "hi")
+    run(second, "hi")
+    assert first.session_id != second.session_id
+    assert fake1.requests[0]["prompt_cache_key"] == fake2.requests[0]["prompt_cache_key"] == first.cache_key
+
+
+def test_cache_key_changes_with_workspace_prompt_or_tools(make_session, tmp_path):
+    base, _, _ = make_session([])
+    assert make_session([], approval="full-auto")[0].cache_key != base.cache_key       # system prompt differs
+    assert make_session([], web_search=True)[0].cache_key != base.cache_key             # prompt + tools differ
+    other_ws = tmp_path / "ws2"
+    other_ws.mkdir()
+    other = Session(AgentConfig(workspace=other_ws, web_search=False), EventLog(), model=FakeModelAdapter(
+        AgentConfig(workspace=other_ws), []))
+    try:
+        assert other.cache_key != base.cache_key
+    finally:
+        other.close()
+
+
 def test_rejected_prompt_cache_key_is_dropped(make_session):
     err = bad_request("Unknown parameter: 'prompt_cache_key'.", param="prompt_cache_key")
     s, fake, log = make_session([Round(output=[msg("ok")], error=err)])
@@ -601,7 +624,7 @@ def test_usage_and_cost_math(make_session):
     u = usage(inp=12_000, cached=8_000, out=900, reasoning=300)
     s, fake, log = make_session([Round(output=[fn_call("list_dir", path=".")], usage=u),
                                  Round(output=[msg("a")], usage=u), Round(output=[msg("b")], usage=u)])
-    rates = PRICING["gpt-5.6-luna"]
+    rates = PRICING[s.config.model]
     expected = (4_000 * rates["input"] + 8_000 * rates["cached"] + 900 * rates["output"]) / 1_000_000
     run(s)
     r1 = log.of("model_round_completed")[0]

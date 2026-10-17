@@ -103,7 +103,7 @@ def test_transcript_from_recorded_events(recorded, tmp_path):
     t.close()
     text = path.read_text(encoding="utf-8")
 
-    assert "# Transcript " in text and "model=gpt-5.6-luna" in text and "approval=auto-edit" in text
+    assert "# Transcript " in text and "model=gpt-6-luna" in text and "approval=auto-edit" in text
     assert text.index("**USER:** change x to 2 please") < text.index("**AGENT:** Changed x.")
     assert "**USER:** thanks" in text and "**AGENT:** Second answer" in text
     assert "> TOOL: `read_file(path='a.py')` -> 'lines 1" in text          # v2 style: repr of the result

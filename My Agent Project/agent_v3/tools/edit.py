@@ -20,15 +20,15 @@ CLOSEST_MAX_FILE_LINES = 20_000
 
 class Edit(BaseModel):
     path: str = Field(description="File to edit.")
-    old_text: str = Field(description="Exact existing text to replace, copied from read_file output without "
-                                      "line-number prefixes. Include enough context to be unique.")
+    old_text: str = Field(description="Exact text to replace, as in read_file output minus line-number "
+                                      "prefixes. Include enough context to be unique.")
     new_text: str = Field(description="Replacement text.")
-    replace_all: bool | None = Field(default=None, description="Replace every occurrence instead of requiring "
-                                                               "exactly one. Default false.")
+    replace_all: bool | None = Field(default=None, description="Replace every occurrence, not exactly one. "
+                                                               "Default false.")
 
 
 class EditFilesArgs(BaseModel):
-    edits: list[Edit] = Field(min_length=1, description="Edits, applied in order. Several edits may target the same file.")
+    edits: list[Edit] = Field(min_length=1, description="Applied in order; several may target one file.")
 
 
 class _EditFail(Exception):
@@ -312,7 +312,6 @@ def edit_files(args: EditFilesArgs, ctx: ToolContext) -> ToolResult:
 
 EDIT_TOOLS = [
     ToolSpec("edit_files", EditFilesArgs, edit_files, False,
-             "Apply one or more exact text replacements across one or more existing files in a single call. "
-             "Put every edit you have decided on into one call. All edits are validated before anything is "
-             "written; if any edit fails, nothing is changed."),
+             "Apply exact text replacements to one or more existing files. All edits are checked before "
+             "anything is written; if any fails, nothing changes."),
 ]

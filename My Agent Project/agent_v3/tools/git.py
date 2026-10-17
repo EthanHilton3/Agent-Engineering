@@ -45,9 +45,9 @@ def git_status(args: GitStatusArgs, ctx: ToolContext) -> ToolResult:
 
 
 class GitDiffArgs(BaseModel):
-    path: str | None = Field(default=None, description="Limit the diff to this path. Default: whole repository.")
-    staged: bool | None = Field(default=None, description="Show staged changes instead of unstaged. Default false.")
-    stat_only: bool | None = Field(default=None, description="Show only the per-file change summary. Default false.")
+    path: str | None = Field(default=None, description="Limit to this path. Default: whole repository.")
+    staged: bool | None = Field(default=None, description="Show staged instead of unstaged changes. Default false.")
+    stat_only: bool | None = Field(default=None, description="Per-file summary only. Default false.")
 
 
 def git_diff(args: GitDiffArgs, ctx: ToolContext) -> ToolResult:
@@ -72,8 +72,7 @@ def git_diff(args: GitDiffArgs, ctx: ToolContext) -> ToolResult:
 
 GIT_TOOLS = [
     ToolSpec("git_status", GitStatusArgs, git_status, True,
-             "Show the current git branch and changed files (git status --porcelain). Read-only."),
+             "Show the git branch and changed files (git status --porcelain)."),
     ToolSpec("git_diff", GitDiffArgs, git_diff, True,
-             "Show uncommitted changes (git diff). Use stat_only for a per-file summary. Read-only; run it "
-             "before finishing to confirm only intended changes were made."),
+             "Show uncommitted changes (git diff)."),
 ]

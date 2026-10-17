@@ -12,7 +12,7 @@ from agent_v3 import events as ev
 from agent_v3.config import AgentConfig
 from agent_v3.model import ModelAdapter, as_dict, cited_sources, describe_web_action, output_text, request_timeout, web_tools
 from agent_v3.pricing import PRICING, Usage, cost_usd, rates_for
-from agent_v3.prompt import build_system_prompt, environment_block
+from agent_v3.prompt import build_system_prompt, environment_block, prompt_cache_key
 
 
 # --- events ----------------------------------------------------------------------------------
@@ -114,7 +114,9 @@ def test_prompt_composition(tmp_path):
     assert text.startswith("# Role") and "# Web search" in text
     env = text[text.index("## Environment"):]
     assert env.rstrip().splitlines() == [
-        "## Environment", f"- Workspace: {tmp_path.resolve()}", env.splitlines()[2], "- Date: 2026-10-09",
+        "## Environment", f"- Workspace: {tmp_path.resolve()}", env.splitlines()[2],
+        "- Run Python tools via `python -m` (e.g. `python -m pytest`); bare `pytest` may not be on PATH",
+        "- Date: 2026-10-09",
         "- Approval mode: auto-edit (workspace edits are automatic; commands need user approval)",
         "- Git repository: yes"]
     assert text.index("# Web search") < text.index("## Environment")
@@ -130,6 +132,17 @@ def test_prompt_without_web_and_with_override(tmp_path):
     assert "- Git repository: no" in environment_block(cfg) or "- Git repository: yes" in environment_block(cfg)
 
 
+def test_prompt_cache_key_is_stable_and_tracks_the_prefix(tmp_path):
+    tools = [{"type": "function", "name": "read_file", "description": "Read.", "parameters": {}}]
+    key = prompt_cache_key(tmp_path, "# Role", tools)
+    assert key == prompt_cache_key(tmp_path, "# Role", [dict(t) for t in tools])         # same inputs, same key
+    assert key.startswith("agent_v3:") and len(key) == len("agent_v3:") + 32
+    assert key != prompt_cache_key(tmp_path / "other", "# Role", tools)                  # workspace
+    assert key != prompt_cache_key(tmp_path, "# Role!", tools)                           # system prompt
+    assert key != prompt_cache_key(tmp_path, "# Role", [{**tools[0], "description": "Read it."}])  # schemas
+    assert key != prompt_cache_key(tmp_path, "# Role", tools + tools)                   # tool list
+
+
 # --- config ----------------------------------------------------------------------------------
 
 def test_config_validation(tmp_path):
@@ -140,5 +153,5 @@ def test_config_validation(tmp_path):
 
 def test_config_summary(tmp_path):
     s = AgentConfig(workspace=str(tmp_path)).summary()
-    assert s == {"model": "gpt-5.6-luna", "reasoning": "none", "approval": "ask",
+    assert s == {"model": "gpt-6-luna", "reasoning": "medium", "approval": "ask",
                  "workspace": str(tmp_path.resolve()), "web_search": True}

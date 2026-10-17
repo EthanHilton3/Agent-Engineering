@@ -121,8 +121,8 @@ def looks_binary(raw: bytes) -> bool:
 # ---------------------------------------------------------------------------------------------
 
 class ListDirArgs(BaseModel):
-    path: str = Field(description="Directory, relative to the workspace or absolute.")
-    offset: int | None = Field(default=None, ge=0, description="Zero-based entry offset for paging. Default 0.")
+    path: str = Field(description="Directory path.")
+    offset: int | None = Field(default=None, ge=0, description="Entry offset, for the next page. Default 0.")
 
 
 def list_dir(args: ListDirArgs, ctx: ToolContext) -> ToolResult:
@@ -166,9 +166,9 @@ def list_dir(args: ListDirArgs, ctx: ToolContext) -> ToolResult:
 # ---------------------------------------------------------------------------------------------
 
 class GlobFilesArgs(BaseModel):
-    pattern: str = Field(description="Glob pattern, e.g. '**/*.py' or 'src/**/test_*.py'.")
-    path: str | None = Field(default=None, description="Directory to search in. Default: the workspace root.")
-    max_results: int | None = Field(default=None, ge=1, le=1000, description="Maximum files to return. Default 200, max 1000.")
+    pattern: str = Field(description="Glob pattern, e.g. '**/*.py'.")
+    path: str | None = Field(default=None, description="Directory to search. Default: workspace root.")
+    max_results: int | None = Field(default=None, ge=1, le=1000, description="Max files. Default 200.")
 
 
 def glob_to_regex(pattern: str) -> re.Pattern:
@@ -236,9 +236,9 @@ def glob_files(args: GlobFilesArgs, ctx: ToolContext) -> ToolResult:
 # ---------------------------------------------------------------------------------------------
 
 class ReadFileArgs(BaseModel):
-    path: str = Field(description="File to read, relative to the workspace or absolute.")
-    start_line: int | None = Field(default=None, ge=1, description="First line to read (1-based). Default 1.")
-    end_line: int | None = Field(default=None, ge=1, description="Last line to read, inclusive. Default: start_line + 249.")
+    path: str = Field(description="File path.")
+    start_line: int | None = Field(default=None, ge=1, description="First line, 1-based. Default 1.")
+    end_line: int | None = Field(default=None, ge=1, description="Last line, inclusive. Default: start_line + 249.")
 
 
 def read_file(args: ReadFileArgs, ctx: ToolContext) -> ToolResult:
@@ -319,13 +319,13 @@ def read_file(args: ReadFileArgs, ctx: ToolContext) -> ToolResult:
 # ---------------------------------------------------------------------------------------------
 
 class SearchTextArgs(BaseModel):
-    pattern: str = Field(description="Text to search for (a regular expression if regex is true).")
-    path: str | None = Field(default=None, description="Directory or single file to search. Default: the workspace root.")
-    glob: str | None = Field(default=None, description="Only search files whose name matches this glob, e.g. '*.py'.")
-    regex: bool | None = Field(default=None, description="Treat pattern as a regular expression. Default false.")
-    ignore_case: bool | None = Field(default=None, description="Case-insensitive match. Default false.")
-    context_lines: int | None = Field(default=None, ge=0, le=5, description="Lines of context around each match. Default 0, max 5.")
-    max_results: int | None = Field(default=None, ge=1, le=300, description="Maximum matching lines to show. Default 60, max 300.")
+    pattern: str = Field(description="Text, or a regex if regex is true.")
+    path: str | None = Field(default=None, description="Directory or file to search. Default: workspace root.")
+    glob: str | None = Field(default=None, description="Only files whose name matches this glob, e.g. '*.py'.")
+    regex: bool | None = Field(default=None, description="Pattern is a regex. Default false.")
+    ignore_case: bool | None = Field(default=None, description="Case-insensitive. Default false.")
+    context_lines: int | None = Field(default=None, ge=0, le=5, description="Context lines around each match. Default 0.")
+    max_results: int | None = Field(default=None, ge=1, le=300, description="Max matching lines. Default 60.")
 
 
 def search_text(args: SearchTextArgs, ctx: ToolContext) -> ToolResult:
@@ -411,9 +411,9 @@ def search_text(args: SearchTextArgs, ctx: ToolContext) -> ToolResult:
 # ---------------------------------------------------------------------------------------------
 
 class WriteFileArgs(BaseModel):
-    path: str = Field(description="File to create or replace, relative to the workspace or absolute.")
-    content: str = Field(description="Complete new file content.")
-    overwrite: bool | None = Field(default=None, description="Allow replacing an existing file (you must have read it). Default false.")
+    path: str = Field(description="File path.")
+    content: str = Field(description="Full file content.")
+    overwrite: bool | None = Field(default=None, description="Allow replacing an existing file, which you must have read. Default false.")
 
 
 def write_file(args: WriteFileArgs, ctx: ToolContext) -> ToolResult:
@@ -477,15 +477,15 @@ def write_file(args: WriteFileArgs, ctx: ToolContext) -> ToolResult:
 
 READ_TOOLS = [
     ToolSpec("list_dir", ListDirArgs, list_dir, True,
-             "List a directory: folders first (name ends with /), then files with sizes. 200 entries per page; use offset for more."),
+             "List a directory: folders (ending in /) first, then files with sizes. 200 entries per page."),
     ToolSpec("glob_files", GlobFilesArgs, glob_files, True,
-             "Find files by glob pattern, e.g. `**/*.py` or `src/**/test_*.py`. Returns paths relative to the search root, sorted."),
+             "Find files by glob pattern. Returns sorted paths relative to the search root."),
     ToolSpec("read_file", ReadFileArgs, read_file, True,
-             "Read a line range of a UTF-8 text file. Prefer narrow ranges found via search_text. Output lines are prefixed with line numbers."),
+             "Read a line range of a UTF-8 text file. Lines are prefixed with line numbers."),
     ToolSpec("search_text", SearchTextArgs, search_text, True,
-             "Search file contents. Fixed-string by default; set regex=true for regular expressions. Use this to locate code before reading it."),
+             "Search file contents for fixed text, or a regex with regex=true."),
 ]
 WRITE_TOOLS = [
     ToolSpec("write_file", WriteFileArgs, write_file, False,
-             "Create a new file, or replace an entire existing file. Use edit_files for partial changes. Overwriting requires that you have read the current version."),
+             "Create a file or replace a whole file. Use edit_files for partial changes."),
 ]

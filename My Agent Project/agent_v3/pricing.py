@@ -6,6 +6,8 @@ from typing import Any
 
 # USD per 1M tokens.
 PRICING: dict[str, dict[str, float]] = {
+    "gpt-6-sol": {"input": 2.00, "cached": 0.20, "output": 10.00},
+    "gpt-6-luna": {"input": 0.10, "cached": 0.01, "output": 0.50},
     "gpt-6-astra": {"input": 10.00, "cached": 1.00, "output": 50.00},
     "gpt-5.6-sol": {"input": 4.00, "cached": 0.40, "output": 20.00},
     "gpt-5.6-terra": {"input": 2.00, "cached": 0.20, "output": 12.00},

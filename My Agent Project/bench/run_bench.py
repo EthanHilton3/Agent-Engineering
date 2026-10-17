@@ -23,9 +23,19 @@ def _git(workdir: Path, *args: str) -> None:
                    cwd=workdir, check=True, capture_output=True)
 
 
+WORK_ROOT = Path(tempfile.gettempdir()) / "agent_bench"
+
+
 def prepare_workdir(task: Task) -> Path:
-    """Copy the fixture to a temp dir, git init + commit, then apply the task's setup."""
-    workdir = Path(tempfile.mkdtemp(prefix=f"bench_{task.id}_"))
+    """Copy the fixture to the task's fixed work dir, git init + commit, then apply the task's setup.
+
+    The path is the same for every run of a task (it is cleaned first), as in real use where the workspace
+    doesn't move between sessions, so the system prompt and v3's prompt_cache_key are stable across runs.
+    """
+    workdir = WORK_ROOT / task.id
+    if workdir.exists():
+        _rmtree(workdir)
+    workdir.mkdir(parents=True)
     shutil.copytree(FIXTURE, workdir, dirs_exist_ok=True, ignore=shutil.ignore_patterns("__pycache__", ".pytest_cache"))
     _git(workdir, "init", "-q")
     _git(workdir, "add", "-A")
@@ -46,11 +56,12 @@ def main() -> None:
     parser.add_argument("--agent", choices=("v2", "v3"), required=True)
     parser.add_argument("--runs", type=int, default=3)
     parser.add_argument("--tasks", help="Comma-separated task ids, e.g. T2,T3. Default: T1-T8.")
-    parser.add_argument("--model", default="gpt-5.6-luna")
-    parser.add_argument("--reasoning", default="none")
+    parser.add_argument("--model", default="gpt-6-luna")
+    parser.add_argument("--reasoning", default="medium")
     parser.add_argument("--with-web", action="store_true", help="Also run the opt-in web task (T9).")
     parser.add_argument("--with-long", action="store_true", help="Also run the opt-in long-session task (T10).")
-    parser.add_argument("--keep-workdirs", action="store_true", help="Don't delete the temp workspaces.")
+    parser.add_argument("--keep-workdirs", action="store_true",
+                        help="Don't delete the work dirs after a run (each task's dir is reused by its next run).")
     parser.add_argument("--no-parallel-reads", action="store_true", help="v3 ablation: run tool calls one at a time.")
     parser.add_argument("--no-prune-history", action="store_true", help="v3 ablation: keep full tool output in history.")
     parser.add_argument("--no-dedupe-reads", action="store_true", help="v3 ablation: re-send unchanged file reads.")

@@ -26,7 +26,7 @@ from .events import (ApprovalResolved, Event, ModelRoundCompleted, ModelRoundSta
                      ToolCompleted, ToolStarted, TurnCancelled, TurnCompleted, TurnFailed, TurnStarted, WebAction,
                      now_iso)
 from .model import Cancelled, ModelAdapter, ModelError, ModelResponse, web_tools
-from .prompt import build_system_prompt
+from .prompt import build_system_prompt, prompt_cache_key
 from .tools import build_registry
 from .tools.executor import ToolCall, ToolExecutor
 from .tools.files import plural
@@ -179,7 +179,6 @@ class Session:
                  model: ModelAdapter | None = None, *, registry: ToolRegistry | None = None):
         self.config = config
         self.session_id = f"s_{uuid.uuid4().hex[:12]}"
-        self.cache_key = f"agent_v3:{self.session_id}"
         self._on_event = on_event
         self._lock = threading.RLock()
         self._seq = 0
@@ -199,6 +198,7 @@ class Session:
         self.model = model or ModelAdapter(config)
         self.tools = [*web_tools(config), *self.registry.schemas()]     # fixed for the session (cache-stable)
         self.system_prompt = build_system_prompt(config)
+        self.cache_key = prompt_cache_key(config.workspace, self.system_prompt, self.tools)
         self.history: list = [{"role": "system", "content": self.system_prompt}]
         self._emit(SessionStarted(config={**config.summary(), "tools": self.registry.names()}))
 
