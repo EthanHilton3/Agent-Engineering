@@ -4,7 +4,8 @@ from __future__ import annotations
 import json
 import threading
 from pathlib import Path
-from typing import Iterator
+
+from ..jsonl import read_jsonl as read_events  # noqa: F401  (moved to the core; old name kept for imports)
 
 
 class EventLogWriter:
@@ -29,14 +30,3 @@ class EventLogWriter:
     def close(self) -> None:
         with self._lock:
             self._file.close()
-
-
-def read_events(path: str | Path) -> Iterator[dict]:
-    """Replay a log: yields each event dict in order, skipping a torn last line."""
-    with Path(path).open(encoding="utf-8") as f:
-        for line in f:
-            if line.strip():
-                try:
-                    yield json.loads(line)
-                except json.JSONDecodeError:
-                    continue

@@ -182,3 +182,15 @@ EVENT_TYPES: dict[str, type[Event]] = {cls.type: cls for cls in (
     SessionStarted, TurnStarted, ModelRoundStarted, TextDelta, ModelRetry, ModelRoundCompleted, WebAction,
     ToolStarted, ToolCompleted, ApprovalRequested, ApprovalResolved, Notice, TurnCompleted, TurnCancelled,
     TurnFailed)}
+
+
+def event_from_dict(data: dict) -> Event:
+    """Rebuild an Event from its `to_dict()` (e.g. a line of a saved log). Unknown keys are ignored.
+
+    Raises ValueError for an unknown `type` and TypeError when a required field is missing.
+    """
+    cls = EVENT_TYPES.get(data.get("type"))
+    if cls is None:
+        raise ValueError(f"unknown event type {data.get('type')!r}")
+    names = {f.name for f in dataclasses.fields(cls)}
+    return cls(**{k: v for k, v in data.items() if k in names})

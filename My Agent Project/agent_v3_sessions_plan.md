@@ -610,3 +610,41 @@ Nothing else changes. `test_session.py`, `test_approvals.py`, `test_executor.py`
 ## Implementation log
 
 *(Append one entry per phase: date, summary, deviations from spec.)*
+
+### Phase S1 — Storage (2026-10-17)
+
+**Built.**
+- `agent_v3/jsonl.py` (new): `append_line(file, obj, fsync=)` (UTF-8 bytes, bare `\n`, flush, optional fsync), `read_jsonl(path)` (skips blank and undecodable lines, including a torn multi-byte character), `repair_tail(path)` (truncates after the last `\n`, reading backwards in 4 KB chunks).
+- `agent_v3/sessions.py` (new): the errors, `SessionInfo`, `InterruptedTurn`, `SavedSession`, `session_title`, `RESTORABLE_SETTINGS`, `config_for_resume`, `SessionStore` (`for_workspace`, `list`, `resolve`, `load`, `create`, `open`, `delete`, `events_path`, `session_dir`), `SessionRecorder` (`on_event`, `on_commit`, `on_reset`, `close`, plus `error`/`healthy`), and the `msvcrt.locking` / `fcntl.flock` lock. Meta is rebuilt from the logs when it is missing, corrupt or stale.
+- `agent_v3/events.py`: `event_from_dict()` only.
+- `agent_v3/frontends/eventlog.py`: `read_events` is now `from ..jsonl import read_jsonl as read_events`. `EventLogWriter` is unchanged.
+- `tests/test_sessions_store.py` (new, 25 tests): covers everything in the §11.2 S1 list, plus `event_from_dict` round trips, `repair_tail` edge cases, a stale meta, `open()` owner/settings handling and `config_for_resume`. The lock test runs a real subprocess that holds the lock and gets hard-killed (`Popen.kill`); after that, `open()` succeeds. While the child is alive, `SessionInUse.owner_pid == child.pid`.
+
+**Tests.** `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python -m pytest tests -q`: **294 passed, 1 skipped** (was 270; +24 new; the skip is the POSIX-only permissions test on Windows). No existing test changed.
+
+**Size.** `sessions.py` is about 640 lines, against the ~350 estimated. The extra lines are the meta rebuild (`_meta_from_logs`, `_logged_stats`, `_read_meta` validation) and the docstrings. `jsonl.py` is about 55 lines, the tests about 500.
+
+**Deviations from the spec, with reasons.**
+1. **`SessionInfo` gains `reasoning`.** `config_for_resume(launch, info, explicit)` has to restore the saved reasoning, and the §5.1 `SessionInfo` had no field for it. This is additive for the S4 `list_sessions` rows.
+2. **`SavedSession` gains `saved_config`** (`{model, reasoning, approval, prune_history}` at the last save). S2 needs it for `session_resumed.saved_config`, and the §5.1 fields could not supply `approval`.
+3. **`SessionStore(root, *, gitignore=None)`.** The constructor takes an optional path for the `.gitignore`, and `for_workspace` passes `<ws>/.agent_v3/.gitignore`. A store built on a bare root (the bench-style `SessionStore(RESULTS / "sessions")` from §8) then writes no `.gitignore` outside `.agent_v3`.
+4. **`SessionStore.open(session_id, config=None)`.** `open` takes the resumed config. Without it, `meta.json` would keep the old `model`/`reasoning` after `--resume --model X`, so the listing would be wrong and the next resume would restore the wrong model (option C says "saved" means last used). The new settings are written to meta from the next save (`turn_started`) on, so opening a session and quitting changes nothing. S2 should pass the config it resumes with.
+5. **`open()` rewrites `meta.json` immediately with the new `owner_pid`.** §4.2 writes meta only at turn start and end. Without the early write, `SessionInUse` would name the pid of the previous, dead owner until the first turn.
+6. **`on_commit(..., stats=None)`.** The extra argument is used only for a recovered interrupted turn, which has no terminal event to carry its stats (§5.3 step 3). The recorder adds it to `meta.totals`. S2 should pass the replayed `_Turn.stats.to_dict()`. `SavedSession.totals` does **not** include a pending interrupted turn's cost; the recovery adds it.
+7. **When meta is used.** `load()` uses `meta.json` only if it is well-formed **and** its `turns` equals the number of turn lines. Otherwise, for example after a crash between the history line and the meta write, it rebuilds from the logs. `turn_no`, `last_seq` and `active_turn` always come from the logs (§5.2). `list()` uses meta as it is and rebuilds only when meta is missing or corrupt.
+8. **Rebuilt totals include recovered interrupted turns.** For a turn line with `outcome: "interrupted"` and no terminal event, the rebuild sums its logged rounds, tool starts and web actions (`_logged_stats`). The web fee isn't saved, so the rebuild uses `AgentConfig`'s default `web_search_fee_usd`.
+9. **`meta.json` also stores `approval`.** The §4.4 example omits it, but §5.6 step 5 says the recorder updates it and S2 needs it for `saved_config`. It is never restored (`RESTORABLE_SETTINGS`).
+10. **`prune_history` when meta is rebuilt** is inferred, because `config.summary()` does not include it: any non-null `record` means it was off, and otherwise it is assumed on. A `prune_history=False` session that only has cancelled or failed turns is inferred as on. That case is harmless because those lines' `record` is null and their `items` are already the pruned form.
+11. **Refs.** The `s_` prefix is optional and matching ignores case. A prefix under 4 characters raises `SessionNotFound` with a "too short" message rather than a separate error class, so the frontends' three-error handling (§6.1) and the server's `not_found` code cover it.
+12. **`event_from_dict`** ignores unknown keys, so logs from newer versions still load. It raises `ValueError` for an unknown `type` rather than a bare `KeyError`.
+13. **Not built in S1: `SessionStore.read_events` (paging).** §5.1 lists it, but Phase S5 owns it ("`SessionStore.read_events`" in its core list and `sessions.py (read_events, …)` in its Files line). Meta updates on `config_changed` are also left for S5.
+14. **How the recorder reports failure.** §5.4 does not say how `Session` learns about a failure. The recorder exposes `error: str | None` (it names the session, the folder and the `OSError`) and `healthy`. S2's `Session.saved` can be `recorder is not None and recorder.healthy`, and it emits `session_save_failed` once when `error` first becomes set. A disabled recorder keeps its lock until `close()`.
+15. **`open()` on a folder where the lock file cannot be created** (an `OSError` other than a lock conflict, such as a read-only folder) returns the `SavedSession` with a recorder that starts disabled, instead of raising. A session in a read-only workspace can still be resumed, and it reports `session_save_failed`.
+16. **Known side effect of status probing.** `list()` and `load()` take each session's lock for a moment to compute `in_use`, as §4.5 specifies. An `open()` in another process at exactly that moment could get a spurious `SessionInUse`. I accepted this; S3/S4 could retry `open()` once after a short pause if it ever shows up.
+
+**Files.** Only the files on the S1 Files line were changed. Nothing outside it was needed.
+
+**Notes for S2.**
+- `InterruptedTurn.events` starts with the turn's `turn_started`.
+- `record: null` in a turn line means "equal to `items`", so restore must fall back to `items`.
+- Call `recorder.close()` only after the last event has been emitted.
