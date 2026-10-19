@@ -730,6 +730,39 @@ Rules a client can rely on:
 - stdout carries protocol lines only; logs and stray output go to stderr.
 - The server writes events synchronously, so a client that stops reading stdout eventually stalls the session.
 
+**Saved sessions (added by `agent_v3_sessions_plan.md` §7, still protocol v1).** Everything above is unchanged; a client that never sends the messages below and never starts the server with `--resume` or `--continue` sees exactly the sequence described above. The server now saves every session to `<workspace>/.agent_v3/sessions/` (`--no-save` turns that off). New start-up flags: `--resume REF` (an id, a unique prefix of at least 4 characters after `s_`, or `latest`; REF is required here), `--continue` / `-c` (the same as `--resume latest`, or a new session if none is saved), `--no-save`. An unknown, ambiguous or in-use REF, or `--no-save` with either resume flag, exits 2 with an empty stdout. A resumed session restores its saved `model` and `reasoning` unless they are passed as flags; the approval mode is never restored.
+
+Client → server (all need an idle session, `error`/`busy` otherwise, except `list_sessions` and `export_session`). Replies that are not events (`sessions`, `transcript`, `session_deleted`) have no `seq`, like `usage`.
+
+| type | fields | effect and replies |
+|---|---|---|
+| `list_sessions` | `limit` (positive int, optional; omitted = all) | Reply `sessions`: `{current, total, sessions: [{session_id, title, created, updated, turns, cost_usd, model, reasoning, status}]}`, newest first; `total` counts every saved session. `status` is `idle`, `in_use` (open in another process), `interrupted` or `current` (the open session). A session is listed from its first turn on. Works under `--no-save`. |
+| `resume_session` | `session_id` (id or prefix), **or** `latest: true` (not both) | Closes the current session (already saved), then emits `session_started` and `session_resumed` for the chosen one, plus `notice` `turn_interrupted` if its last turn was cut off. If it fails, the current session stays open and unchanged. Errors: `busy`, `not_found`, `ambiguous`, `in_use`, `saving_disabled` (`--no-save`), `bad_request` (also for the session that is already open). |
+| `new_session` | none | Closes the current session and starts a new one: `session_started` with a new `session_id` and `seq` 1. `new_conversation` keeps its meaning (history cleared, same id). |
+| `export_session` | `session_id` (optional; default the open session) | Reply `transcript`: `{session_id, markdown}`, rebuilt from the saved log (`markdown` is empty for an open session with no turns yet). Allowed at any time. Errors: `not_found`, `ambiguous`, `saving_disabled` (the open session under `--no-save`). |
+| `delete_session` | `session_id` (id or prefix; required) | Reply `session_deleted`: `{session_id}`. Deletes that one session's files. Errors: `not_found`, `ambiguous`, `in_use` (the open session, or one open in another process), `busy`. |
+
+```json
+{"type": "list_sessions"}
+{"type": "sessions", "current": "s_9c1d2e3f4a5b", "total": 1, "sessions": [{"session_id": "s_9c1d2e3f4a5b", "title": "Rename Store.remove", "created": "2026-10-16T09:00:01.002+00:00", "updated": "2026-10-16T09:04:40.311+00:00", "turns": 1, "cost_usd": 0.0011, "model": "gpt-6-luna", "reasoning": "medium", "status": "current"}]}
+{"type": "resume_session", "session_id": "3f9a"}
+{"type": "session_resumed", "title": "Fix the failing test in test_store.py", "created": "...", "turns_total": 4, "turns": [{"turn_id": "t3", "user_message": "Run the tests again", "outcome": "completed", "text": "All 18 tests pass.", "ts": "..."}], "totals": {"rounds": 14, "...": "..."}, "history": "pruned", "restored_items": 11, "interrupted_turn": null, "saved_config": {"model": "gpt-6-luna", "reasoning": "medium", "approval": "ask", "prune_history": true}}
+{"type": "new_session"}
+{"type": "export_session"}
+{"type": "transcript", "session_id": "s_51be09d7c3aa", "markdown": "# Transcript ...\n\n**USER:** ..."}
+{"type": "delete_session", "session_id": "s_77e0"}
+{"type": "session_deleted", "session_id": "s_77e0d41a9c55"}
+```
+
+New `error` codes: `not_found`, `ambiguous`, `in_use`, `saving_disabled` (clients already treat unknown codes generically).
+
+Rules added for saved sessions:
+- **More than one `session_started`.** A `session_started` line may appear again, but only in response to `resume_session` or `new_session`. It opens a new session context: later events carry its `session_id`. A client that never sends those messages never sees a second one.
+- **`seq` per session.** `seq` is strictly increasing with no gaps per `session_id` on the wire. A resumed session continues its saved numbering, so its first `seq` is greater than 1. A client that tracks `seq` should reset its expectation at each `session_started`.
+- **Recap event.** `session_resumed` directly follows the `session_started` of a resumed session (at start-up with `--resume` too). A `notice` `turn_interrupted` or `session_save_failed` may follow it.
+- **Usage after a resume.** `get_usage` after a resume returns the totals of the whole saved session, including earlier processes.
+- **Failed switches change nothing.** If `resume_session` fails, the open session is untouched and nothing but the `error` is written.
+
 ### 10.3 Transcript (`frontends/transcript.py`)
 
 An event consumer that writes v2-compatible Markdown (`**USER:**`, `> TOOL: ...`, `**AGENT:**`, sources, usage block at the end), plus one line per round:

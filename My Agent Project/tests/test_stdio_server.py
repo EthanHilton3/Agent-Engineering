@@ -404,3 +404,379 @@ def test_a_closed_stdout_stops_output_without_raising(tmp_path):
     assert server._broken
     server._write({"type": "usage"})                            # silently dropped
     assert server.serve() == 0                                  # empty stdin: returns at once
+
+
+# -- saved sessions (sessions spec §7, phase S4) ---------------------------------------------------
+#
+# Two ways to drive the server: as a subprocess (`start_in`, several servers sharing one workspace), and in-process
+# (`inproc`, with the FakeModelAdapter shared by every session, so `fake.requests` shows what the model was sent).
+
+import shutil
+
+from conftest import FakeModelAdapter, Round
+
+from agent_v3.sessions import SessionStore
+
+SHARED = "shared"
+
+
+@pytest.fixture
+def start_in(tmp_path):
+    """Like `start`, but every client works in tmp_path/shared, so a second server can see the first one's sessions."""
+    clients: list[Client] = []
+    (tmp_path / SHARED).mkdir(exist_ok=True)
+
+    def make(script, *flags: str) -> Client:
+        home = tmp_path / f"home{len(clients)}"
+        home.mkdir()
+        client = Client(home, script, "--workspace", str(tmp_path / SHARED), *flags)     # the later flag wins
+        client.workspace = tmp_path / SHARED
+        clients.append(client)
+        client.expect("session_started")
+        return client
+
+    yield make
+    for c in clients:
+        c.close()
+    for c in clients:
+        assert c.bad_lines == [], f"stdout carried non-protocol lines: {c.bad_lines}"
+
+
+def _run_server(tmp_path, *args: str) -> subprocess.CompletedProcess:
+    (tmp_path / SHARED).mkdir(exist_ok=True)
+    script = tmp_path / "empty.json"
+    script.write_text("[]", encoding="utf-8")
+    return subprocess.run([sys.executable, "-m", "agent_v3.frontends.stdio_server", "--workspace",
+                           str(tmp_path / SHARED), "--no-web", "--fake-model-script", str(script), *args],
+                          cwd=ROOT, capture_output=True, timeout=TIMEOUT)
+
+
+class InProc:
+    """A StdioServer in this process, fed one line at a time. Its output is read back from a buffer."""
+
+    def __init__(self, workspace: Path, rounds: list, *, saving: bool = True, resume: str | None = None):
+        self.workspace = workspace
+        self.out = io.BytesIO()
+        config = AgentConfig(workspace=workspace, web_search=False)
+        self.fake = FakeModelAdapter(config, rounds)
+        self.store = SessionStore.for_workspace(workspace)
+        self.server = StdioServer(config, self.fake, stdin=io.BytesIO(), stdout=self.out,
+                                  store=self.store if saving else None, resume=resume)
+        self._pos = 0
+
+    @property
+    def session_id(self) -> str:
+        return self.server.session.session_id
+
+    def take(self) -> list[dict]:
+        """The messages written since the last `take`."""
+        lines = self.out.getvalue().split(b"\n")[:-1]
+        fresh, self._pos = lines[self._pos:], len(lines)
+        return [json.loads(line) for line in fresh]
+
+    def send(self, **message) -> list[dict]:
+        self.server._handle_line(json.dumps(message).encode() + b"\n")
+        return self.take()
+
+    def turn(self, text: str) -> list[dict]:
+        sent = self.send(type="user_message", text=text)
+        assert self.server.session.wait(TIMEOUT)
+        return sent + self.take()
+
+    def blocked(self) -> None:
+        """Wait until the (blocked) round is in flight."""
+        deadline = time.monotonic() + TIMEOUT
+        while not (self.fake.streams and self.fake.streams[-1].blocked.wait(0.05)):
+            assert time.monotonic() < deadline, "the model round never started"
+
+
+@pytest.fixture
+def inproc(tmp_path):
+    made: list[InProc] = []
+
+    def make(rounds: list, **kw) -> InProc:
+        workspace = kw.pop("workspace", tmp_path / "ws")
+        workspace.mkdir(exist_ok=True)
+        made.append(InProc(workspace, rounds, **kw))
+        return made[-1]
+
+    yield make
+    for p in made:
+        p.server.session.close()
+
+
+def only(messages: list[dict], type_: str) -> dict:
+    found = [m for m in messages if m.get("type") == type_]
+    assert len(found) == 1, f"expected one {type_}, got {[m.get('type') for m in messages]}"
+    return found[0]
+
+
+def prompt_texts(request: dict) -> list:
+    return [item.get("content") for item in request["input"]]
+
+
+# -- list_sessions -------------------------------------------------------------------------------
+
+
+def test_list_sessions_shows_the_open_session_as_current(start):
+    c = start([[msg("hi")]])
+    c.send(type="list_sessions")
+    first = c.expect("sessions")
+    assert first["sessions"] == [] and first["total"] == 0                  # nothing is saved before the first turn
+    sid = c.received[0]["session_id"]
+    assert first["current"] == sid
+
+    c.send(type="user_message", text="Rename Store.remove please")
+    c.expect("turn_completed")
+    c.send(type="list_sessions")
+    reply = c.expect("sessions")
+    assert reply["current"] == sid and reply["total"] == 1 and "seq" not in reply
+    (row,) = reply["sessions"]
+    assert row["session_id"] == sid and row["status"] == "current" and row["turns"] == 1
+    assert row["title"] == "Rename Store.remove please" and row["model"] and row["updated"] >= row["created"]
+
+
+def test_list_sessions_without_a_limit_returns_every_session_with_total(inproc):
+    p = inproc([[msg("a")], [msg("b")], [msg("c")]])
+    ids = []
+    for text in ("one", "two", "three"):
+        p.turn(text)
+        ids.append(p.session_id)
+        if text != "three":
+            p.send(type="new_session")
+    reply = only(p.send(type="list_sessions"), "sessions")
+    assert reply["total"] == 3 and {r["session_id"] for r in reply["sessions"]} == set(ids)
+    assert reply["current"] == ids[-1]
+    updated = [r["updated"] for r in reply["sessions"]]
+    assert updated == sorted(updated, reverse=True)                         # newest first
+    assert [r["status"] for r in reply["sessions"] if r["session_id"] == ids[-1]] == ["current"]
+
+    limited = only(p.send(type="list_sessions", limit=2), "sessions")
+    assert limited["total"] == 3 and [r["session_id"] for r in limited["sessions"]] == [r["session_id"] for r in reply["sessions"]][:2]
+    for bad in (0, -1, "2", 1.5, True):
+        assert only(p.send(type="list_sessions", limit=bad), "error")["code"] == "bad_request"
+
+
+# -- starting with --resume / --continue -----------------------------------------------------------
+
+
+def test_a_new_server_resumes_a_saved_session_with_the_flag(start_in):
+    a = start_in([[msg("a1")]])
+    sid = a.received[0]["session_id"]
+    a.send(type="user_message", text="remember the number 7")
+    a.expect("turn_completed")
+    a.send(type="shutdown")
+    assert a.wait_exit() == 0
+
+    b = start_in([[msg("b1")]], "--resume", sid[2:8])
+    resumed = b.expect("session_resumed")
+    started = b.received[0]
+    assert b.received[1] is resumed                                          # directly after session_started
+    assert started["type"] == "session_started" and started["session_id"] == sid
+    assert started["seq"] > 1 and started["protocol_version"] == 1
+    assert resumed["type"] == "session_resumed" and resumed["session_id"] == sid and resumed["seq"] == started["seq"] + 1
+    assert resumed["title"] == "remember the number 7" and resumed["turns_total"] == 1
+    assert resumed["turns"][0]["text"] == "a1"
+    b.send(type="user_message", text="again")
+    assert b.expect("turn_started")["turn_id"] == "t2"                       # the turn counter continues
+    b.expect("turn_completed")
+    b.send(type="get_usage")
+    assert b.expect("usage")["totals"]["rounds"] == 2                        # totals cover the earlier process too
+
+
+def test_continue_resumes_the_latest_session_or_starts_a_new_one(start_in):
+    first = start_in([[msg("x")]], "--continue")                             # nothing saved yet: a new session
+    sid = first.received[0]["session_id"]
+    assert first.received[0]["seq"] == 1 and not any(m["type"] == "session_resumed" for m in first.barrier())
+    first.send(type="user_message", text="hello")
+    first.expect("turn_completed")
+    first.send(type="shutdown")
+    first.wait_exit()
+    second = start_in([[msg("y")]], "-c")
+    second.expect("session_resumed")
+    assert second.received[0]["session_id"] == sid and second.received[1]["type"] == "session_resumed"
+
+
+def test_resume_startup_errors_exit_2_with_empty_stdout(tmp_path, start_in):
+    a = start_in([[msg("a")]])
+    sid = a.received[0]["session_id"]
+    a.send(type="user_message", text="hello")
+    a.expect("turn_completed")                                               # saved, and still open here
+
+    in_use = _run_server(tmp_path, "--resume", sid)
+    assert in_use.returncode == 2 and in_use.stdout == b"" and b"another agent_v3 process" in in_use.stderr
+    cont = _run_server(tmp_path, "--continue")
+    assert cont.returncode == 2 and cont.stdout == b"" and b"use --resume to pick another" in cont.stderr
+    unknown = _run_server(tmp_path, "--resume", "s_ffffffffffff")
+    assert unknown.returncode == 2 and unknown.stdout == b"" and b"No saved session" in unknown.stderr
+    for flags in (["--resume"], ["--resume", "latest", "--continue"], ["--no-save", "--resume", "latest"],
+                  ["--no-save", "--continue"]):
+        run = _run_server(tmp_path, *flags)
+        assert run.returncode == 2 and run.stdout == b"", flags
+
+
+# -- resume_session, new_session -------------------------------------------------------------------
+
+
+def test_resume_session_switches_to_the_saved_conversation(inproc):
+    p = inproc([[msg("a1")], [msg("b1")], [msg("a2")], [msg("c1")]])
+    p.turn("first question")
+    first = p.session_id
+    started = only(p.send(type="new_session"), "session_started")
+    second = started["session_id"]
+    assert second != first and started["seq"] == 1
+    p.turn("second question")
+
+    messages = p.send(type="resume_session", session_id=first[2:8])
+    assert [m["type"] for m in messages] == ["session_started", "session_resumed"]
+    assert messages[0]["session_id"] == first == p.session_id and messages[0]["seq"] > 1
+    assert messages[1]["seq"] == messages[0]["seq"] + 1
+    assert only(p.send(type="get_usage"), "usage")["totals"]["rounds"] == 1
+
+    p.turn("third question")
+    seen = prompt_texts(p.fake.requests[-1])
+    assert "first question" in seen and "a1" in seen and "second question" not in seen
+    p.send(type="new_session")                                               # unsaved until its first turn
+    assert only(p.send(type="resume_session", latest=True), "session_started")["session_id"] == first
+
+
+def test_resume_session_errors_leave_the_current_session_alone(inproc, tmp_path):
+    p = inproc([Round(output=[msg("never")], block="cancel"), [msg("later")]])
+    other = inproc([[msg("o")]])
+    other.turn("held open elsewhere")
+    held = other.session_id
+    current = p.session_id
+
+    p.send(type="user_message", text="start")
+    p.blocked()
+    assert only(p.send(type="resume_session", session_id=held), "error")["code"] == "busy"
+    assert only(p.send(type="new_session"), "error")["code"] == "busy"
+    p.send(type="cancel")
+    assert p.server.session.wait(TIMEOUT)
+    p.take()
+
+    for message, code in (({"session_id": "ffff0000"}, "not_found"), ({"session_id": "ab"}, "not_found"),
+                          ({"session_id": held}, "in_use"), ({"latest": True}, "bad_request"),    # latest is this one
+                          ({"session_id": current}, "bad_request"), ({}, "bad_request"),
+                          ({"session_id": held, "latest": True}, "bad_request"), ({"latest": "yes"}, "bad_request"),
+                          ({"session_id": 5}, "bad_request")):
+        reply = p.send(type="resume_session", **message)
+        assert [m["type"] for m in reply] == ["error"] and reply[0]["code"] == code, (message, reply)
+    assert p.session_id == current                                           # the failed resumes changed nothing
+    p.turn("still works")
+    assert p.fake.index == 2
+
+
+def test_resume_session_with_an_ambiguous_prefix(inproc):
+    p = inproc([[msg("a")]])
+    p.turn("hello")
+    twin = p.store.root / ("s_" + p.session_id[2:6] + "ffffffff")
+    shutil.copytree(p.store.session_dir(p.session_id), twin)
+    for name in ("meta.json", "lock"):
+        (twin / name).unlink(missing_ok=True)
+    reply = only(p.send(type="resume_session", session_id=p.session_id[2:6]), "error")
+    assert reply["code"] == "ambiguous" and twin.name in reply["message"]
+
+
+def test_new_session_is_a_new_id_while_new_conversation_keeps_its_meaning(inproc):
+    p = inproc([[msg("a")], [msg("b")]])
+    p.turn("hello")
+    first = p.session_id
+    reply = only(p.send(type="new_conversation"), "notice")
+    assert reply["code"] == "new_conversation" and reply["session_id"] == first       # same id, history cleared
+    assert p.session_id == first
+    messages = p.send(type="new_session")
+    assert [m["type"] for m in messages] == ["session_started"]
+    assert messages[0]["session_id"] != first and messages[0]["seq"] == 1
+    assert messages[0]["config"]["approval"] == "ask"
+    p.turn("fresh start")
+    assert "hello" not in prompt_texts(p.fake.requests[-1])
+
+
+# -- export_session, delete_session ----------------------------------------------------------------
+
+
+def test_export_session_returns_the_markdown(inproc):
+    p = inproc([[msg("a")], [msg("b")]])
+    empty = only(p.send(type="export_session"), "transcript")
+    assert empty["session_id"] == p.session_id and empty["markdown"] == "" and "seq" not in empty
+    p.turn("explain the cache")
+    first = p.session_id
+    current = only(p.send(type="export_session"), "transcript")
+    assert current["session_id"] == first and "**USER:** explain the cache" in current["markdown"]
+    p.send(type="new_session")
+    p.turn("something else")
+    old = only(p.send(type="export_session", session_id=first[2:8]), "transcript")      # another session, by prefix
+    assert old["session_id"] == first and "explain the cache" in old["markdown"]
+    assert "something else" not in old["markdown"]
+    assert only(p.send(type="export_session", session_id="ffff0000"), "error")["code"] == "not_found"
+
+
+def test_delete_session_removes_one_session(inproc):
+    p = inproc([[msg("a")], [msg("b")]])
+    held = inproc([[msg("h")]], workspace=p.workspace)
+    held.turn("busy elsewhere")
+    p.turn("old chat")
+    old = p.session_id
+    p.send(type="new_session")
+    p.turn("current chat")
+    current = p.session_id
+
+    assert only(p.send(type="delete_session", session_id=current), "error")["code"] == "in_use"
+    assert only(p.send(type="delete_session", session_id=held.session_id), "error")["code"] == "in_use"
+    assert only(p.send(type="delete_session", session_id="ffff0000"), "error")["code"] == "not_found"
+    assert only(p.send(type="delete_session"), "error")["code"] == "bad_request"
+    assert only(p.send(type="delete_session", session_id=7), "error")["code"] == "bad_request"
+    assert only(p.send(type="list_sessions"), "sessions")["total"] == 3
+
+    deleted = only(p.send(type="delete_session", session_id=old[2:8]), "session_deleted")
+    assert deleted == {"type": "session_deleted", "session_id": old}
+    listed = only(p.send(type="list_sessions"), "sessions")
+    assert {r["session_id"] for r in listed["sessions"]} == {current, held.session_id}
+    assert not p.store.session_dir(old).exists()
+
+
+# -- --no-save -----------------------------------------------------------------------------------------
+
+
+def test_no_save_writes_nothing_but_still_lists_and_exports(start_in):
+    a = start_in([[msg("saved")]])
+    saved = a.received[0]["session_id"]
+    a.send(type="user_message", text="keep this")
+    a.expect("turn_completed")
+    a.send(type="shutdown")
+    a.wait_exit()
+    sessions = a.workspace / ".agent_v3" / "sessions"
+    before = sorted(p.name for p in sessions.iterdir())
+
+    b = start_in([[msg("unsaved")], [msg("also unsaved")]], "--no-save")
+    b.send(type="user_message", text="do not keep this")
+    b.expect("turn_completed")
+    b.send(type="list_sessions")
+    listed = b.expect("sessions")
+    assert [r["session_id"] for r in listed["sessions"]] == [saved] and listed["total"] == 1
+    assert listed["sessions"][0]["status"] == "idle" and listed["current"] != saved
+
+    b.send(type="resume_session", session_id=saved)
+    assert b.expect("error")["code"] == "saving_disabled"
+    b.send(type="resume_session", latest=True)
+    assert b.expect("error")["code"] == "saving_disabled"
+    b.send(type="export_session")
+    assert b.expect("error")["code"] == "saving_disabled"
+    b.send(type="export_session", session_id=b.received[0]["session_id"])
+    assert b.expect("error")["code"] == "saving_disabled"
+    b.send(type="export_session", session_id=saved)                          # a saved session can still be read
+    assert "keep this" in b.expect("transcript")["markdown"]
+    b.send(type="new_session")                                               # and a new (unsaved) one can start
+    assert b.expect("session_started")["seq"] == 1
+    b.barrier()
+    assert sorted(p.name for p in sessions.iterdir()) == before
+
+
+def test_no_save_creates_no_folder(start):
+    c = start([[msg("hi")]], "--no-save")
+    c.send(type="user_message", text="hello")
+    c.expect("turn_completed")
+    c.send(type="list_sessions")
+    assert c.expect("sessions")["total"] == 0
+    assert not (c.workspace / ".agent_v3").exists()
