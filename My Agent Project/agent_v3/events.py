@@ -58,6 +58,31 @@ class SessionStarted(Event):
 
 
 @dataclass(frozen=True, kw_only=True)
+class SessionResumed(Event):
+    """Sent once, right after `session_started`, when a saved session was resumed (sessions spec §5.5)."""
+    type: ClassVar[str] = "session_resumed"
+    title: str
+    created: str
+    turns_total: int                # every turn line, across resets
+    turns: list = field(default_factory=list)          # last ≤20 restored: {turn_id, user_message, outcome, text, ts}
+    totals: dict = field(default_factory=dict)         # restored usage totals (TurnStats shape)
+    history: str = "pruned"         # full | pruned: which form of the earlier turns the model is given
+    restored_items: int = 0         # history items given to the model, excluding the system message
+    interrupted_turn: str | None = None                # turn_id recovered from a process that died mid-turn
+    saved_config: dict = field(default_factory=dict)   # {model, reasoning, approval, prune_history} at the last save
+
+
+@dataclass(frozen=True, kw_only=True)
+class ConfigChanged(Event):
+    """Settings changed between turns by `Session.update_config` (sessions spec §5.6). Emitted even when nothing
+    changed (`changes == {}`), so a client that asked always gets an answer."""
+    type: ClassVar[str] = "config_changed"
+    changes: dict = field(default_factory=dict)        # {"approval": {"from": "ask", "to": "auto-edit"}}
+    config: dict = field(default_factory=dict)         # config.summary() + tools after the change (as session_started)
+    history: str = "unchanged"      # unchanged | pruned (a model change dropped full turns for their pruned records)
+
+
+@dataclass(frozen=True, kw_only=True)
 class TurnStarted(Event):
     type: ClassVar[str] = "turn_started"
     user_message: str
@@ -179,6 +204,18 @@ class TurnFailed(Event):
 
 
 EVENT_TYPES: dict[str, type[Event]] = {cls.type: cls for cls in (
-    SessionStarted, TurnStarted, ModelRoundStarted, TextDelta, ModelRetry, ModelRoundCompleted, WebAction,
-    ToolStarted, ToolCompleted, ApprovalRequested, ApprovalResolved, Notice, TurnCompleted, TurnCancelled,
-    TurnFailed)}
+    SessionStarted, SessionResumed, ConfigChanged, TurnStarted, ModelRoundStarted, TextDelta, ModelRetry,
+    ModelRoundCompleted, WebAction, ToolStarted, ToolCompleted, ApprovalRequested, ApprovalResolved, Notice,
+    TurnCompleted, TurnCancelled, TurnFailed)}
+
+
+def event_from_dict(data: dict) -> Event:
+    """Rebuild an Event from its `to_dict()` (e.g. a line of a saved log). Unknown keys are ignored.
+
+    Raises ValueError for an unknown `type` and TypeError when a required field is missing.
+    """
+    cls = EVENT_TYPES.get(data.get("type"))
+    if cls is None:
+        raise ValueError(f"unknown event type {data.get('type')!r}")
+    names = {f.name for f in dataclasses.fields(cls)}
+    return cls(**{k: v for k, v in data.items() if k in names})

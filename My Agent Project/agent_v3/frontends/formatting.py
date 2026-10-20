@@ -47,6 +47,12 @@ def completion_line(stats: dict, sep: str = " · ") -> str:
                      fmt_cost(turn_cost(stats))])
 
 
+def usage_label(models_used: list[str], current: str) -> str:
+    """The model name a usage block is labelled with: every model the turns ran on (`gpt-6-luna + gpt-5.6-sol`), or
+    `current` when no turn has run yet."""
+    return " + ".join(models_used) or current
+
+
 def format_usage(model: str, totals: dict) -> str:
     """Session usage block in the shape of v2's `print_usage`, from summed turn stats."""
     t = totals

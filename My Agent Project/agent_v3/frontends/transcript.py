@@ -1,13 +1,17 @@
 """Transcript (plan §10.3): an event consumer that appends v2-compatible Markdown, plus one line per round.
 
-It accepts event objects or the dicts from an event log, so a transcript can be rebuilt from a recorded session.
+It accepts event objects or the dicts from an event log, so a transcript can be rebuilt from a recorded session
+(`export_transcript`). A later `session_started` in the same log (a resumed session) writes a RESUMED line instead
+of a second header; `session_resumed` itself has no handler and is ignored. `config_changed` writes a SETTINGS line.
 """
 from __future__ import annotations
 
+import os
 from datetime import datetime
 from pathlib import Path
 
-from .formatting import fmt_cost, format_usage, round_summary, turn_cost, work_summary
+from ..jsonl import read_jsonl
+from .formatting import fmt_cost, format_usage, round_summary, turn_cost, usage_label, work_summary
 
 _SUMMED = ("rounds", "tool_calls", "parallel_groups", "web_searches", "web_opens", "web_finds", "input_tokens",
            "cached_tokens", "output_tokens", "reasoning_tokens", "model_cost_usd", "web_cost_usd", "elapsed_s")
@@ -29,6 +33,7 @@ class TranscriptWriter:
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.model = ""
+        self.models_used: list[str] = []           # the models turns ran on, in order: the usage block's label
         self.totals: dict = {k: 0 for k in _SUMMED}
         self._calls: dict[str, dict] = {}          # call_id -> tool_started
         self._requests: dict[str, dict] = {}       # request_id -> approval request
@@ -51,7 +56,7 @@ class TranscriptWriter:
         if self._closed:
             return
         if self._started:
-            self._log("```\n" + format_usage(self.model, self.totals) + "\n```")
+            self._log("```\n" + format_usage(usage_label(self.models_used, self.model), self.totals) + "\n```")
         self._closed = True
         if self._file is not None:
             self._file.close()
@@ -78,16 +83,30 @@ class TranscriptWriter:
     def _on_session_started(self, d: dict) -> None:
         cfg = d.get("config", {})
         self.model = cfg.get("model", "")
-        self._started = True
         try:
             when = datetime.fromisoformat(d["ts"]).astimezone()
         except (KeyError, ValueError):
             when = datetime.now()
+        if self._started:
+            self._log(f"> RESUMED {when:%Y-%m-%d %H:%M} (model={self.model}, reasoning={cfg.get('reasoning')}, "
+                      f"approval={cfg.get('approval')})\n")
+            return
+        self._started = True
         self._log(f"\n---\n\n# Transcript {when:%Y-%m-%d %H:%M} (model={self.model}, "
                   f"reasoning={cfg.get('reasoning')}, approval={cfg.get('approval')}, "
                   f"web_search={cfg.get('web_search')}, workspace={cfg.get('workspace')})\n")
 
+    def _on_config_changed(self, d: dict) -> None:
+        changes = d.get("changes") or {}
+        if not changes:
+            return
+        self.model = (d.get("config") or {}).get("model") or self.model     # the model later turns run on
+        self._log("> SETTINGS: " + "; ".join(f"{name} {c.get('from')} → {c.get('to')}" for name, c in changes.items())
+                  + "\n")
+
     def _on_turn_started(self, d: dict) -> None:
+        if self.model and self.model not in self.models_used:
+            self.models_used.append(self.model)
         self._log(f"**USER:** {d['user_message']}\n")
 
     def _on_tool_started(self, d: dict) -> None:
@@ -149,3 +168,24 @@ class TranscriptWriter:
         stats = d.get("stats", {})
         self._add_stats(stats)
         self._log(f"**FAILED** ({d['error_code']}): {d['message']}\n\n{self._footer(stats)}")
+
+
+def export_transcript(events_path: str | Path, out_path: str | Path) -> Path:
+    """Replay a saved `events.jsonl` through a TranscriptWriter into a temp file, then `os.replace` it onto
+    `out_path`, so the result is always rebuilt from scratch and never half-written."""
+    out_path = Path(out_path)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = out_path.with_name(out_path.name + ".tmp")
+    tmp.unlink(missing_ok=True)                    # TranscriptWriter appends
+    writer = TranscriptWriter(tmp)
+    try:
+        for d in read_jsonl(events_path):
+            writer.write(d)
+        writer.close()
+        tmp.touch()                                # a log with no events still gives an (empty) file
+        os.replace(tmp, out_path)
+    except BaseException:
+        writer.close()
+        tmp.unlink(missing_ok=True)
+        raise
+    return out_path

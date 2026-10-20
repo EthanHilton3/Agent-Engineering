@@ -142,14 +142,34 @@ class ModelAdapter:
         self._client = client
         self.retry_delays = retry_delays
         self.jitter = jitter
-        self.dropped_params: set[str] = set()   # prompt_cache_key / include values the API rejected this session
+        self.dropped_params: set[str] = set()   # prompt_cache_key / include values the API rejected (see set_config)
         self._unknown_price_noticed = False
+        self._own_client = False                # True once `client` built it (set_config may rebuild only that one)
 
     @property
     def client(self):
         if self._client is None:
             self._client = openai.OpenAI(max_retries=3, timeout=request_timeout(self.config.reasoning))
+            self._own_client = True
         return self._client
+
+    def set_config(self, config: AgentConfig) -> None:
+        """Use `config` from the next request on: model, reasoning and the cost lookup read it (sessions spec §5.6).
+
+        A client this adapter built is closed and rebuilt (lazily) when the reasoning level's read timeout differs; an
+        injected client is kept. A model change forgets the rejected include values, which depend on the model (the
+        400 fallback drops them again if the new model rejects them too); a rejected prompt_cache_key stays dropped.
+        """
+        old, self.config = self.config, config
+        if config.model != old.model:
+            self._unknown_price_noticed = False      # a new model with no price entry gets its own notice
+            self.dropped_params &= {"prompt_cache_key"}
+        if self._own_client and request_timeout(config.reasoning) != request_timeout(old.reasoning):
+            client, self._client, self._own_client = self._client, None, False
+            try:
+                client.close()                       # its connection pool would otherwise stay open until GC
+            except Exception:
+                pass
 
     # -- request -------------------------------------------------------------------------------
 

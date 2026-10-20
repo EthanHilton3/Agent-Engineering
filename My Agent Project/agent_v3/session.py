@@ -9,6 +9,9 @@ Threading model
 - `cancel()` commits the cancellation itself and bumps `_generation`. A worker whose generation is
   stale (or whose token is cancelled) never touches history, and its events are dropped because
   they carry a turn_id that is no longer active.
+- With a store, every recorder call also happens under `_lock` (sessions spec §5.4): an event is written
+  before `on_event` sees it, and a turn's history line is written (and fsync'd) before its terminal event.
+- `update_config` changes model, reasoning and approval in place, under `_lock` and only between turns (§5.6).
 """
 from __future__ import annotations
 
@@ -16,17 +19,19 @@ import logging
 import threading
 import time
 import uuid
-from collections import Counter
-from dataclasses import dataclass, fields, replace
+from dataclasses import replace
 from typing import Callable
 
 from .approvals import ApprovalGateway, ApprovalPolicy, Decision
 from .config import AgentConfig
-from .events import (ApprovalResolved, Event, ModelRoundCompleted, ModelRoundStarted, Notice, SessionStarted,
-                     ToolCompleted, ToolStarted, TurnCancelled, TurnCompleted, TurnFailed, TurnStarted, WebAction,
-                     now_iso)
+from .events import (ConfigChanged, Event, ModelRoundCompleted, ModelRoundStarted, Notice, SessionResumed,
+                     SessionStarted, ToolCompleted, ToolStarted, TurnCancelled, TurnCompleted, TurnFailed, TurnStarted,
+                     event_from_dict, now_iso)
 from .model import Cancelled, ModelAdapter, ModelError, ModelResponse, web_tools
 from .prompt import build_system_prompt, prompt_cache_key
+from .sessions import (InterruptedTurn, SavedSession, SessionInfo, SessionRecorder, SessionStore,
+                       config_for_resume)
+from .stats import StatsCounter, TurnStats
 from .tools import build_registry
 from .tools.executor import ToolCall, ToolExecutor
 from .tools.files import plural
@@ -36,6 +41,8 @@ from .workspace import CancelToken, FileState, WorkspacePolicy
 logger = logging.getLogger(__name__)
 
 TURN_RECORD_MAX_CHARS = 600
+RESUMED_TURNS_SHOWN = 20
+CHANGEABLE_SETTINGS = ("model", "reasoning", "approval")    # update_config (§5.6); the rest need a new session
 SUMMARY_INSTRUCTION = ("Budget reached ({reason}). Do not call tools. Summarize what was done, what was verified, "
                        "and what remains.")
 
@@ -44,89 +51,55 @@ class Busy(RuntimeError):
     """A turn is running; the command needs an idle session."""
 
 
-@dataclass
-class TurnStats:
-    rounds: int = 0
-    tool_calls: int = 0
-    parallel_groups: int = 0
-    web_searches: int = 0
-    web_opens: int = 0
-    web_finds: int = 0
-    input_tokens: int = 0
-    cached_tokens: int = 0
-    output_tokens: int = 0
-    reasoning_tokens: int = 0
-    model_cost_usd: float = 0.0
-    web_cost_usd: float = 0.0
-    elapsed_s: float = 0.0
-    model_wait_s: float = 0.0
-    tool_wait_s: float = 0.0
-    approval_wait_s: float = 0.0
+class WorkingConfig:
+    """What a frontend's next session starts from (sessions spec §5.1): the launch config plus each setting changed by
+    command since (/model, set_config, ...). A resume restores the saved model and reasoning unless that setting was
+    typed as a flag (`flags`) or changed by command (`changed`)."""
 
-    def add(self, other: "TurnStats") -> None:
-        for f in fields(self):
-            setattr(self, f.name, getattr(self, f.name) + getattr(other, f.name))
+    def __init__(self, launch: AgentConfig, flags: set[str] | frozenset = frozenset()):
+        self.config = launch
+        self.flags = set(flags)
+        self.changed: set[str] = set()
 
-    def to_dict(self) -> dict:
-        out = {}
-        for f in fields(self):
-            v = getattr(self, f.name)
-            out[f.name] = round(v, 6 if f.name.endswith("_usd") else 3) if isinstance(v, float) else v
-        return out
+    def remember(self, config: AgentConfig, names) -> None:
+        """Carry the settings `names` of `config` (the open session's, after a change) into later sessions."""
+        self.config = replace(self.config, **{name: getattr(config, name) for name in names})
+        self.changed |= set(names)
+
+    def config_for(self, saved: SessionInfo | None = None) -> AgentConfig:
+        """The config for a new session (None), or for resuming the saved session `saved` describes."""
+        return self.config if saved is None else config_for_resume(self.config, saved, self.flags | self.changed)
 
 
 def _clip(text: str, n: int) -> str:
     return text if len(text) <= n else text[: n - 1] + "…"
 
 
-class _Turn:
+class _Turn(StatsCounter):
     """Per-turn state. `observe` runs under the session lock for every delivered event of this turn."""
 
     def __init__(self, turn_id: str, generation: int, user_message: str, base_history: list, web_fee: float):
+        super().__init__(web_fee)
         self.id = turn_id
         self.generation = generation
         self.user_message = user_message
         self.base_history = base_history         # history snapshot taken at start_turn
-        self.web_fee = web_fee
         self.cancel = CancelToken()
         self.started = time.monotonic()
-        self.stats = TurnStats()
         self.sources: list[dict] = []
         self.sources_all: list[dict] = []
         self._started_calls: dict[str, ToolStarted] = {}
-        self._group_sizes: Counter = Counter()
         self._reads: dict[str, None] = {}
         self._edits: dict[str, list[int]] = {}
         self._commands: list[str] = []
         self._rejected: list[str] = []
 
     def observe(self, ev: Event) -> None:
-        s = self.stats
-        if isinstance(ev, ModelRoundCompleted):
-            s.rounds += 1
-            s.input_tokens += ev.input_tokens
-            s.cached_tokens += ev.cached_tokens
-            s.output_tokens += ev.output_tokens
-            s.reasoning_tokens += ev.reasoning_tokens
-            s.model_cost_usd += ev.cost_usd or 0.0
-            s.model_wait_s += ev.duration_s
-        elif isinstance(ev, WebAction):
-            if ev.kind == "search":
-                s.web_searches += 1
-                s.web_cost_usd = s.web_searches * self.web_fee
-            elif ev.kind == "open_page":
-                s.web_opens += 1
-            elif ev.kind == "find_in_page":
-                s.web_finds += 1
-        elif isinstance(ev, ToolStarted):
-            s.tool_calls += 1
+        super().observe(ev)                      # the stats
+        if isinstance(ev, ToolStarted):
             self._started_calls[ev.call_id] = ev
-            self._group_sizes[ev.group] += 1
-            s.parallel_groups = sum(1 for n in self._group_sizes.values() if n >= 2)
         elif isinstance(ev, ToolCompleted):
             self._record(ev)
-        elif isinstance(ev, ApprovalResolved):
-            s.approval_wait_s += ev.wait_s
 
     def _record(self, ev: ToolCompleted) -> None:
         started = self._started_calls.get(ev.call_id)
@@ -176,9 +149,44 @@ class _Turn:
 
 class Session:
     def __init__(self, config: AgentConfig, on_event: Callable[[Event], None],
-                 model: ModelAdapter | None = None, *, registry: ToolRegistry | None = None):
+                 model: ModelAdapter | None = None, *, registry: ToolRegistry | None = None,
+                 store: SessionStore | None = None, resume: str | None = None):
+        """`store`: save the session there (None: nothing is saved). `resume`: a full session id in `store`
+        to continue; SessionNotFound / SessionInUse are raised before anything is emitted."""
         self.config = config
-        self.session_id = f"s_{uuid.uuid4().hex[:12]}"
+        self._recorder: SessionRecorder | None = None
+        self._save_failure_reported = False
+        self._hold_save_failure = False          # while the resume events go out (§5.5: session_resumed comes next)
+        saved: SavedSession | None = None
+        if resume is not None:
+            if store is None:
+                raise ValueError("resume= needs a store")
+            saved, self._recorder = store.open(resume, config)
+            self.session_id = resume
+        else:
+            self.session_id = f"s_{uuid.uuid4().hex[:12]}"
+            if store is not None:
+                self._recorder = store.create(self.session_id, config)
+        try:
+            self._setup(config, on_event, model, registry)
+            resumed = self._restore(saved) if saved is not None else None
+        except BaseException:
+            if self._recorder is not None:
+                self._recorder.close()
+            raise
+        opening: list[Event] = [SessionStarted(config={**config.summary(), "tools": self.registry.names()})]
+        if resumed is not None:
+            opening.append(resumed)
+            if resumed.interrupted_turn:
+                opening.append(Notice(level="warning", code="turn_interrupted", message=(
+                    f"Turn {resumed.interrupted_turn} was interrupted when the agent stopped. "
+                    "Its partial work is noted in the history.")))
+        for n, event in enumerate(opening, 1):
+            self._hold_save_failure = n < len(opening)   # a failure at open or recovery is reported after these
+            self._emit(event)
+
+    def _setup(self, config: AgentConfig, on_event: Callable[[Event], None], model: ModelAdapter | None,
+               registry: ToolRegistry | None) -> None:
         self._on_event = on_event
         self._lock = threading.RLock()
         self._seq = 0
@@ -200,7 +208,74 @@ class Session:
         self.system_prompt = build_system_prompt(config)
         self.cache_key = prompt_cache_key(config.workspace, self.system_prompt, self.tools)
         self.history: list = [{"role": "system", "content": self.system_prompt}]
-        self._emit(SessionStarted(config={**config.summary(), "tools": self.registry.names()}))
+        # With pruning off, history[1:] in its pruned form (kept by `_append`): what a model change falls back to (§5.6)
+        self._pruned_history: list = []
+        self._models: list[str] = []             # the models turns ran on, in order of first use (the usage label)
+
+    def _append(self, items: list, record: list | None = None) -> None:
+        """Add a committed turn's items to history. With pruning off, also add its pruned form (`record`, or `items`
+        when they are plain messages already) to `_pruned_history`; with pruning on, history is that form."""
+        self.history += items
+        if not self.config.prune_history:
+            self._pruned_history += items if record is None else record
+
+    # -- resume (sessions spec §5.2, §5.3) ------------------------------------------------------
+
+    def _restore(self, saved: SavedSession) -> SessionResumed:
+        """Load the saved turns into history and the counters, and recover an interrupted turn.
+
+        The system prompt, cache key, FileState and approval allowances stay fresh (built by `_setup`).
+        """
+        cfg = self.config
+        self._seq = saved.last_seq
+        self._turn_no = saved.turn_no
+        self._totals = TurnStats.from_dict(saved.totals)
+        self._models = list(saved.models)
+        full = False
+        turns = []
+        for line in saved.turn_lines:
+            items, record = line.get("items"), line.get("record")
+            if not isinstance(items, list):
+                continue
+            # A full turn (record kept) goes back only to the model that made it, in a session that keeps full
+            # turns; otherwise its pruned record does, which is valid for any model.
+            if record is not None:
+                if not cfg.prune_history and (line.get("model") or saved.info.model) == cfg.model:
+                    full = True
+                else:
+                    items = record
+            self._append(items, record)
+            turns.append({k: line.get(k) for k in ("turn_id", "user_message", "outcome", "text", "ts")})
+        interrupted = saved.interrupted
+        if interrupted is not None:
+            turns.append(self._recover_interrupted(interrupted))
+        return SessionResumed(
+            title=saved.info.title, created=saved.info.created,
+            turns_total=saved.all_turn_lines + (interrupted is not None), turns=turns[-RESUMED_TURNS_SHOWN:],
+            totals=self._totals.to_dict(), history="full" if full else "pruned",
+            restored_items=len(self.history) - 1, interrupted_turn=interrupted.turn_id if interrupted else None,
+            saved_config=dict(saved.saved_config))
+
+    def _recover_interrupted(self, interrupted: InterruptedTurn) -> dict:
+        """§5.3: replay the dead turn's logged events for its activity and billed costs, then commit it."""
+        turn = _Turn(interrupted.turn_id, 0, interrupted.user_message, [], self.config.web_search_fee_usd)
+        for d in interrupted.events:
+            try:
+                turn.observe(event_from_dict(d))
+            except (TypeError, ValueError):
+                continue                       # a line from another version; the rest still counts
+        items = [{"role": "user", "content": turn.user_message},
+                 {"role": "developer", "content": _clip(
+                     f"Turn interrupted (the agent process stopped) after: {turn.activity()}. "
+                     "Files may have changed since; re-read before editing.", TURN_RECORD_MAX_CHARS)}]
+        self._append(items)
+        self._totals.add(turn.stats)
+        if self._recorder is not None:
+            with self._lock:
+                self._recorder.on_commit(turn_id=turn.id, outcome="interrupted", user_message=turn.user_message,
+                                         text="", items=items, record=None, stats=turn.stats.to_dict())
+        return {"turn_id": turn.id, "user_message": turn.user_message, "outcome": "interrupted", "text": "",
+                "ts": now_iso()}
 
     # -- commands ------------------------------------------------------------------------------
 
@@ -214,6 +289,8 @@ class Session:
                          self.config.web_search_fee_usd)
             self._active = turn
             self._idle.clear()
+            if self.config.model not in self._models:
+                self._models.append(self.config.model)
             self._emit(TurnStarted(turn_id=turn.id, user_message=user_message))
         threading.Thread(target=self._worker, args=(turn,), name=f"agent-{turn.id}", daemon=True).start()
         return turn.id
@@ -232,10 +309,12 @@ class Session:
             if self._active is not turn:   # finished on its own meanwhile
                 return
             self.approvals.cancel_pending(turn.id)
-            self.history += [{"role": "user", "content": turn.user_message},
-                             {"role": "developer", "content": _clip(
-                                 f"Turn cancelled by user after: {turn.activity()}.", TURN_RECORD_MAX_CHARS)}]
+            items = [{"role": "user", "content": turn.user_message},
+                     {"role": "developer", "content": _clip(
+                         f"Turn cancelled by user after: {turn.activity()}.", TURN_RECORD_MAX_CHARS)}]
+            self._append(items)
             self._generation += 1
+            self._save_commit(turn, "cancelled", "", items, None)
             self._emit(TurnCancelled(turn_id=turn.id, stats=self._close_stats(turn)))
             self._end(turn)
 
@@ -244,12 +323,65 @@ class Session:
             if self._active is not None:
                 raise Busy("A turn is running; cancel it first.")
             self.history = [{"role": "system", "content": self.system_prompt}]
+            self._pruned_history = []
             self.files = FileState()       # the model no longer remembers what it read
+            if self._recorder is not None:
+                self._recorder.on_reset()
             self._emit(Notice(level="info", code="new_conversation", message="Conversation history cleared."))
+
+    def update_config(self, *, model: str | None = None, reasoning: str | None = None,
+                      approval: str | None = None) -> dict:
+        """Change settings between turns, in place: same id, history, log and lock (sessions spec §5.6).
+
+        Returns `{field: [old, new]}` for each field that changed. Emits `config_changed` even when nothing did.
+        Raises Busy while a turn runs, ValueError for an invalid value (model names are stripped, not checked against
+        a list), or whatever rebuilding the system prompt raises (an OSError if the prompt file is gone). On any error
+        nothing is applied and nothing is emitted.
+        """
+        with self._lock:
+            if self._active is not None:
+                raise Busy("A turn is running; settings can change between turns.")
+            if model is not None:
+                if not isinstance(model, str) or not model.strip():
+                    raise ValueError(f"model must be a non-empty string; got {model!r}")
+                model = model.strip()
+            asked = {k: v for k, v in (("model", model), ("reasoning", reasoning), ("approval", approval))
+                     if v is not None}
+            old = self.config
+            new = replace(old, **asked)          # AgentConfig.__post_init__ rejects an unknown level or mode
+            changes = {k: [getattr(old, k), getattr(new, k)] for k in CHANGEABLE_SETTINGS
+                       if getattr(old, k) != getattr(new, k)}
+            history = "unchanged"
+            if changes:
+                # Build everything that can fail first (the prompt file is read again), then swap it all in.
+                policy, prompt, key = self.policy, self.system_prompt, self.cache_key
+                if "approval" in changes:
+                    # A new mode is a new trust decision: "allow for session" approvals start over. The prompt names
+                    # the mode, so it and the cache key are rebuilt.
+                    policy = ApprovalPolicy(new.approval)
+                    prompt = build_system_prompt(new)
+                    key = prompt_cache_key(new.workspace, prompt, self.tools)
+                self.model.set_config(new)
+                self.config = new
+                if "approval" in changes:
+                    self.policy = self.approvals.policy = policy
+                    self.system_prompt, self.cache_key = prompt, key
+                    self.history[0] = {"role": "system", "content": prompt}
+                if "model" in changes and not new.prune_history and self.history[1:] != self._pruned_history:
+                    # Full turns hold reasoning items encrypted for the old model: keep only their records (§5.2).
+                    self.history = [self.history[0], *self._pruned_history]
+                    history = "pruned"
+            self._emit(ConfigChanged(changes={k: {"from": a, "to": b} for k, (a, b) in changes.items()},
+                                     config={**self.config.summary(), "tools": self.registry.names()},
+                                     history=history))
+            return changes
 
     def close(self) -> None:
         self.cancel()
         self.executor.shutdown()
+        with self._lock:
+            if self._recorder is not None:
+                self._recorder.close()     # after the last event (a cancelled worker's later events are dropped)
 
     # -- queries -------------------------------------------------------------------------------
 
@@ -257,12 +389,23 @@ class Session:
     def busy(self) -> bool:
         return self._active is not None
 
+    @property
+    def saved(self) -> bool:
+        """True while the session is being saved (a store was given and no write has failed)."""
+        return self._recorder is not None and self._recorder.healthy
+
     def wait(self, timeout: float | None = None) -> bool:
         return self._idle.wait(timeout)
 
     def usage_totals(self) -> dict:
         with self._lock:
             return self._totals.to_dict()
+
+    @property
+    def models_used(self) -> list[str]:
+        """The models this session's turns ran on (restored turns included), in order of first use."""
+        with self._lock:
+            return list(self._models)
 
     # -- events --------------------------------------------------------------------------------
 
@@ -276,11 +419,25 @@ class Session:
             event = replace(event, session_id=self.session_id, seq=self._seq, ts=now_iso())
             if turn is not None and event.turn_id == turn.id:
                 turn.observe(event)
+            if self._recorder is not None:
+                self._recorder.on_event(event)     # on disk before the frontend sees it
             try:
                 self._on_event(event)
             except Exception:
                 logger.exception("on_event raised for %s", event.type)
+            self._report_save_failure()
             return True
+
+    def _report_save_failure(self) -> None:
+        """Emit one `session_save_failed` notice the first time the recorder disables itself (§5.4).
+
+        Called only by `_emit`, after it delivered an event, so the notice follows the event whose write failed.
+        """
+        r = self._recorder
+        if r is not None and r.error is not None and not self._save_failure_reported and not self._hold_save_failure:
+            self._save_failure_reported = True
+            self._emit(Notice(level="warning", code="session_save_failed",
+                              message=f"Saving stopped: {r.error}. The session continues unsaved."))
 
     def _turn_emitter(self, turn: _Turn) -> Callable[[Event], None]:
         def emit(event: Event) -> None:
@@ -376,14 +533,14 @@ class Session:
         with self._lock:
             if self._stale(turn):
                 return
-            if self.config.prune_history:
-                # Only these three items survive the turn: no reasoning/function_call/output/web items,
-                # so there are never orphaned call/output pairs, and the earlier prefix stays cached.
-                self.history += [{"role": "user", "content": turn.user_message},
-                                 {"role": "assistant", "content": response.text or "(no answer text)"},
-                                 {"role": "developer", "content": self._turn_record(turn)}]
-            else:
-                self.history += items
+            # With pruning, only these three items survive the turn: no reasoning/function_call/output/web
+            # items, so there are never orphaned call/output pairs, and the earlier prefix stays cached.
+            record = [{"role": "user", "content": turn.user_message},
+                      {"role": "assistant", "content": response.text or "(no answer text)"},
+                      {"role": "developer", "content": self._turn_record(turn)}]
+            new_items = record if self.config.prune_history else items
+            self._append(new_items, record)
+            self._save_commit(turn, "completed", response.text or "", new_items, record)
             self._emit(TurnCompleted(turn_id=turn.id, text=response.text, sources=list(turn.sources),
                                      sources_all=list(turn.sources_all), stats=self._close_stats(turn),
                                      stop_reason=stop_reason))
@@ -394,12 +551,20 @@ class Session:
             if self._stale(turn):
                 return
             # Keep the user's message and what already happened (files may have been edited).
-            self.history += [{"role": "user", "content": turn.user_message},
-                             {"role": "developer", "content": _clip(
-                                 f"Turn failed ({code}) after: {turn.activity()}.", TURN_RECORD_MAX_CHARS)}]
+            items = [{"role": "user", "content": turn.user_message},
+                     {"role": "developer", "content": _clip(
+                         f"Turn failed ({code}) after: {turn.activity()}.", TURN_RECORD_MAX_CHARS)}]
+            self._append(items)
+            self._save_commit(turn, "failed", "", items, None)
             self._emit(TurnFailed(turn_id=turn.id, error_code=code, message=message,
                                   stats=self._close_stats(turn)))
             self._end(turn)
+
+    def _save_commit(self, turn: _Turn, outcome: str, text: str, items: list, record: list | None) -> None:
+        """Write the turn's history line before its terminal event is emitted (§4.2 commit order)."""
+        if self._recorder is not None:
+            self._recorder.on_commit(turn_id=turn.id, outcome=outcome, user_message=turn.user_message, text=text,
+                                     items=items, record=record)
 
     def _close_stats(self, turn: _Turn) -> dict:
         turn.stats.elapsed_s = time.monotonic() - turn.started

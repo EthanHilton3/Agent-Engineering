@@ -113,7 +113,7 @@ bench/
 
 The package is **self-contained**. It does not import `usage.py`, `tools.py`, or `ui.py` from the homework folder, so it can later be moved into an app unchanged. Dependencies: `openai`, `pydantic` (both installed), and `rich` (CLI only, already used by v2). No new dependencies.
 
-Run from the homework folder: `python -m agent_v3 --workspace <path> --transcript transcript4.md`.
+Run from the homework folder: `python -m agent_v3 --workspace <path>`. (`--transcript` was removed; sessions are saved and exported on demand, see `agent_v3_sessions_plan.md` §6.)
 
 ---
 
@@ -150,7 +150,7 @@ class AgentConfig:
     output_dir: Path | None = None          # default: <workspace>/.agent_v3/outputs
 ```
 
-CLI flags map one-to-one (`--model`, `--reasoning`, `--approval`, `--workspace`, `--no-web`, `--search-context-size`, `--allow-domain` (repeatable), `--max-rounds`, `--max-turn-cost`, `--no-parallel-reads`, `--no-prune-history`, `--no-dedupe-reads`, `--no-lenient-edit`, `--prompt`), plus frontend-only flags `--transcript PATH`, `--events-log PATH`, `--verbose`.
+CLI flags map one-to-one (`--model`, `--reasoning`, `--approval`, `--workspace`, `--no-web`, `--search-context-size`, `--allow-domain` (repeatable), `--max-rounds`, `--max-turn-cost`, `--no-parallel-reads`, `--no-prune-history`, `--no-dedupe-reads`, `--no-lenient-edit`, `--prompt`), plus frontend-only flags `--events-log PATH`, `--verbose`. (`--transcript` is removed, and `--resume`, `--continue`, `--no-save` are added: see `agent_v3_sessions_plan.md` §6.1.)
 
 ---
 
@@ -638,6 +638,7 @@ The CLI keeps **v2's look**: `You ›` prompt, one line per tool with `↳ name 
 - Driven entirely by events. Copy the helpers from `ui.py` (`_style`, TTY detection, symbols, spinner) and do not import `ui.py` itself.
 - **Single output thread:** the main thread owns stdout. The worker's `on_event` only does `queue.put(event)`. The main loop is `while session.busy or not q.empty(): handle(q.get(timeout=0.1))`. The spinner stops before any line is printed and before any approval prompt.
 - Tool lines are printed at `tool_completed`, one line per call: `↳ read_file  store.py  ✓ lines 1–80`. For parallel groups, print a dim header `parallel ×3` before the group's lines. This halves v2's line count.
+- Saved sessions add `/sessions`, `/resume`, `/export`, a new meaning for `/new` and an exit hint: see `agent_v3_sessions_plan.md` §6.2.
 - `text_delta` is ignored (the final Markdown render is unchanged). `model_retry` prints a dim notice.
 - **Approval prompt** (on `approval_requested`):
   ```text
@@ -729,6 +730,62 @@ Rules a client can rely on:
 - stdout carries protocol lines only; logs and stray output go to stderr.
 - The server writes events synchronously, so a client that stops reading stdout eventually stalls the session.
 
+**Saved sessions (added by `agent_v3_sessions_plan.md` §7, still protocol v1).** Everything above is unchanged; a client that never sends the messages below and never starts the server with `--resume` or `--continue` sees exactly the sequence described above. The server now saves every session to `<workspace>/.agent_v3/sessions/` (`--no-save` turns that off). New start-up flags: `--resume REF` (an id, a unique prefix of at least 4 characters after `s_`, or `latest`; REF is required here), `--continue` / `-c` (the same as `--resume latest`, or a new session if none is saved), `--no-save`. An unknown, ambiguous or in-use REF, or `--no-save` with either resume flag, exits 2 with an empty stdout. A resumed session restores its saved `model` and `reasoning` unless they are passed as flags; the approval mode is never restored.
+
+Client → server (all need an idle session, `error`/`busy` otherwise, except `list_sessions` and `export_session`). Replies that are not events (`sessions`, `transcript`, `session_deleted`) have no `seq`, like `usage`.
+
+| type | fields | effect and replies |
+|---|---|---|
+| `list_sessions` | `limit` (positive int, optional; omitted = all) | Reply `sessions`: `{current, total, sessions: [{session_id, title, created, updated, turns, cost_usd, model, reasoning, status}]}`, newest first; `total` counts every saved session. `status` is `idle`, `in_use` (open in another process), `interrupted` or `current` (the open session). A session is listed from its first turn on. Works under `--no-save`. |
+| `resume_session` | `session_id` (id or prefix), **or** `latest: true` (not both) | Closes the current session (already saved), then emits `session_started` and `session_resumed` for the chosen one, plus `notice` `turn_interrupted` if its last turn was cut off. If it fails, the current session stays open and unchanged. Errors: `busy`, `not_found`, `ambiguous`, `in_use`, `saving_disabled` (`--no-save`), `bad_request` (also for the session that is already open). |
+| `new_session` | none | Closes the current session and starts a new one: `session_started` with a new `session_id` and `seq` 1. `new_conversation` keeps its meaning (history cleared, same id). |
+| `export_session` | `session_id` (optional; default the open session) | Reply `transcript`: `{session_id, markdown}`, rebuilt from the saved log (`markdown` is empty for an open session with no turns yet). Allowed at any time. Errors: `not_found`, `ambiguous`, `saving_disabled` (the open session under `--no-save`). |
+| `delete_session` | `session_id` (id or prefix; required) | Reply `session_deleted`: `{session_id}`. Deletes that one session's files. Errors: `not_found`, `ambiguous`, `in_use` (the open session, or one open in another process), `busy`. |
+
+```json
+{"type": "list_sessions"}
+{"type": "sessions", "current": "s_9c1d2e3f4a5b", "total": 1, "sessions": [{"session_id": "s_9c1d2e3f4a5b", "title": "Rename Store.remove", "created": "2026-10-16T09:00:01.002+00:00", "updated": "2026-10-16T09:04:40.311+00:00", "turns": 1, "cost_usd": 0.0011, "model": "gpt-6-luna", "reasoning": "medium", "status": "current"}]}
+{"type": "resume_session", "session_id": "3f9a"}
+{"type": "session_resumed", "title": "Fix the failing test in test_store.py", "created": "...", "turns_total": 4, "turns": [{"turn_id": "t3", "user_message": "Run the tests again", "outcome": "completed", "text": "All 18 tests pass.", "ts": "..."}], "totals": {"rounds": 14, "...": "..."}, "history": "pruned", "restored_items": 11, "interrupted_turn": null, "saved_config": {"model": "gpt-6-luna", "reasoning": "medium", "approval": "ask", "prune_history": true}}
+{"type": "new_session"}
+{"type": "export_session"}
+{"type": "transcript", "session_id": "s_51be09d7c3aa", "markdown": "# Transcript ...\n\n**USER:** ..."}
+{"type": "delete_session", "session_id": "s_77e0"}
+{"type": "session_deleted", "session_id": "s_77e0d41a9c55"}
+```
+
+New `error` codes: `not_found`, `ambiguous`, `in_use`, `saving_disabled` (clients already treat unknown codes generically).
+
+Rules added for saved sessions:
+- **More than one `session_started`.** A `session_started` line may appear again, but only in response to `resume_session` or `new_session`. It opens a new session context: later events carry its `session_id`. A client that never sends those messages never sees a second one.
+- **`seq` per session.** `seq` is strictly increasing with no gaps per `session_id` on the wire. A resumed session continues its saved numbering, so its first `seq` is greater than 1. A client that tracks `seq` should reset its expectation at each `session_started`.
+- **Recap event.** `session_resumed` directly follows the `session_started` of a resumed session (at start-up with `--resume` too). A `notice` `turn_interrupted` or `session_save_failed` may follow it.
+- **Usage after a resume.** `get_usage` after a resume returns the totals of the whole saved session, including earlier processes.
+- **Failed switches change nothing.** If `resume_session` fails, the open session is untouched and nothing but the `error` is written.
+
+**Settings and replay (added by `agent_v3_sessions_plan.md` §5.6 and §7.2, phase S5; still protocol v1).** Two more client messages and one more event. Everything above is unchanged.
+
+| type | fields | effect and replies |
+|---|---|---|
+| `set_config` | `model`, `reasoning`, `approval` (each an optional string; at least one; `null` counts as left out) | Changes the open session between turns, in place: the same `session_id`, history and saved log, and `seq` continues. Emits the event `config_changed`, even when nothing changed (`changes: {}`), so the client always gets an answer. Errors: `busy`, `bad_request` (no field given, a value that is not a non-empty string, an unknown reasoning level or approval mode; nothing is applied). Model names are not checked; one without a price gets the usual `notice` `unknown_pricing` on its first round. |
+| `get_session_events` | `session_id` (id or prefix; optional, default the open session), `after_seq` (integer ≥ 0, default 0), `limit` (integer 1–2000, default 500) | Reply `session_events`: `{session_id, events, next_after_seq, done}`, with no `seq` of its own. `events` are the saved events with `seq > after_seq`, in order, without `text_delta`. Pass `next_after_seq` back to get the next page; `done` is true when the page reached the end of the log. The open session before its first turn gives `events: []` and `done: true`. Allowed at any time, also during a turn. Errors: `not_found`, `ambiguous`, `saving_disabled` (the open session under `--no-save`; other saved sessions can still be read), `bad_request`. |
+
+`config_changed` (event): `changes` (`{field: {from, to}}` for each field that changed), `config` (the full settings after the change, the same shape as `session_started.config`), `history` (`unchanged`, or `pruned` when a model change replaced earlier turns' full detail with their summaries; only possible with `--no-prune-history`).
+
+```json
+{"type": "set_config", "model": "gpt-5.6-sol", "approval": "auto-edit"}
+{"type": "config_changed", "turn_id": null, "seq": 42, "changes": {"model": {"from": "gpt-6-luna", "to": "gpt-5.6-sol"}, "approval": {"from": "ask", "to": "auto-edit"}}, "config": {"model": "gpt-5.6-sol", "reasoning": "medium", "approval": "auto-edit", "workspace": "C:\\work\\app", "web_search": true, "tools": ["list_dir", "..."]}, "history": "unchanged"}
+{"type": "get_session_events", "session_id": "3f9a", "after_seq": 0, "limit": 500}
+{"type": "session_events", "session_id": "s_3f9a1c0b7d2e", "events": [{"type": "session_started", "seq": 1, "...": "..."}, {"type": "turn_started", "turn_id": "t1", "seq": 2, "...": "..."}], "next_after_seq": 214, "done": true}
+```
+
+Rules added for settings and replay:
+- **Settings changes.** `config_changed` appears only between turns, in reply to `set_config`. Its `config` replaces what the client learned from `session_started.config`. Every change starts the next request with a cold prompt cache: a model or reasoning change was measured to get no cache hit on its next round, and an approval change alters the system prompt, which names the mode. An approval change also forgets every "allow for session" answer.
+- **Changed settings carry over.** For the rest of the process, the values given to `set_config` count as if they had been passed as flags: `new_session` starts with them, and `resume_session` keeps them instead of the saved `model` and `reasoning`. The saved session records the change, so a later resume (in another process too) restores the last-used `model` and `reasoning`. The approval mode is still never restored from disk.
+- **`null` means omitted.** For every optional field of these messages, `null` is treated as if the field were left out (`after_seq`, `limit`, `latest`, `session_id`, and the `set_config` fields).
+- **Model names are stripped.** `set_config` strips surrounding whitespace from `model` and rejects an empty result, so later sessions also get the stripped name.
+- **Redrawing a saved session.** `get_session_events` returns the saved events with their original `seq`, with gaps where `text_delta` was dropped. To open the current session, keep the live events that arrive meanwhile, fetch pages until `done`, then apply the live events whose `seq` is higher than the last fetched one. Fetched and live events share the numbering, so duplicates are easy to drop.
+
 ### 10.3 Transcript (`frontends/transcript.py`)
 
 An event consumer that writes v2-compatible Markdown (`**USER:**`, `> TOOL: ...`, `**AGENT:**`, sources, usage block at the end), plus one line per round:
@@ -736,6 +793,8 @@ An event consumer that writes v2-compatible Markdown (`**USER:**`, `> TOOL: ...`
 ```text
 > ROUND 3 · 41.2k in (39.0k cached) · 812 out (240 reasoning) · 4.1s · $0.0213
 ```
+
+The transcript is no longer a CLI flag: it is rebuilt from the saved event log by `/export` and `python -m agent_v3 export` (`agent_v3_sessions_plan.md` §6.3).
 
 ### 10.4 Event log (`frontends/eventlog.py`)
 
