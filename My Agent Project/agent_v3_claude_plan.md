@@ -763,6 +763,27 @@ Rules added for saved sessions:
 - **Usage after a resume.** `get_usage` after a resume returns the totals of the whole saved session, including earlier processes.
 - **Failed switches change nothing.** If `resume_session` fails, the open session is untouched and nothing but the `error` is written.
 
+**Settings and replay (added by `agent_v3_sessions_plan.md` §5.6 and §7.2, phase S5; still protocol v1).** Two more client messages and one more event. Everything above is unchanged.
+
+| type | fields | effect and replies |
+|---|---|---|
+| `set_config` | `model`, `reasoning`, `approval` (each an optional string; at least one; `null` counts as left out) | Changes the open session between turns, in place: the same `session_id`, history and saved log, and `seq` continues. Emits the event `config_changed`, even when nothing changed (`changes: {}`), so the client always gets an answer. Errors: `busy`, `bad_request` (no field given, a value that is not a non-empty string, an unknown reasoning level or approval mode; nothing is applied). Model names are not checked; one without a price gets the usual `notice` `unknown_pricing` on its first round. |
+| `get_session_events` | `session_id` (id or prefix; optional, default the open session), `after_seq` (integer ≥ 0, default 0), `limit` (integer 1–2000, default 500) | Reply `session_events`: `{session_id, events, next_after_seq, done}`, with no `seq` of its own. `events` are the saved events with `seq > after_seq`, in order, without `text_delta`. Pass `next_after_seq` back to get the next page; `done` is true when the page reached the end of the log. The open session before its first turn gives `events: []` and `done: true`. Allowed at any time, also during a turn. Errors: `not_found`, `ambiguous`, `saving_disabled` (the open session under `--no-save`; other saved sessions can still be read), `bad_request`. |
+
+`config_changed` (event): `changes` (`{field: {from, to}}` for each field that changed), `config` (the full settings after the change, the same shape as `session_started.config`), `history` (`unchanged`, or `pruned` when a model change replaced earlier turns' full detail with their summaries; only possible with `--no-prune-history`).
+
+```json
+{"type": "set_config", "model": "gpt-5.6-sol", "approval": "auto-edit"}
+{"type": "config_changed", "turn_id": null, "seq": 42, "changes": {"model": {"from": "gpt-6-luna", "to": "gpt-5.6-sol"}, "approval": {"from": "ask", "to": "auto-edit"}}, "config": {"model": "gpt-5.6-sol", "reasoning": "medium", "approval": "auto-edit", "workspace": "C:\\work\\app", "web_search": true, "tools": ["list_dir", "..."]}, "history": "unchanged"}
+{"type": "get_session_events", "session_id": "3f9a", "after_seq": 0, "limit": 500}
+{"type": "session_events", "session_id": "s_3f9a1c0b7d2e", "events": [{"type": "session_started", "seq": 1, "...": "..."}, {"type": "turn_started", "turn_id": "t1", "seq": 2, "...": "..."}], "next_after_seq": 214, "done": true}
+```
+
+Rules added for settings and replay:
+- **Settings changes.** `config_changed` appears only between turns, in reply to `set_config`. Its `config` replaces what the client learned from `session_started.config`. Every change starts the next request with a cold prompt cache: a model or reasoning change was measured to get no cache hit on its next round, and an approval change alters the system prompt, which names the mode. An approval change also forgets every "allow for session" answer.
+- **Changed settings carry over.** For the rest of the process, the values given to `set_config` count as if they had been passed as flags: `new_session` starts with them, and `resume_session` keeps them instead of the saved `model` and `reasoning`. The saved session records the change, so a later resume (in another process too) restores the last-used `model` and `reasoning`. The approval mode is still never restored from disk.
+- **Redrawing a saved session.** `get_session_events` returns the saved events with their original `seq`, with gaps where `text_delta` was dropped. To open the current session, keep the live events that arrive meanwhile, fetch pages until `done`, then apply the live events whose `seq` is higher than the last fetched one. Fetched and live events share the numbering, so duplicates are easy to drop.
+
 ### 10.3 Transcript (`frontends/transcript.py`)
 
 An event consumer that writes v2-compatible Markdown (`**USER:**`, `> TOOL: ...`, `**AGENT:**`, sources, usage block at the end), plus one line per round:

@@ -144,12 +144,26 @@ class ModelAdapter:
         self.jitter = jitter
         self.dropped_params: set[str] = set()   # prompt_cache_key / include values the API rejected this session
         self._unknown_price_noticed = False
+        self._own_client = False                # True once `client` built it (set_config may rebuild only that one)
 
     @property
     def client(self):
         if self._client is None:
             self._client = openai.OpenAI(max_retries=3, timeout=request_timeout(self.config.reasoning))
+            self._own_client = True
         return self._client
+
+    def set_config(self, config: AgentConfig) -> None:
+        """Use `config` from the next request on: model, reasoning and the cost lookup read it (sessions spec §5.6).
+
+        A client this adapter built is rebuilt (lazily) when the reasoning level's read timeout differs; an injected
+        client is kept. `dropped_params` is kept: the API's rejections do not depend on these settings.
+        """
+        old, self.config = self.config, config
+        if config.model != old.model:
+            self._unknown_price_noticed = False      # a new model with no price entry gets its own notice
+        if self._own_client and request_timeout(config.reasoning) != request_timeout(old.reasoning):
+            self._client, self._own_client = None, False
 
     # -- request -------------------------------------------------------------------------------
 

@@ -780,3 +780,108 @@ def test_no_save_creates_no_folder(start):
     c.send(type="list_sessions")
     assert c.expect("sessions")["total"] == 0
     assert not (c.workspace / ".agent_v3").exists()
+
+
+# -- set_config, get_session_events (sessions spec §5.6, §7.2, phase S5) -----------------------------
+
+
+def test_set_config_changes_the_open_session_in_place(inproc):
+    p = inproc([[msg("a")], [msg("b")], [msg("c")]])
+    opening = only(p.take(), "session_started")
+    first = p.turn("first")
+    sid, last_seq = p.session_id, first[-1]["seq"]
+    reply = p.send(type="set_config", model="gpt-5.6-sol", approval="auto-edit", reasoning=None)
+    changed = only(reply, "config_changed")
+    assert len(reply) == 1 and changed["session_id"] == sid and changed["seq"] == last_seq + 1
+    assert changed["turn_id"] is None and changed["history"] == "unchanged"
+    assert changed["changes"] == {"model": {"from": "gpt-6-luna", "to": "gpt-5.6-sol"},
+                                  "approval": {"from": "ask", "to": "auto-edit"}}
+    assert changed["config"]["model"] == "gpt-5.6-sol" and changed["config"]["approval"] == "auto-edit"
+    assert changed["config"]["tools"] == opening["config"]["tools"]      # same shape as session_started.config
+    p.turn("second")
+    assert p.session_id == sid and p.fake.requests[-1]["model"] == "gpt-5.6-sol"
+    assert "Approval mode: auto-edit" in p.fake.requests[-1]["input"][0]["content"]
+
+    same = only(p.send(type="set_config", model="gpt-5.6-sol"), "config_changed")      # always answered
+    assert same["changes"] == {} and same["config"]["model"] == "gpt-5.6-sol"
+
+    started = only(p.send(type="new_session"), "session_started")    # new sessions start from the working config
+    assert (started["config"]["model"], started["config"]["approval"]) == ("gpt-5.6-sol", "auto-edit")
+    only(p.send(type="set_config", model="gpt-6-luna"), "config_changed")
+    resumed = p.send(type="resume_session", session_id=sid)          # the changed model counts as typed
+    assert resumed[1]["saved_config"]["model"] == "gpt-5.6-sol" and resumed[0]["config"]["model"] == "gpt-6-luna"
+    assert resumed[0]["config"]["approval"] == "auto-edit"
+
+
+def test_set_config_errors(inproc):
+    p = inproc([Round(output=[msg("never")], block="cancel"), [msg("later")]])
+    p.take()
+    for message in ({}, {"model": None}, {"approval": "yolo"}, {"reasoning": "LOUD"}, {"model": 5}, {"model": ""},
+                    {"reasoning": ["low"]}, {"model": "gpt-5.6-sol", "approval": "nope"}):
+        reply = p.send(type="set_config", **message)
+        assert [m["type"] for m in reply] == ["error"] and reply[0]["code"] == "bad_request", (message, reply)
+    p.send(type="user_message", text="start")
+    p.blocked()
+    p.take()
+    reply = p.send(type="set_config", reasoning="low")
+    assert [m["type"] for m in reply] == ["error"] and reply[0]["code"] == "busy"
+    p.send(type="cancel")
+    assert p.server.session.wait(TIMEOUT)
+    config = p.server.session.config
+    assert (config.model, config.reasoning, config.approval) == ("gpt-6-luna", "medium", "ask")   # nothing applied
+    started = only(p.send(type="new_session"), "session_started")
+    assert started["config"]["model"] == "gpt-6-luna"                  # and nothing was remembered
+
+
+def test_get_session_events_pages_through_a_saved_session(inproc):
+    p = inproc([[msg("one two three")], [msg("four five")], [msg("six")]])
+    empty = only(p.send(type="get_session_events"), "session_events")   # the open session, before its first turn
+    assert empty == {"type": "session_events", "session_id": p.session_id, "events": [], "next_after_seq": 0,
+                     "done": True}
+    wire = p.turn("first") + p.send(type="set_config", reasoning="low") + p.turn("second")
+    old = p.session_id
+    expected = [m for m in [{"type": "session_started", "seq": 1}] + wire if m["type"] != "text_delta"]
+    assert any(m["type"] == "text_delta" for m in wire)
+    p.send(type="new_session")
+    p.turn("third")
+
+    events, after, pages = [], 0, 0
+    while True:
+        reply = only(p.send(type="get_session_events", session_id=old[2:8], after_seq=after, limit=4),
+                     "session_events")
+        assert reply["session_id"] == old and "seq" not in reply and len(reply["events"]) <= 4
+        events += reply["events"]
+        after, pages = reply["next_after_seq"], pages + 1
+        if reply["done"]:
+            break
+        assert after == reply["events"][-1]["seq"]
+    assert pages > 2 and [e["seq"] for e in events] == [m["seq"] for m in expected]
+    assert events[1:] == expected[1:] and events[0]["type"] == "session_started"
+    assert all(e["type"] != "text_delta" for e in events)
+    tail = only(p.send(type="get_session_events", session_id=old, after_seq=after), "session_events")
+    assert tail["events"] == [] and tail["done"] and tail["next_after_seq"] == after
+
+    current = only(p.send(type="get_session_events"), "session_events")    # default: the open session
+    assert current["session_id"] == p.session_id and current["done"]
+    assert [e["type"] for e in current["events"]][:2] == ["session_started", "turn_started"]
+
+
+def test_get_session_events_errors(inproc, tmp_path):
+    saver = inproc([[msg("kept")]])
+    saver.turn("a saved session")
+    saved = saver.session_id
+    saver.server.session.close()
+    p = inproc([[msg("x")]], workspace=saver.workspace)
+    assert only(p.send(type="get_session_events", session_id="ffff0000"), "error")["code"] == "not_found"
+    for bad in ({"limit": 0}, {"limit": 2001}, {"limit": "5"}, {"after_seq": -1}, {"after_seq": 1.5},
+                {"after_seq": True}, {"session_id": 7}):
+        assert only(p.send(type="get_session_events", **bad), "error")["code"] == "bad_request", bad
+    assert only(p.send(type="get_session_events", limit=2000), "session_events")["done"]
+
+    unsaved = inproc([[msg("y")]], workspace=saver.workspace, saving=False)
+    unsaved.turn("not kept")
+    assert only(unsaved.send(type="get_session_events"), "error")["code"] == "saving_disabled"
+    reply = unsaved.send(type="get_session_events", session_id=unsaved.session_id)
+    assert only(reply, "error")["code"] == "saving_disabled"
+    other = only(unsaved.send(type="get_session_events", session_id=saved), "session_events")   # still readable
+    assert other["done"] and other["events"][0]["session_id"] == saved

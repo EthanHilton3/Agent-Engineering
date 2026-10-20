@@ -12,19 +12,23 @@ import os
 import queue
 import re
 import sys
+import textwrap
 import threading
 import time
 from collections import Counter, deque
 from contextlib import suppress
+from dataclasses import replace
 from datetime import datetime
 from itertools import cycle
 from pathlib import Path
 from typing import Callable
 
 from ..approvals import Decision
-from ..config import AgentConfig
+from ..config import APPROVAL_MODES, REASONING_EFFORTS, AgentConfig
 from ..events import Event
-from ..session import Session
+from ..pricing import PRICING
+from ..prompt import APPROVAL_TEXT
+from ..session import Busy, Session
 from ..sessions import SessionInUse, SessionNotFound, SessionStore, SessionStoreError, config_for_resume
 from .args import add_config_args, add_session_args, config_from_args, explicit_settings
 from .commands import COMMANDS, format_sessions, reconfigure_utf8
@@ -50,8 +54,14 @@ _MINUS = "−" if _TTY else "-"
 
 DOUBLE_INTERRUPT_S = 2.0
 DIFF_PREVIEW_LINES = 40
-SLASH_COMMANDS = ("/new", "/sessions", "/resume", "/export", "/usage", "/quit")
-ARG_COMMANDS = re.compile(r"/(resume|export|sessions)(?:\s+(.+))?", re.IGNORECASE)   # these take an argument (§6.2)
+SLASH_COMMANDS = ("/new", "/sessions", "/resume", "/export", "/model", "/reasoning", "/approval", "/usage", "/quit")
+ARG_COMMANDS = re.compile(r"/(resume|export|sessions|model|reasoning|approval)(?:\s+(.+))?",
+                          re.IGNORECASE)          # these take an argument (§6.2)
+SETTINGS = ("model", "reasoning", "approval")     # changeable between turns (§5.6)
+CACHE_NOTES = {"model": "the next request starts with a cold cache",
+               "reasoning": "the next request starts with a cold cache",        # measured in the S5 smoke test
+               "approval": "the system prompt names the mode, so the next request starts with a cold cache"}
+FULL_AUTO_WARNING = "Edits and commands now run without asking, except risky commands and anything outside the workspace."
 LIST_RECENT = 10                                  # how many sessions a bare /sessions shows
 RECAP_ANSWER_LINES = 15
 
@@ -185,7 +195,14 @@ class SessionOpener:
 
     def __init__(self, store: SessionStore | None, on_event: Callable[[Event], None], launch: AgentConfig,
                  explicit: set[str] | frozenset = frozenset(), model_of: Callable[[], object] | None = None):
-        self.store, self.on_event, self.launch, self.explicit, self.model_of = store, on_event, launch, explicit, model_of
+        self.store, self.on_event, self.launch, self.model_of = store, on_event, launch, model_of
+        self.explicit = set(explicit)
+
+    def remember(self, name: str, value: str) -> None:
+        """A setting changed by command (/model, /reasoning, /approval): later sessions start from it (the working
+        config), and a resume keeps it instead of restoring the saved one, as if it had been typed (§5.1)."""
+        self.launch = replace(self.launch, **{name: value})
+        self.explicit.add(name)
 
     def __call__(self, resume_id: str | None) -> Session:
         config = self.launch
@@ -260,6 +277,8 @@ class Cli:
             self._cmd_resume(arg)
         elif cmd == "/export":
             self._cmd_export(arg)
+        elif cmd[1:] in SETTINGS:
+            self._cmd_setting(cmd[1:], arg)
         elif cmd == "/usage":
             print(format_usage(self.session.config.model, self.session.usage_totals()))
         else:
@@ -364,6 +383,35 @@ class Cli:
             self._say(_dim(f"  Transcript written to {export_transcript(events, out)}"))
         except OSError as e:
             self._say(_style(f"  could not write the transcript: {e}", "33"))
+
+    # -- settings (§5.6) -----------------------------------------------------------------------
+
+    def _choices(self, name: str) -> list[str]:
+        if name == "approval":
+            return [_dim(f"    {mode:<9}  {APPROVAL_TEXT[mode]}") for mode in APPROVAL_MODES]
+        values = PRICING if name == "model" else REASONING_EFFORTS
+        label = "models with known prices" if name == "model" else "levels"
+        return [_dim(line) for line in textwrap.wrap(f"{label}: {', '.join(values)}", 100,
+                                                     initial_indent="    ", subsequent_indent="      ")]
+
+    def _cmd_setting(self, name: str, arg: str) -> None:
+        """`/model`, `/reasoning`, `/approval`: show the value and the choices, or change it for the open session."""
+        current = getattr(self.session.config, name)
+        if not arg:
+            self._say(_dim(f"  {name}: {current}"), *self._choices(name))
+            return
+        value = arg if name == "model" else arg.lower()
+        try:
+            changed = self.session.update_config(**{name: value})
+        except (ValueError, Busy) as e:
+            self._say(_style(f"  {e}", "33"), *self._choices(name))
+            return
+        remember = getattr(self.open_session, "remember", None)
+        if remember is not None:                  # /new and /resume start from it from now on
+            remember(name, value)
+        if not changed:
+            self._note(f"{name} is already {current}")
+        self._pump()                              # config_changed prints the confirmation
 
     def _saved_hint(self) -> str | None:
         """The exit line for a session that was saved and has something in it."""
@@ -475,8 +523,8 @@ class Cli:
         self._say(_dim(f"agent_v3{_SEP}{c['model']}{_SEP}reasoning {c['reasoning']}{_SEP}approval {c['approval']}"
                        f"{_SEP}web search {'on' if c['web_search'] else 'off'}"),
                   _dim(f"workspace {c['workspace']}"),
-                  _dim("Enter a task. /new = new session, /sessions, /resume, /export, /usage = totals, /quit = exit. "
-                       "Ctrl+C cancels a running turn."),
+                  _dim("Enter a task. /new = new session, /sessions, /resume, /export, /model, /reasoning, /approval, "
+                       "/usage = totals, /quit = exit. Ctrl+C cancels a running turn."),
                   *([_dim(f"Saving this session in {self.store.root} (git-ignored). --no-save turns saving off.")]
                     if self.store is not None and self.session.saved else []))
 
@@ -502,6 +550,18 @@ class Cli:
                 if len(answer) > RECAP_ANSWER_LINES:
                     lines.append(_dim(f"{_ELLIPSIS} {len(answer) - RECAP_ANSWER_LINES} more lines"))
         self._say(*lines)
+
+    def _on_config_changed(self, ev) -> None:
+        lines = []
+        for name, change in ev.changes.items():
+            note = CACHE_NOTES.get(name)
+            lines.append(_dim(f"  {name} {change['to']} (was {change['from']})" + (f"; {note}" if note else "")))
+        if ev.history == "pruned":
+            lines.append(_dim("  earlier turns continue as their summaries: their full detail belonged to the old model"))
+        if ev.changes.get("approval", {}).get("to") == "full-auto":
+            lines.append(_style(f"  {FULL_AUTO_WARNING}", "33"))
+        if lines:
+            self._say(*lines)
 
     def _on_model_round_started(self, ev) -> None:
         self._spin("Thinking…")

@@ -36,6 +36,8 @@ from .transcript import export_transcript
 logger = logging.getLogger("agent_v3.stdio_server")
 
 DECISIONS = tuple(d.value for d in Decision)
+SETTINGS = ("model", "reasoning", "approval")     # what set_config may change (sessions spec §5.6)
+EVENTS_PAGE, EVENTS_PAGE_MAX = 500, 2000          # get_session_events: default and largest `limit`
 
 
 class BadRequest(Exception):
@@ -74,8 +76,11 @@ class StdioServer:
             "new_session": self._new_session,
             "export_session": self._export_session,
             "delete_session": self._delete_session,
+            "set_config": self._set_config,
+            "get_session_events": self._get_session_events,
         }
-        self._launch = config                 # new_session and resume_session start from the launch settings (§5.1)
+        # new_session and resume_session start from the working config: the launch settings plus set_config's (§5.1)
+        self._launch = config
         self._model = model                   # an injected adapter is shared by every session; None: one per session
         self._store = store
         self._explicit = set(explicit)
@@ -214,6 +219,20 @@ class StdioServer:
         except SessionStoreError as e:
             raise self._protocol_error(e) from e
 
+    def _saved_ref(self, ref: str | None) -> str:
+        """The full id for a command that reads a saved log: `ref`, or the open session when it is None."""
+        current = self.session.session_id
+        if self._store is None and (ref is None or ref.strip().lower() in (current, current[2:])):
+            raise ProtocolError("saving_disabled", "The open session is not being saved (--no-save), so it has no log.")
+        return current if ref is None else self._resolve(ref)
+
+    @staticmethod
+    def _int(message: dict, key: str, default: int, low: int, high: int | None = None) -> int:
+        value = message.get(key, default)
+        if isinstance(value, bool) or not isinstance(value, int) or value < low or (high is not None and value > high):
+            raise BadRequest(f"'{key}' must be an integer from {low}" + (f" to {high}" if high is not None else " up"))
+        return value
+
     def _require_idle(self) -> None:
         if self.session.busy:
             raise Busy("A turn is running; cancel it first.")
@@ -250,14 +269,10 @@ class StdioServer:
         self._switch(None)
 
     def _export_session(self, message: dict) -> None:
-        ref = self._string(message, "session_id", required=False)
-        current = self.session.session_id
-        if self._store is None and (ref is None or ref.strip().lower() in (current, current[2:])):
-            raise ProtocolError("saving_disabled", "The open session is not being saved (--no-save), so it has no log.")
-        sid = current if ref is None else self._resolve(ref)
+        sid = self._saved_ref(self._string(message, "session_id", required=False))
         events = self._reader.events_path(sid)
         if not events.is_file():
-            if sid == current:                # saved from the first message on; nothing to show before that
+            if sid == self.session.session_id:    # saved from the first message on; nothing to show before that
                 return self._write({"type": "transcript", "session_id": sid, "markdown": ""})
             raise ProtocolError("not_found", f"Session {sid} has no saved events.")
         with tempfile.TemporaryDirectory() as tmp:
@@ -275,6 +290,37 @@ class StdioServer:
         except SessionStoreError as e:
             raise self._protocol_error(e) from e
         self._write({"type": "session_deleted", "session_id": sid})
+
+    # -- settings and replay (sessions spec §5.6, §7.2; phase S5) ------------------------------
+
+    def _set_config(self, message: dict) -> None:
+        changes = {}
+        for key in SETTINGS:
+            if message.get(key) is not None:  # null is the same as leaving the field out
+                changes[key] = self._string(message, key)
+        if not changes:
+            raise BadRequest(f"give at least one of {', '.join(repr(k) for k in SETTINGS)}")
+        try:
+            self.session.update_config(**changes)     # Busy while a turn runs; emits config_changed
+        except ValueError as e:
+            raise BadRequest(str(e)) from e
+        # Like a typed flag for the rest of this process: new sessions start from it and a resume keeps it.
+        self._launch = dataclasses.replace(self._launch, **changes)
+        self._explicit |= set(changes)
+
+    def _get_session_events(self, message: dict) -> None:
+        sid = self._saved_ref(self._string(message, "session_id", required=False))
+        after = self._int(message, "after_seq", 0, 0)
+        limit = self._int(message, "limit", EVENTS_PAGE, 1, EVENTS_PAGE_MAX)
+        if sid == self.session.session_id and not self._reader.events_path(sid).is_file():
+            events, done = [], True           # the open session is saved from its first message on
+        else:
+            try:
+                events, done = self._reader.read_events(sid, after, limit)
+            except SessionStoreError as e:
+                raise self._protocol_error(e) from e
+        self._write({"type": "session_events", "session_id": sid, "events": events,
+                     "next_after_seq": events[-1]["seq"] if events else after, "done": done})
 
 
 # -- stdio ownership -----------------------------------------------------------------------------

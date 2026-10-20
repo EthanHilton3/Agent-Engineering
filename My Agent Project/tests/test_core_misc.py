@@ -19,7 +19,7 @@ from agent_v3.prompt import build_system_prompt, environment_block, prompt_cache
 
 def test_event_types_cover_the_protocol():
     assert set(ev.EVENT_TYPES) == {
-        "session_started", "session_resumed", "turn_started", "model_round_started", "text_delta", "model_retry",
+        "session_started", "session_resumed", "config_changed", "turn_started", "model_round_started", "text_delta", "model_retry",
         "model_round_completed", "web_action", "tool_started", "tool_completed", "approval_requested",
         "approval_resolved", "notice", "turn_completed", "turn_cancelled", "turn_failed"}
     assert ev.PROTOCOL_VERSION == 1

@@ -532,3 +532,67 @@ def test_no_save_writes_nothing_to_the_workspace(tmp_path, monkeypatch, configs)
     type_input(monkeypatch, "ping")
     assert cli_mod.main(["--workspace", str(root), "--no-save"]) == 0
     assert not (root / ".agent_v3").exists()
+
+
+# --- settings mid-session (S5, §5.6, §6.2) ----------------------------------------------------
+
+def test_setting_commands_without_an_argument_show_the_value_and_choices(tmp_path, capsys):
+    s, q, fake, store = open_cli(workspace(tmp_path), [])
+    run_cli(s, q, ["/model", "/reasoning", "/approval"], store=store)
+    out = capsys.readouterr().out
+    assert "model: gpt-6-luna" in out and "models with known prices: gpt-6-sol, gpt-6-luna" in out
+    assert "gpt-4.1-nano" in out                                       # the whole price table, wrapped
+    assert "reasoning: medium" in out and "levels: none, minimal, low, medium, high, xhigh" in out
+    assert "approval: ask" in out and "auto-edit  workspace edits are automatic; commands need user approval" in out
+    assert fake.index == 0 and (s.config.model, s.config.reasoning, s.config.approval) == ("gpt-6-luna", "medium", "ask")
+
+
+def test_setting_commands_change_the_open_session(tmp_path, capsys):
+    s, q, fake, store = open_cli(workspace(tmp_path), [[msg("ok")]])
+    cli = Cli(s, q, input_fn=scripted(["/model gpt-5.6-sol", "/reasoning LOW", "/approval full-auto", "task"]),
+              store=store)
+    cli.run()
+    out = capsys.readouterr().out
+    assert "model gpt-5.6-sol (was gpt-6-luna); the next request starts with a cold cache" in out
+    assert "reasoning low (was medium); the next request starts with a cold cache" in out      # measured in S5
+    assert "approval full-auto (was ask); the system prompt names the mode" in out
+    assert "Edits and commands now run without asking, except risky commands and anything outside the workspace." in out
+    assert cli.session is s and out.count("agent_v3 - ") == 1          # changed in place: no new session or banner
+    request = fake.requests[0]
+    assert (request["model"], request["reasoning"]["effort"]) == ("gpt-5.6-sol", "low")
+    assert "Approval mode: full-auto" in request["input"][0]["content"]
+
+
+def test_an_invalid_or_unchanged_setting_changes_nothing(tmp_path, capsys):
+    s, q, fake, store = open_cli(workspace(tmp_path), [])
+    run_cli(s, q, ["/approval yolo", "/reasoning extreme", "/model gpt-6-luna"], store=store)
+    out = capsys.readouterr().out
+    assert "approval must be one of ask, auto-edit, full-auto; got 'yolo'" in out and "full-auto  edits and" in out
+    assert "reasoning must be one of" in out and "levels: none, minimal" in out
+    assert "model is already gpt-6-luna" in out and "(was " not in out
+    assert (s.config.model, s.config.reasoning, s.config.approval) == ("gpt-6-luna", "medium", "ask")
+
+
+def test_new_and_resume_after_a_setting_change_use_it(tmp_path, monkeypatch, capsys, configs):
+    root = workspace(tmp_path)
+    sid = save_session(root, model="gpt-5.6-sol", reasoning="high")
+    type_input(monkeypatch, "/model gpt-5.6-terra", "/approval auto-edit", "/new", f"/resume {sid}")
+    assert cli_mod.main(["--workspace", str(root)]) == 0
+    launched, fresh, resumed = configs
+    assert (launched.model, launched.approval) == (AgentConfig.model, "ask")
+    assert (fresh.model, fresh.reasoning, fresh.approval) == ("gpt-5.6-terra", AgentConfig.reasoning, "auto-edit")
+    # the changed model counts as typed, so the resume keeps it; the reasoning was not changed, so it is restored
+    assert (resumed.model, resumed.reasoning, resumed.approval) == ("gpt-5.6-terra", "high", "auto-edit")
+    assert "model gpt-5.6-terra (--model; saved with gpt-5.6-sol)" in capsys.readouterr().out
+
+
+def test_the_transcript_shows_setting_changes(tmp_path):
+    s, q, fake, store = open_cli(workspace(tmp_path), [[msg("one")], [msg("two")]])
+    run_cli(s, q, ["/model gpt-5.6-sol", "first", "/approval auto-edit", "/reasoning high", "/model gpt-5.6-sol",
+                   "second", "/export"], store=store)
+    text = (store.session_dir(s.session_id) / "transcript.md").read_text(encoding="utf-8")
+    assert text.count("> SETTINGS: ") == 3                             # the unchanged /model writes nothing
+    assert "> SETTINGS: model gpt-6-luna → gpt-5.6-sol\n" in text
+    assert "> SETTINGS: approval ask → auto-edit\n" in text and "> SETTINGS: reasoning medium → high\n" in text
+    assert text.index("SETTINGS: model") < text.index("**USER:** first") < text.index("SETTINGS: approval")
+    assert "gpt-5.6-sol cost (USD)" in text

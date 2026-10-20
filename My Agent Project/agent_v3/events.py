@@ -73,6 +73,16 @@ class SessionResumed(Event):
 
 
 @dataclass(frozen=True, kw_only=True)
+class ConfigChanged(Event):
+    """Settings changed between turns by `Session.update_config` (sessions spec §5.6). Emitted even when nothing
+    changed (`changes == {}`), so a client that asked always gets an answer."""
+    type: ClassVar[str] = "config_changed"
+    changes: dict = field(default_factory=dict)        # {"approval": {"from": "ask", "to": "auto-edit"}}
+    config: dict = field(default_factory=dict)         # config.summary() + tools after the change (as session_started)
+    history: str = "unchanged"      # unchanged | pruned (a model change dropped full turns for their pruned records)
+
+
+@dataclass(frozen=True, kw_only=True)
 class TurnStarted(Event):
     type: ClassVar[str] = "turn_started"
     user_message: str
@@ -194,9 +204,9 @@ class TurnFailed(Event):
 
 
 EVENT_TYPES: dict[str, type[Event]] = {cls.type: cls for cls in (
-    SessionStarted, SessionResumed, TurnStarted, ModelRoundStarted, TextDelta, ModelRetry, ModelRoundCompleted,
-    WebAction, ToolStarted, ToolCompleted, ApprovalRequested, ApprovalResolved, Notice, TurnCompleted,
-    TurnCancelled, TurnFailed)}
+    SessionStarted, SessionResumed, ConfigChanged, TurnStarted, ModelRoundStarted, TextDelta, ModelRetry,
+    ModelRoundCompleted, WebAction, ToolStarted, ToolCompleted, ApprovalRequested, ApprovalResolved, Notice,
+    TurnCompleted, TurnCancelled, TurnFailed)}
 
 
 def event_from_dict(data: dict) -> Event:

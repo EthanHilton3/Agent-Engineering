@@ -170,6 +170,25 @@ class SessionStore:
     def events_path(self, session_id: str) -> Path:
         return self.root / session_id / EVENTS_FILE
 
+    def read_events(self, session_id: str, after_seq: int = 0, limit: int | None = None) -> tuple[list[dict], bool]:
+        """The saved events with `seq > after_seq`, in log order, at most `limit` of them, and whether that reached
+        the end of the log (§7.2 `get_session_events`). Reads without the lock; a torn last line is skipped.
+
+        Raises SessionNotFound for an unknown id or a folder with no event log.
+        """
+        path = self._existing_dir(session_id) / EVENTS_FILE
+        if not path.is_file():
+            raise SessionNotFound(f"Session {session_id} has no saved events.")
+        events: list[dict] = []
+        for d in read_jsonl(path):
+            seq = d.get("seq") if isinstance(d, dict) else None
+            if not isinstance(seq, int) or isinstance(seq, bool) or seq <= after_seq or d.get("type") == "text_delta":
+                continue
+            if limit is not None and len(events) >= limit:
+                return events, False
+            events.append(d)
+        return events, True
+
     def list(self, limit: int | None = None) -> list[SessionInfo]:
         """Every session (or the `limit` newest), newest `updated` first."""
         rows = sorted(self._metas(), key=lambda pair: str(pair[1].get("updated") or ""), reverse=True)
@@ -488,6 +507,13 @@ class SessionRecorder:
             m["totals"].add(TurnStats.from_dict(d.get("stats")))
             if m["active_turn"] == d["turn_id"]:
                 m["active_turn"] = None
+        elif d["type"] == "config_changed":
+            # The later turn lines are tagged with these (restore, §5.2), and a resume restores the last-used model
+            # and reasoning (option C). `updated` follows turns only, as in a meta rebuilt from the logs.
+            config = d.get("config") or {}
+            m.update({k: config[k] for k in ("model", "reasoning", "approval") if isinstance(config.get(k), str)})
+            self._write_meta()
+            return
         else:
             return
         m["updated"] = d["ts"]

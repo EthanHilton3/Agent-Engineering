@@ -2,7 +2,7 @@
 
 It accepts event objects or the dicts from an event log, so a transcript can be rebuilt from a recorded session
 (`export_transcript`). A later `session_started` in the same log (a resumed session) writes a RESUMED line instead
-of a second header; `session_resumed` itself has no handler and is ignored.
+of a second header; `session_resumed` itself has no handler and is ignored. `config_changed` writes a SETTINGS line.
 """
 from __future__ import annotations
 
@@ -94,6 +94,14 @@ class TranscriptWriter:
         self._log(f"\n---\n\n# Transcript {when:%Y-%m-%d %H:%M} (model={self.model}, "
                   f"reasoning={cfg.get('reasoning')}, approval={cfg.get('approval')}, "
                   f"web_search={cfg.get('web_search')}, workspace={cfg.get('workspace')})\n")
+
+    def _on_config_changed(self, d: dict) -> None:
+        changes = d.get("changes") or {}
+        if not changes:
+            return
+        self.model = (d.get("config") or {}).get("model") or self.model     # the usage block follows the latest model
+        self._log("> SETTINGS: " + "; ".join(f"{name} {c.get('from')} → {c.get('to')}" for name, c in changes.items())
+                  + "\n")
 
     def _on_turn_started(self, d: dict) -> None:
         self._log(f"**USER:** {d['user_message']}\n")
