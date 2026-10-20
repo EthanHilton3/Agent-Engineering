@@ -327,12 +327,13 @@ class ConfigChanged(Event):          # §5.6; EVENT_TYPES gains "config_changed"
 - `seq` simply continues, and the lock is never released, so another process can't grab the session in between.
 
 **`update_config(model=, reasoning=, approval=)`**, under the session lock:
-- **Preconditions.** It raises `Busy` while a turn runs and `ValueError` for an invalid reasoning level or approval mode. Model names are not validated; an unknown price already triggers the existing "cost is not tracked" notice.
+- **Preconditions.** It raises `Busy` while a turn runs and `ValueError` for an invalid reasoning level or approval mode. Model names are stripped of surrounding whitespace and an empty name is rejected, but they are not otherwise validated; an unknown price already triggers the existing "cost is not tracked" notice.
 - **Return value.** `{field: [old, new]}` for each field that changed; `{}` if nothing changed.
 
 Steps:
 1. `self.config = dataclasses.replace(self.config, **changes)`. `__post_init__` validates it.
-2. `self.model.set_config(self.config)`. This is a new `ModelAdapter` method: `model`, `reasoning` and the cost lookup read it from the next request on. If the adapter built its own OpenAI client, the client is rebuilt when the reasoning level's timeout tier changes (`request_timeout`). `dropped_params` is kept. `FakeModelAdapter` inherits the method.
+2. `self.model.set_config(self.config)`. This is a new `ModelAdapter` method: `model`, `reasoning` and the cost lookup read it from the next request on. If the adapter built its own OpenAI client, the old client is closed and rebuilt when the reasoning level's timeout tier changes (`request_timeout`). On a **model** change the include values in `dropped_params` are cleared, because a rejection depends on the model; the existing 400 fallback drops them again if the new model rejects them too. A dropped `prompt_cache_key` stays dropped. `FakeModelAdapter` inherits the method.
+   - **All or nothing** (final review). The new config, `ApprovalPolicy`, system prompt and cache key are all built **before** anything is swapped in, so a failure (e.g. the `--prompt` file has gone) changes nothing and emits nothing. The CLI prints "… not changed: <error>"; the server replies `internal_error` with nothing applied.
 3. **If the approval mode changed:**
    - The gateway gets a new `ApprovalPolicy(mode)`, which clears "allow for session" approvals. A new mode is a new trust decision, the same rule as a resume.
    - The system prompt names the approval mode, so it is rebuilt (`build_system_prompt`), `history[0]` is replaced, and `cache_key` is recomputed.
@@ -377,7 +378,7 @@ Errors (`SessionNotFound`, `AmbiguousSession` listing the matches, `SessionInUse
   - With an argument, each calls `session.update_config` and prints a dim confirmation, e.g. `model gpt-5.6-sol (was gpt-6-luna); the next request starts with a cold cache`.
   - `/approval full-auto` also prints the yellow warning. An invalid value prints the choices and changes nothing.
   - The change carries over to `/new` (working config, §5.1).
-- `/resume [N|REF]` works only between turns (the only time the prompt is shown); without an argument it behaves like `--resume` without REF. It closes the current `Session`, drains its queue, and builds the resumed one through `Cli`'s `open_session` factory. The recap is one dim line, `Resumed s_3f9a1c0b7d · "Fix the failing test…" · 3 turns · $0.012 · last active 2026-10-15 17:20`, plus a dim line for each setting that differs from the saved one (e.g. `model gpt-6-luna (--model; saved with gpt-5.6-sol)`, `approval ask (saved with full-auto; approval is never restored)`), then the last exchange (`You ›` message, `Agent ›` answer clipped to 15 lines). Resuming the current session is a no-op with a note.
+- `/resume [N|REF]` works only between turns (the only time the prompt is shown); without an argument it behaves like `--resume` without REF. It closes the current `Session`, drains its queue, and builds the resumed one through `Cli`'s `open_session` factory. The recap is one dim line, `Resumed s_3f9a1c0b7d · "Fix the failing test…" · 3 turns · $0.012 · last active 2026-10-15 17:20`, plus a dim line for each setting that differs from the saved one (e.g. `model gpt-6-luna (--model; saved with gpt-5.6-sol)` for a typed flag, `model gpt-6-luna (set with /model; saved with gpt-5.6-sol)` for a change made by command, `approval ask (saved with full-auto; approval is never restored)`), then the last exchange (`You ›` message, `Agent ›` answer clipped to 15 lines). Resuming the current session is a no-op with a note.
 - `/export [PATH]` writes the transcript to PATH, or to `<session folder>/transcript.md` by default, and prints the path. The file is always rebuilt from scratch from `events.jsonl` (§6.3).
 - `/new` closes the session and opens a new one (new id, new banner), saved unless `--no-save` is set. It never clears history in place, and there is no `/clear`. The CLI no longer calls `Session.new_conversation()`; the method stays for the server's v1 `new_conversation`.
 - **Exit.** After the usage block, when the session was saved and had at least one turn, print `Session saved: s_3f9a1c0b7d · resume with: python -m agent_v3 --resume 3f9a1c0b7d`.
@@ -625,7 +626,7 @@ Nothing else changes. `test_session.py`, `test_approvals.py`, `test_executor.py`
 | Users run `--continue` while the session is open elsewhere and expect it to work. | A clear `in use` error names the pid and suggests `--resume`. |
 | A mid-session change makes the next round cold (model or approval change; maybe reasoning). | Accepted; the CLI says so. Phase S5 measures the reasoning case. |
 | A mid-session model change with `prune_history=False` loses the full turn detail from history. | Documented in `config_changed.history = "pruned"`. The event log still has everything. |
-| `get_session_events` re-reads the log for each page (O(log size) per page). | Logs are a few MB at most. Add a seq→offset index only if a GUI reports slow loading. |
+| `get_session_events` re-reads the log for each page (O(log size) per page). | **Resolved in the final review:** `SessionStore` keeps a per-session seq→byte-offset index, built once and extended as the log grows, so a page decodes only its own lines. |
 
 ---
 
@@ -861,3 +862,61 @@ Not changed, noted for later: subcommands must come first (`python -m agent_v3 s
 10. **Not changed, noted:** an adapter injected into `Session` keeps its own config at construction. Only `update_config` calls `set_config`. The CLI's default factory and the server's `--fake-model-script` share one adapter across sessions, so a resume restoring a different model would still send the adapter's model. These are test-only paths: `main()` builds a fresh adapter per session.
 
 **Files.** `agent_v3/session.py`, `agent_v3/model.py` (deviation 1), `agent_v3/events.py`, `agent_v3/sessions.py`, `agent_v3/frontends/cli.py`, `agent_v3/frontends/transcript.py`, `agent_v3/frontends/stdio_server.py`, new `tests/test_session_settings.py`, additions to `tests/test_cli_sessions.py` and `tests/test_stdio_server.py`, `tests/test_core_misc.py` (event-type set), `agent_v3_claude_plan.md` §10.2 (append only), and this log. `approvals.py`, the tools and `bench/` were not touched. Not committed.
+
+### Final review (2026-10-19)
+
+A `/code-review high` of S1–S5 found 10 issues. The owner decided how to fix each one, and all 10 are fixed.
+
+**Findings and what was done.**
+1. **A rejected include value stayed dropped after a model change** (`model.py`). On a model change, `ModelAdapter.set_config` now removes the include values from `dropped_params` and keeps a dropped `prompt_cache_key`, which does not depend on the model. If the new model rejects a value too, the existing 400 fallback drops it again. A reasoning-only change keeps everything dropped. This changes §5.6 step 2 ("`dropped_params` is kept").
+2. **`update_config` could fail half-applied** (`session.py`, `cli.py`). The new config, the new `ApprovalPolicy`, the rebuilt system prompt and the new cache key are all built first. Only then are they swapped in, starting with `model.set_config`. If anything raises (for example `FileNotFoundError` because the `--prompt` file is gone), nothing changes, nothing is emitted, and the error propagates. The CLI's `/model`, `/reasoning` and `/approval` catch `OSError`, print `approval not changed: <error>` and carry on, and nothing is carried over to `/new`. The server still reports the error as `internal_error`, but now nothing is applied and the working config is not updated.
+3. **A padded model name was accepted and carried over** (`session.py`, `stdio_server.py`). `update_config` strips the model name and rejects an empty result, so both frontends get the fix. The server now copies the carried-over values from the session's config after the change, not from the raw message, so `new_session` and `resume_session` also get the stripped name.
+4. **`read_events` decoded the whole log for every page** (`sessions.py`). `SessionStore` keeps an `_EventIndex` per session that maps each `seq` to the byte offset of its line. The index is built on first use and then extended from where it stopped as the append-only log grows. A page uses `bisect` to find its first event and seeks to each line, so it decodes only its own lines. The page API and its results are unchanged, and a torn last line is still skipped. Details:
+   - A last line without a newline is never indexed until its newline arrives. That includes a fragment that happens to be valid JSON, which `repair_tail` would also cut.
+   - If the log has non-increasing `seq` values (only possible if someone edits it by hand), the index is scanned in full instead of bisected.
+   - The index is reset if the file is now shorter than what was indexed, and `delete` drops it.
+   - A per-store lock guards the index.
+   - This also resolves the §13 risk row about `get_session_events`.
+5. **The resume recap credited a flag nobody typed** (`cli.py`, `session.py`). The shared working config (#9) records which settings came from flags (`flags`) and which from commands (`changed`). A setting changed by command shows `(set with /model; saved with X)`. A typed flag still shows `(--model; saved with X)`. If a value differs for neither reason (a saved reasoning level that is not valid), the line shows just `(saved with X)`. This changes the §6.2 recap wording.
+6. **`null` was rejected for optional integer fields** (`stdio_server.py`). In `_int`, `null` now means "use the default", which fixes `after_seq` and `limit`. `resume_session`'s `latest: null` now means `false`. `session_id`, `feedback` and `list_sessions`'s `limit` already accepted `null`.
+7. **The usage block was labelled with the last model set** (`session.py`, `sessions.py`, `transcript.py`, `formatting.py`, `cli.py`). `Session.models_used` lists the models the session's turns ran on, in order of first use. It counts a model when a turn starts on it. On resume it is rebuilt from `SavedSession.models`: every turn line's model tag (resets included, since the totals include those turns), plus the saved model for an interrupted turn. The transcript tracks the same list from `turn_started`. The new `usage_label(models_used, current)` joins the models with ` + ` and falls back to the current model before the first turn. `/usage`, the exit summary and the transcript all use it. With one model the label is unchanged. A model that was set but never used for a turn is no longer named.
+8. **`_pruned_history` was updated in six places** (`session.py`). The new `Session._append(items, record=None)` adds to `history` and, only when `prune_history` is off, to `_pruned_history` (the `record`, or the items if they are plain already). It is used for commit, cancel, fail, interrupted recovery and restore; `new_conversation` still clears both. With pruning on, `_pruned_history` stays empty, because history already is the pruned form.
+9. **The changeable-settings tuple and the carry-over logic were duplicated** (`session.py`, `cli.py`, `stdio_server.py`, `sessions.py`). `cli.SETTINGS` and `stdio_server.SETTINGS` are removed; both frontends import `session.CHANGEABLE_SETTINGS`. `SessionRecorder._write_event` imports it inside the function, because `session.py` imports `sessions.py` at module level and a top-level import would be circular. The new `session.WorkingConfig` (`config`, `flags`, `changed`, `remember(config, names)`, `config_for(saved_info=None)`) replaces `SessionOpener.launch`/`explicit`/`remember` and the server's `_launch`/`_explicit`.
+10. **A replaced OpenAI client was never closed** (`model.py`). `set_config` now closes the adapter's own client before dropping it, and ignores any error from `close()`. An injected client is still never touched.
+
+**Tests.** Every new test (or new assertion) was run against the pre-fix code (a scratch worktree at `f02a5e8` with the new test files) and failed there for the reason its finding describes:
+
+| finding | test | failure on the old code |
+|---|---|---|
+| #1 | `test_a_model_change_retries_the_include_values_the_old_model_rejected` | no `include` after the model change |
+| #2 | `test_a_change_that_cannot_rebuild_the_prompt_changes_nothing` | config, adapter config and policy already swapped |
+| #2 | `test_a_setting_that_cannot_be_applied_is_reported_and_changes_nothing` | `FileNotFoundError` escapes `Cli.run` |
+| #3 | `test_a_model_name_is_stripped` | the padded name is stored |
+| #3 | `test_set_config_strips_the_model_name_for_this_and_later_sessions` | the padded name is stored |
+| #4 | `test_read_events_decodes_each_line_once_and_follows_the_growing_log` | 24 lines decoded for a 2-event page instead of 2 |
+| #5 | `test_the_resume_recap_never_names_a_flag_that_was_not_typed` | the recap shows `--model` |
+| #6 | `test_null_optional_fields_mean_omitted` | `bad_request` |
+| #7 | `test_usage_is_labelled_with_every_model_the_turns_ran_on` | labels follow the last model set |
+| #7 | `test_models_used_covers_every_turn_including_restored_ones` | `models_used` does not exist |
+
+Notes on the tests:
+- The #4 test also checks that the index follows a log that grows while the session is open, that it gives the same answers as an index built from scratch, and that a torn line is left out until its newline arrives.
+- #10 has no separate test. `test_the_adapter_rebuilds_only_a_client_it_built` gained `assert built.is_closed()`, which also fails on the old code.
+- Two existing assertions encoded the old behaviour and were changed. `test_two_session_starts_give_one_header_and_a_resumed_line` expected the usage block to follow the latest model; it now expects the model its one turn ran on (#7). `test_new_and_resume_after_a_setting_change_use_it` expected `(--model; …)` after a `/model`; it now expects `(set with /model; …)` (#5).
+- `tests/test_stdio_server.py` only grew: `git diff --numstat` shows 32 added and 0 removed, so the 19 original tests are byte-for-byte unchanged. `PROTOCOL_VERSION` is still 1, and `events.py` was not touched.
+
+`PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python -m pytest tests -q`: **395 passed, 1 skipped** (was 385; +10 new tests; the skip is still the POSIX-only permissions test).
+
+**Files.** `agent_v3/model.py`, `agent_v3/session.py`, `agent_v3/sessions.py`, `agent_v3/frontends/cli.py`, `agent_v3/frontends/stdio_server.py`, `agent_v3/frontends/transcript.py`, `agent_v3/frontends/formatting.py`, `tests/test_session_settings.py`, `tests/test_cli_sessions.py`, `tests/test_stdio_server.py` (append only), and this log. Not committed.
+
+**Still not done.**
+- **The spec text above is not updated** (this entry records the changes instead). *(Updated 2026-10-19: §5.6, §6.2, §13 and v3 §10.2 now describe these fixes.)* Four places are out of date:
+  - §5.6 step 2 still says `dropped_params` is kept (#1).
+  - §6.2's recap example shows only the `--model` form (#5).
+  - §13's `get_session_events` risk row still describes a full re-read (#4).
+  - `agent_v3_claude_plan.md` §10.2 does not yet say that `null` means "omitted" for every optional field (#6), or that model names are stripped (#3).
+- **No live API run for these fixes.** #1 is verified only through `FakeModelAdapter`. It depends on the existing 400 fallback, which the S2 tests already cover.
+- **Earlier notes still stand:**
+  - From S3: subcommands must come first; every reopen of a session adds a `> RESUMED` line; Rich joins single line breaks in answers.
+  - S5 deviation 9: a resume can bring back turns that were pruned in-process, because their lines are tagged with the model the session ended on.
+  - S5 deviation 10: an adapter injected into `Session` and shared across sessions keeps its own config on `/new` or a resume. These are test-only paths.

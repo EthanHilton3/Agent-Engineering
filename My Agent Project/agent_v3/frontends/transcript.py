@@ -11,7 +11,7 @@ from datetime import datetime
 from pathlib import Path
 
 from ..jsonl import read_jsonl
-from .formatting import fmt_cost, format_usage, round_summary, turn_cost, work_summary
+from .formatting import fmt_cost, format_usage, round_summary, turn_cost, usage_label, work_summary
 
 _SUMMED = ("rounds", "tool_calls", "parallel_groups", "web_searches", "web_opens", "web_finds", "input_tokens",
            "cached_tokens", "output_tokens", "reasoning_tokens", "model_cost_usd", "web_cost_usd", "elapsed_s")
@@ -33,6 +33,7 @@ class TranscriptWriter:
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.model = ""
+        self.models_used: list[str] = []           # the models turns ran on, in order: the usage block's label
         self.totals: dict = {k: 0 for k in _SUMMED}
         self._calls: dict[str, dict] = {}          # call_id -> tool_started
         self._requests: dict[str, dict] = {}       # request_id -> approval request
@@ -55,7 +56,7 @@ class TranscriptWriter:
         if self._closed:
             return
         if self._started:
-            self._log("```\n" + format_usage(self.model, self.totals) + "\n```")
+            self._log("```\n" + format_usage(usage_label(self.models_used, self.model), self.totals) + "\n```")
         self._closed = True
         if self._file is not None:
             self._file.close()
@@ -99,11 +100,13 @@ class TranscriptWriter:
         changes = d.get("changes") or {}
         if not changes:
             return
-        self.model = (d.get("config") or {}).get("model") or self.model     # the usage block follows the latest model
+        self.model = (d.get("config") or {}).get("model") or self.model     # the model later turns run on
         self._log("> SETTINGS: " + "; ".join(f"{name} {c.get('from')} → {c.get('to')}" for name, c in changes.items())
                   + "\n")
 
     def _on_turn_started(self, d: dict) -> None:
+        if self.model and self.model not in self.models_used:
+            self.models_used.append(self.model)
         self._log(f"**USER:** {d['user_message']}\n")
 
     def _on_tool_started(self, d: dict) -> None:

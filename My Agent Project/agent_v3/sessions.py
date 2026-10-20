@@ -6,11 +6,13 @@ and `lock` (an OS lock held while the session is open in a process). Nothing her
 """
 from __future__ import annotations
 
+import bisect
 import dataclasses
 import json
 import os
 import re
 import shutil
+import threading
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -84,6 +86,16 @@ class InterruptedTurn:
 
 
 @dataclass
+class _EventIndex:
+    """Where each event `read_events` can return starts in one events.jsonl. The log is append-only, so the index is
+    built on first use and only extended after that."""
+    seqs: list[int] = field(default_factory=list)
+    offsets: list[int] = field(default_factory=list)     # byte offset of the line holding seqs[i]
+    end: int = 0                      # bytes indexed so far: always just after a newline
+    ordered: bool = True              # seqs strictly increase (always, unless the log was edited by hand)
+
+
+@dataclass
 class SavedSession:
     """What a resume needs."""
     info: SessionInfo
@@ -94,6 +106,7 @@ class SavedSession:
     totals: dict                      # TurnStats.to_dict() shape
     interrupted: InterruptedTurn | None
     saved_config: dict = field(default_factory=dict)   # {model, reasoning, approval, prune_history} at the last save
+    models: list[str] = field(default_factory=list)    # the models its turns ran on, in order of first use
 
 
 def session_title(user_message: str) -> str:
@@ -158,6 +171,8 @@ class SessionStore:
     def __init__(self, root: str | os.PathLike, *, gitignore: str | os.PathLike | None = None):
         self.root = Path(root)
         self.gitignore = Path(gitignore) if gitignore is not None else None   # created with "*" on first save
+        self._indexes: dict[str, _EventIndex] = {}      # read_events: session id -> where its events start
+        self._index_lock = threading.Lock()
 
     @classmethod
     def for_workspace(cls, workspace: str | os.PathLike) -> "SessionStore":
@@ -172,22 +187,51 @@ class SessionStore:
 
     def read_events(self, session_id: str, after_seq: int = 0, limit: int | None = None) -> tuple[list[dict], bool]:
         """The saved events with `seq > after_seq`, in log order, at most `limit` of them, and whether that reached
-        the end of the log (§7.2 `get_session_events`). Reads without the lock; a torn last line is skipped.
+        the end of the log (§7.2 `get_session_events`). Reads without the lock; a torn last line is skipped. Each page
+        seeks to its events through a per-session index (`_event_index`) instead of decoding the log from the start.
 
         Raises SessionNotFound for an unknown id or a folder with no event log.
         """
         path = self._existing_dir(session_id) / EVENTS_FILE
         if not path.is_file():
             raise SessionNotFound(f"Session {session_id} has no saved events.")
-        events: list[dict] = []
-        for d in read_jsonl(path):
-            seq = d.get("seq") if isinstance(d, dict) else None
-            if not isinstance(seq, int) or isinstance(seq, bool) or seq <= after_seq or d.get("type") == "text_delta":
-                continue
-            if limit is not None and len(events) >= limit:
-                return events, False
-            events.append(d)
+        with self._index_lock, path.open("rb") as f:
+            index = self._event_index(session_id, f)
+            start = bisect.bisect_right(index.seqs, after_seq) if index.ordered else 0
+            events: list[dict] = []
+            for i in range(start, len(index.seqs)):
+                if index.seqs[i] <= after_seq:
+                    continue
+                if limit is not None and len(events) >= limit:
+                    return events, False
+                f.seek(index.offsets[i])
+                events.append(json.loads(f.readline()))
         return events, True
+
+    def _event_index(self, session_id: str, f) -> "_EventIndex":
+        """The session's index, extended over the lines appended to `f` (its open events.jsonl) since the last read,
+        so each line is decoded once. A last line with no newline yet (torn, or still being written) is left out
+        until it is complete."""
+        index = self._indexes.get(session_id)
+        if index is None or os.fstat(f.fileno()).st_size < index.end:     # first use, or the log was replaced
+            index = self._indexes[session_id] = _EventIndex()
+        f.seek(index.end)
+        pos = index.end
+        for line in f:
+            if not line.endswith(b"\n"):
+                break
+            try:
+                d = json.loads(line)
+            except ValueError:                   # a corrupt line (or a blank one): skipped, as read_jsonl does
+                d = None
+            seq = d.get("seq") if isinstance(d, dict) else None
+            if isinstance(seq, int) and not isinstance(seq, bool) and d.get("type") != "text_delta":
+                index.ordered = index.ordered and (not index.seqs or seq > index.seqs[-1])
+                index.seqs.append(seq)
+                index.offsets.append(pos)
+            pos += len(line)
+        index.end = pos
+        return index
 
     def list(self, limit: int | None = None) -> list[SessionInfo]:
         """Every session (or the `limit` newest), newest `updated` first."""
@@ -266,6 +310,8 @@ class SessionStore:
             lock = _take_lock(folder / LOCK_FILE)
         except _Locked:
             raise SessionInUse(session_id, self._owner_pid(session_id)) from None
+        with self._index_lock:
+            self._indexes.pop(session_id, None)
         try:
             for path in folder.iterdir():
                 if path.name != LOCK_FILE:
@@ -340,12 +386,19 @@ class SessionStore:
         if probe and self._status(sid, {}) == "in_use":
             status = "in_use"
         info = _info(sid, meta, status)
+        # Every turn the totals cover, resets included; an interrupted turn ran on the model the session was left on.
+        models: list[str] = []
+        for model in [_line_setting(line, "model", str, "") or info.model for line in lines
+                      if line.get("kind") == "turn"] + ([info.model] if interrupted else []):
+            if model and model not in models:
+                models.append(model)
         saved = SavedSession(
             info=info, turn_lines=[line for line in lines[last_reset + 1:] if line.get("kind") == "turn"],
             all_turn_lines=rebuilt["turns"], turn_no=meta["turn_no"], last_seq=meta["last_seq"],
             totals=meta["totals"].to_dict(), interrupted=interrupted,
             saved_config={"model": info.model, "reasoning": info.reasoning, "approval": str(meta.get("approval") or ""),
-                          "prune_history": bool(meta.get("prune_history", True))})
+                          "prune_history": bool(meta.get("prune_history", True))},
+            models=models)
         return saved, meta
 
 
@@ -510,8 +563,9 @@ class SessionRecorder:
         elif d["type"] == "config_changed":
             # The later turn lines are tagged with these (restore, §5.2), and a resume restores the last-used model
             # and reasoning (option C). `updated` follows turns only, as in a meta rebuilt from the logs.
+            from .session import CHANGEABLE_SETTINGS     # here: session.py imports this module
             config = d.get("config") or {}
-            m.update({k: config[k] for k in ("model", "reasoning", "approval") if isinstance(config.get(k), str)})
+            m.update({k: config[k] for k in CHANGEABLE_SETTINGS if isinstance(config.get(k), str)})
             self._write_meta()
             return
         else:

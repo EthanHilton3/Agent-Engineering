@@ -885,3 +885,35 @@ def test_get_session_events_errors(inproc, tmp_path):
     assert only(reply, "error")["code"] == "saving_disabled"
     other = only(unsaved.send(type="get_session_events", session_id=saved), "session_events")   # still readable
     assert other["done"] and other["events"][0]["session_id"] == saved
+
+
+# -- final review regressions --------------------------------------------------------------------
+
+
+def test_set_config_strips_the_model_name_for_this_and_later_sessions(inproc):
+    """#3: a padded model name is stored, announced, sent and carried over stripped."""
+    p = inproc([[msg("a")], [msg("b")]])
+    p.take()
+    changed = only(p.send(type="set_config", model="gpt-5.6-sol "), "config_changed")
+    assert changed["changes"]["model"]["to"] == "gpt-5.6-sol" and changed["config"]["model"] == "gpt-5.6-sol"
+    p.turn("first")
+    assert p.fake.requests[-1]["model"] == "gpt-5.6-sol"
+    assert only(p.send(type="set_config", model=" \t"), "error")["code"] == "bad_request"
+    started = only(p.send(type="new_session"), "session_started")
+    assert started["config"]["model"] == "gpt-5.6-sol"
+
+
+def test_null_optional_fields_mean_omitted(inproc):
+    """#6: null is the default for every optional field, as set_config already treats it."""
+    saver = inproc([[msg("kept")]])
+    saver.turn("a saved session")
+    saved = saver.session_id
+    saver.server.session.close()
+    p = inproc([[msg("x")]], workspace=saver.workspace)
+    p.take()
+    reply = only(p.send(type="get_session_events", session_id=saved, after_seq=None, limit=None), "session_events")
+    assert reply["done"] and reply["events"][0]["seq"] == 1 and reply["next_after_seq"] == reply["events"][-1]["seq"]
+    assert only(p.send(type="list_sessions", limit=None), "sessions")["total"] == 1
+    assert only(p.send(type="export_session", session_id=None), "transcript")["session_id"] == p.session_id
+    resumed = p.send(type="resume_session", session_id=saved[2:8], latest=None)
+    assert [m["type"] for m in resumed][:2] == ["session_started", "session_resumed"] and p.session_id == saved

@@ -4,6 +4,8 @@
 import json
 import time
 
+import httpx
+import openai
 import pytest
 
 from conftest import EventLog, FakeModelAdapter, Round, fn_call, msg, reasoning_item, usage
@@ -23,6 +25,12 @@ def run(session, text="go", timeout=10):
 
 def kinds(items):
     return [i.get("type") or f"msg:{i['role']}" for i in items]
+
+
+def bad_request(message, param=None):
+    req = httpx.Request("POST", "https://api.openai.com/v1/responses")
+    return openai.BadRequestError(message, response=httpx.Response(400, request=req),
+                                  body={"message": message, "param": param, "type": "invalid_request_error"})
 
 
 def wait_blocked(fake, timeout=5):
@@ -208,6 +216,7 @@ def test_the_adapter_rebuilds_only_a_client_it_built(tmp_path, monkeypatch):
     adapter.set_config(AgentConfig(workspace=tmp_path, reasoning="high"))          # longer read timeout
     rebuilt = adapter.client
     assert rebuilt is not built and rebuilt.timeout == request_timeout("high")
+    assert built.is_closed()                                                       # its connections are not left open
     assert adapter.config.reasoning == "high" and adapter.dropped_params == {"prompt_cache_key"}
 
     injected = object()
@@ -291,3 +300,106 @@ def test_read_events_pages_in_order_without_text_deltas(open_session, store):
     (store.root / "s_000000000000").mkdir()                              # a folder with no log
     with pytest.raises(SessionNotFound):
         store.read_events("s_000000000000")
+
+
+# -- final review regressions --------------------------------------------------------------------
+
+def test_a_model_change_retries_the_include_values_the_old_model_rejected(open_session):
+    """#1: an include value one model rejected is tried again on the next model; a rejected cache key stays dropped."""
+    include_err = bad_request("Invalid value: 'reasoning.encrypted_content'. Supported values are: ...", param="include")
+    key_err = bad_request("Unknown parameter: 'prompt_cache_key'.", param="prompt_cache_key")
+    s, fake, log = open_session([Round(output=[msg("a")], error=include_err), Round(output=[msg("b")], error=key_err),
+                                 [msg("c")], Round(output=[msg("d")], error=include_err)], saved=False)
+    run(s, "first")
+    assert "include" in fake.requests[0] and "include" not in fake.requests[1]
+    s.update_config(reasoning="low")                                   # not a model change: still dropped
+    run(s, "second")
+    assert "include" not in fake.requests[2] and "prompt_cache_key" not in fake.requests[3]
+    s.update_config(model="gpt-5.6-sol")
+    run(s, "third")
+    assert fake.requests[4]["include"] == ["reasoning.encrypted_content"] and "prompt_cache_key" not in fake.requests[4]
+    s.update_config(model="gpt-5.6-luna")
+    run(s, "fourth")                                                   # rejected again: the fallback drops it again
+    assert "include" in fake.requests[5] and "include" not in fake.requests[6]
+    assert [n.code for n in log.of("notice")].count("include_rejected") == 2
+    assert [e.type for e in log.events].count("turn_completed") == 4
+
+
+def test_a_change_that_cannot_rebuild_the_prompt_changes_nothing(open_session, ws, tmp_path):
+    """#2: the prompt file is read before anything is swapped in; on an error nothing is applied or emitted."""
+    prompt = tmp_path / "prompt.md"
+    prompt.write_text("You are a test agent.", encoding="utf-8")
+    s, fake, log = open_session([[msg("a")], [msg("b")]], saved=False, prompt_path=prompt)
+    before = (s.config, s.policy, s.approvals.policy, s.system_prompt, s.cache_key, list(s.history), fake.config)
+    prompt.unlink()
+    with pytest.raises(FileNotFoundError):
+        s.update_config(model="gpt-5.6-sol", approval="auto-edit")
+    assert (s.config, s.policy, s.approvals.policy, s.system_prompt, s.cache_key, list(s.history), fake.config) == before
+    assert log.of("config_changed") == []
+    run(s)
+    assert fake.requests[0]["model"] == "gpt-6-luna" and "Approval mode: ask" in fake.requests[0]["input"][0]["content"]
+    assert s.update_config(model="gpt-5.6-sol") == {"model": ["gpt-6-luna", "gpt-5.6-sol"]}   # needs no prompt
+    run(s)
+    assert fake.requests[1]["model"] == "gpt-5.6-sol"
+
+
+def test_a_model_name_is_stripped(open_session):
+    """#3: surrounding spaces never reach the config, the event or the request."""
+    s, fake, log = open_session([[msg("a")]], saved=False)
+    assert s.update_config(model="  gpt-5.6-sol\t") == {"model": ["gpt-6-luna", "gpt-5.6-sol"]}
+    assert s.config.model == "gpt-5.6-sol" and log.of("config_changed")[-1].config["model"] == "gpt-5.6-sol"
+    assert s.update_config(model=" gpt-5.6-sol ") == {}
+    run(s)
+    assert fake.requests[0]["model"] == "gpt-5.6-sol"
+
+
+def test_read_events_decodes_each_line_once_and_follows_the_growing_log(open_session, store, ws, monkeypatch):
+    """#4: pages seek through an index instead of decoding the log from the start; results are unchanged."""
+    s, fake, log = open_session([[msg(f"answer {n}")] for n in range(7)])
+    for n in range(6):
+        run(s, f"question {n}")
+    sid = s.session_id
+    everything, done = store.read_events(sid)                          # builds the index
+    assert done and len(everything) > 20
+
+    decoded = []
+    real_loads = json.loads
+    monkeypatch.setattr(json, "loads", lambda text, *a, **kw: decoded.append(text) or real_loads(text, *a, **kw))
+    page, done = store.read_events(sid, after_seq=everything[-5]["seq"], limit=2)
+    assert page == everything[-4:-2] and not done
+    assert len(decoded) == 2                                           # the page's two lines, nothing else
+
+    run(s, "question 6")                                               # the log grows while the session is open
+    s.close()
+    decoded.clear()
+    grown, done = store.read_events(sid, after_seq=everything[-1]["seq"])
+    assert done and grown and grown[0]["type"] == "turn_started" and grown[-1]["type"] == "turn_completed"
+    assert len(decoded) == 2 * len(grown)                              # each new line indexed once, then read once
+    monkeypatch.undo()
+    fresh = SessionStore.for_workspace(ws)                             # same answers as an index built from scratch
+    assert store.read_events(sid) == fresh.read_events(sid) == (everything + grown, True)
+
+    path = store.events_path(sid)
+    line = json.dumps({"type": "notice", "seq": grown[-1]["seq"] + 1, "level": "info", "code": "x", "message": "m"})
+    with path.open("ab") as f:
+        f.write(line[:20].encode())                                    # torn: left out, and not indexed
+    assert store.read_events(sid, after_seq=grown[-1]["seq"]) == ([], True)
+    with path.open("ab") as f:
+        f.write(line[20:].encode() + b"\n")                            # completed later: now it is there
+    assert store.read_events(sid, after_seq=grown[-1]["seq"]) == ([json.loads(line)], True)
+
+
+def test_models_used_covers_every_turn_including_restored_ones(open_session):
+    """#7: the usage label's source. Restored turns count; a model set but never used does not."""
+    s, fake, log = open_session([[msg("a")], [msg("b")]])
+    assert s.models_used == []
+    run(s)
+    s.update_config(model="gpt-5.6-sol")
+    assert s.models_used == ["gpt-6-luna"]
+    run(s)
+    s.update_config(model="gpt-5.6-terra")
+    assert s.models_used == ["gpt-6-luna", "gpt-5.6-sol"]
+    sid = s.session_id
+    s.close()
+    resumed, _, _ = open_session([], resume=sid, model="gpt-5.6-terra")
+    assert resumed.models_used == ["gpt-6-luna", "gpt-5.6-sol"]

@@ -782,6 +782,8 @@ Rules added for saved sessions:
 Rules added for settings and replay:
 - **Settings changes.** `config_changed` appears only between turns, in reply to `set_config`. Its `config` replaces what the client learned from `session_started.config`. Every change starts the next request with a cold prompt cache: a model or reasoning change was measured to get no cache hit on its next round, and an approval change alters the system prompt, which names the mode. An approval change also forgets every "allow for session" answer.
 - **Changed settings carry over.** For the rest of the process, the values given to `set_config` count as if they had been passed as flags: `new_session` starts with them, and `resume_session` keeps them instead of the saved `model` and `reasoning`. The saved session records the change, so a later resume (in another process too) restores the last-used `model` and `reasoning`. The approval mode is still never restored from disk.
+- **`null` means omitted.** For every optional field of these messages, `null` is treated as if the field were left out (`after_seq`, `limit`, `latest`, `session_id`, and the `set_config` fields).
+- **Model names are stripped.** `set_config` strips surrounding whitespace from `model` and rejects an empty result, so later sessions also get the stripped name.
 - **Redrawing a saved session.** `get_session_events` returns the saved events with their original `seq`, with gaps where `text_delta` was dropped. To open the current session, keep the live events that arrive meanwhile, fetch pages until `done`, then apply the live events whose `seq` is higher than the last fetched one. Fetched and live events share the numbering, so duplicates are easy to drop.
 
 ### 10.3 Transcript (`frontends/transcript.py`)

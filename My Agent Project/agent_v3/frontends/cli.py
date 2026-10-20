@@ -17,7 +17,6 @@ import threading
 import time
 from collections import Counter, deque
 from contextlib import suppress
-from dataclasses import replace
 from datetime import datetime
 from itertools import cycle
 from pathlib import Path
@@ -28,12 +27,12 @@ from ..config import APPROVAL_MODES, REASONING_EFFORTS, AgentConfig
 from ..events import Event
 from ..pricing import PRICING
 from ..prompt import APPROVAL_TEXT
-from ..session import Busy, Session
-from ..sessions import SessionInUse, SessionNotFound, SessionStore, SessionStoreError, config_for_resume
+from ..session import CHANGEABLE_SETTINGS, Busy, Session, WorkingConfig
+from ..sessions import SessionInUse, SessionNotFound, SessionStore, SessionStoreError
 from .args import add_config_args, add_session_args, config_from_args, explicit_settings
 from .commands import COMMANDS, format_sessions, reconfigure_utf8
 from .eventlog import EventLogWriter
-from .formatting import completion_line, fmt_cost, format_usage, round_summary
+from .formatting import completion_line, fmt_cost, format_usage, round_summary, usage_label
 from .transcript import export_transcript
 
 # Enable ANSI escape-sequence handling in supported Windows terminals.
@@ -57,7 +56,6 @@ DIFF_PREVIEW_LINES = 40
 SLASH_COMMANDS = ("/new", "/sessions", "/resume", "/export", "/model", "/reasoning", "/approval", "/usage", "/quit")
 ARG_COMMANDS = re.compile(r"/(resume|export|sessions|model|reasoning|approval)(?:\s+(.+))?",
                           re.IGNORECASE)          # these take an argument (§6.2)
-SETTINGS = ("model", "reasoning", "approval")     # changeable between turns (§5.6)
 CACHE_NOTES = {"model": "the next request starts with a cold cache",
                "reasoning": "the next request starts with a cold cache",        # measured in the S5 smoke test
                "approval": "the system prompt names the mode, so the next request starts with a cold cache"}
@@ -189,25 +187,18 @@ def _file_summary(req: dict) -> list[tuple[str, int, int]]:
 
 
 class SessionOpener:
-    """Builds the `Session` for `/new` (ref None) and for a resume (a full session id), with the right config:
+    """Builds the `Session` for `/new` (ref None) and for a resume (a full session id) from the working config:
     a new session gets the launch config; a resumed one gets its saved model and reasoning unless they were
-    typed (option C, §5.1). `model_of` supplies the model adapter to reuse (None: build a fresh one)."""
+    typed or changed by command (option C, §5.1). `model_of` supplies the model adapter to reuse (None: build a
+    fresh one)."""
 
     def __init__(self, store: SessionStore | None, on_event: Callable[[Event], None], launch: AgentConfig,
                  explicit: set[str] | frozenset = frozenset(), model_of: Callable[[], object] | None = None):
-        self.store, self.on_event, self.launch, self.model_of = store, on_event, launch, model_of
-        self.explicit = set(explicit)
-
-    def remember(self, name: str, value: str) -> None:
-        """A setting changed by command (/model, /reasoning, /approval): later sessions start from it (the working
-        config), and a resume keeps it instead of restoring the saved one, as if it had been typed (§5.1)."""
-        self.launch = replace(self.launch, **{name: value})
-        self.explicit.add(name)
+        self.store, self.on_event, self.model_of = store, on_event, model_of
+        self.working = WorkingConfig(launch, explicit)    # /model, /reasoning and /approval update it
 
     def __call__(self, resume_id: str | None) -> Session:
-        config = self.launch
-        if resume_id is not None:
-            config = config_for_resume(self.launch, self.store.load(resume_id).info, set(self.explicit))
+        config = self.working.config_for(self.store.load(resume_id).info if resume_id is not None else None)
         model = self.model_of() if self.model_of is not None else None
         return Session(config, self.on_event, model=model, store=self.store, resume=resume_id)
 
@@ -277,10 +268,10 @@ class Cli:
             self._cmd_resume(arg)
         elif cmd == "/export":
             self._cmd_export(arg)
-        elif cmd[1:] in SETTINGS:
+        elif cmd[1:] in CHANGEABLE_SETTINGS:
             self._cmd_setting(cmd[1:], arg)
         elif cmd == "/usage":
-            print(format_usage(self.session.config.model, self.session.usage_totals()))
+            print(self._usage())
         else:
             print(_dim(f"Unknown command {cmd}. Commands: {', '.join(SLASH_COMMANDS)}"))
         return True
@@ -406,12 +397,20 @@ class Cli:
         except (ValueError, Busy) as e:
             self._say(_style(f"  {e}", "33"), *self._choices(name))
             return
-        remember = getattr(self.open_session, "remember", None)
-        if remember is not None:                  # /new and /resume start from it from now on
-            remember(name, value)
+        except OSError as e:                      # the prompt file could not be read again; nothing was changed
+            self._say(_style(f"  {name} not changed: {e}", "33"))
+            return
+        working = getattr(self.open_session, "working", None)
+        if working is not None:                   # /new and /resume start from it from now on
+            working.remember(self.session.config, [name])
         if not changed:
             self._note(f"{name} is already {current}")
         self._pump()                              # config_changed prints the confirmation
+
+    def _usage(self) -> str:
+        """The usage block for /usage and the exit summary, labelled with every model the session's turns ran on."""
+        s = self.session
+        return format_usage(usage_label(s.models_used, s.config.model), s.usage_totals())
 
     def _saved_hint(self) -> str | None:
         """The exit line for a session that was saved and has something in it."""
@@ -460,7 +459,7 @@ class Cli:
             self.session.close()                  # cancels a running turn; its event is drained below
             self._pump()
             print()
-            print(format_usage(self.session.config.model, self.session.usage_totals()))
+            print(self._usage())
             if (hint := self._saved_hint()) is not None:
                 print(_dim(hint))
 
@@ -536,9 +535,12 @@ class Cli:
         lines = [_dim(f"Resumed {ev.session_id}{_SEP}\"{ev.title}\"{_SEP}{n} turn{'' if n == 1 else 's'}{_SEP}"
                       f"{fmt_cost(cost)}{_SEP}last active {active}")]
         config, saved = self.session.config, ev.saved_config
+        working = getattr(self.open_session, "working", None)
+        flags, by_command = (working.flags, working.changed) if working is not None else (self.explicit, set())
         for name in ("model", "reasoning"):
             if saved.get(name) and getattr(config, name) != saved[name]:
-                lines.append(_dim(f"  {name} {getattr(config, name)} (--{name}; saved with {saved[name]})"))
+                how = f"set with /{name}; " if name in by_command else f"--{name}; " if name in flags else ""
+                lines.append(_dim(f"  {name} {getattr(config, name)} ({how}saved with {saved[name]})"))
         if saved.get("approval") and config.approval != saved["approval"]:
             lines.append(_dim(f"  approval {config.approval} (saved with {saved['approval']}; "
                               "approval is never restored)"))

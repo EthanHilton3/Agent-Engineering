@@ -27,16 +27,14 @@ from ..approvals import Decision
 from ..config import AgentConfig
 from ..events import Event
 from ..model import ModelAdapter
-from ..session import Busy, Session
-from ..sessions import (AmbiguousSession, SessionInUse, SessionNotFound, SessionStore, SessionStoreError,
-                        config_for_resume)
+from ..session import CHANGEABLE_SETTINGS, Busy, Session, WorkingConfig
+from ..sessions import AmbiguousSession, SessionInUse, SessionNotFound, SessionStore, SessionStoreError
 from .args import add_config_args, add_session_args, config_from_args, explicit_settings
 from .transcript import export_transcript
 
 logger = logging.getLogger("agent_v3.stdio_server")
 
 DECISIONS = tuple(d.value for d in Decision)
-SETTINGS = ("model", "reasoning", "approval")     # what set_config may change (sessions spec §5.6)
 EVENTS_PAGE, EVENTS_PAGE_MAX = 500, 2000          # get_session_events: default and largest `limit`
 
 
@@ -80,10 +78,9 @@ class StdioServer:
             "get_session_events": self._get_session_events,
         }
         # new_session and resume_session start from the working config: the launch settings plus set_config's (§5.1)
-        self._launch = config
+        self._working = WorkingConfig(config, explicit)
         self._model = model                   # an injected adapter is shared by every session; None: one per session
         self._store = store
-        self._explicit = set(explicit)
         # Listing, export and delete only read the saved files, so they work under --no-save too.
         self._reader = store or SessionStore.for_workspace(config.workspace)
         self.session = self._open(resume)     # emits session_started (and session_resumed) from here
@@ -193,9 +190,7 @@ class StdioServer:
 
     def _open(self, resume_id: str | None) -> Session:
         """A new session (None) or the saved one with this full id. Raises SessionStoreError, with nothing emitted."""
-        config = self._launch
-        if resume_id is not None:
-            config = config_for_resume(config, self._reader.load(resume_id).info, self._explicit)
+        config = self._working.config_for(self._reader.load(resume_id).info if resume_id is not None else None)
         return Session(config, self.on_event, model=self._model, store=self._store, resume=resume_id)
 
     def _switch(self, resume_id: str | None) -> None:
@@ -228,7 +223,9 @@ class StdioServer:
 
     @staticmethod
     def _int(message: dict, key: str, default: int, low: int, high: int | None = None) -> int:
-        value = message.get(key, default)
+        value = message.get(key)
+        if value is None:                     # null is the same as leaving the field out
+            return default
         if isinstance(value, bool) or not isinstance(value, int) or value < low or (high is not None and value > high):
             raise BadRequest(f"'{key}' must be an integer from {low}" + (f" to {high}" if high is not None else " up"))
         return value
@@ -251,7 +248,9 @@ class StdioServer:
 
     def _resume_session(self, message: dict) -> None:
         ref = self._string(message, "session_id", required=False)
-        latest = message.get("latest", False)
+        latest = message.get("latest")
+        if latest is None:                    # left out, or null
+            latest = False
         if not isinstance(latest, bool):
             raise BadRequest("'latest' must be true or false")
         if (ref is None) == (not latest):
@@ -295,18 +294,18 @@ class StdioServer:
 
     def _set_config(self, message: dict) -> None:
         changes = {}
-        for key in SETTINGS:
+        for key in CHANGEABLE_SETTINGS:
             if message.get(key) is not None:  # null is the same as leaving the field out
                 changes[key] = self._string(message, key)
         if not changes:
-            raise BadRequest(f"give at least one of {', '.join(repr(k) for k in SETTINGS)}")
+            raise BadRequest(f"give at least one of {', '.join(repr(k) for k in CHANGEABLE_SETTINGS)}")
         try:
             self.session.update_config(**changes)     # Busy while a turn runs; emits config_changed
         except ValueError as e:
             raise BadRequest(str(e)) from e
-        # Like a typed flag for the rest of this process: new sessions start from it and a resume keeps it.
-        self._launch = dataclasses.replace(self._launch, **changes)
-        self._explicit |= set(changes)
+        # Like a typed flag for the rest of this process: new sessions start from it and a resume keeps it. The values
+        # come from the session, so they are the ones it accepted (a model name stripped).
+        self._working.remember(self.session.config, changes)
 
     def _get_session_events(self, message: dict) -> None:
         sid = self._saved_ref(self._string(message, "session_id", required=False))

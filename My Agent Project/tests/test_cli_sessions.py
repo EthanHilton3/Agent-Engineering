@@ -442,7 +442,7 @@ def test_two_session_starts_give_one_header_and_a_resumed_line(tmp_path):
     assert text.count("# Transcript ") == 1 and text.count("> RESUMED ") == 1
     assert re.search(r"> RESUMED 2026-10-16 \d\d:\d\d \(model=m2, reasoning=low, approval=full-auto\)", text)
     assert "> NOTICE (warning, turn_interrupted): Turn t1 was interrupted" in text and "session_resumed" not in text
-    assert "m2 cost (USD)" in text                                    # the usage block follows the latest model
+    assert "\nm cost (USD)" in text and "m2" not in text.split("```")[-2]   # labelled with the model its turn ran on
 
 
 # --- subcommands and the exit hint -------------------------------------------------------------
@@ -583,7 +583,7 @@ def test_new_and_resume_after_a_setting_change_use_it(tmp_path, monkeypatch, cap
     assert (fresh.model, fresh.reasoning, fresh.approval) == ("gpt-5.6-terra", AgentConfig.reasoning, "auto-edit")
     # the changed model counts as typed, so the resume keeps it; the reasoning was not changed, so it is restored
     assert (resumed.model, resumed.reasoning, resumed.approval) == ("gpt-5.6-terra", "high", "auto-edit")
-    assert "model gpt-5.6-terra (--model; saved with gpt-5.6-sol)" in capsys.readouterr().out
+    assert "model gpt-5.6-terra (set with /model; saved with gpt-5.6-sol)" in capsys.readouterr().out
 
 
 def test_the_transcript_shows_setting_changes(tmp_path):
@@ -596,3 +596,44 @@ def test_the_transcript_shows_setting_changes(tmp_path):
     assert "> SETTINGS: approval ask → auto-edit\n" in text and "> SETTINGS: reasoning medium → high\n" in text
     assert text.index("SETTINGS: model") < text.index("**USER:** first") < text.index("SETTINGS: approval")
     assert "gpt-5.6-sol cost (USD)" in text
+
+
+# --- final review regressions ------------------------------------------------------------------
+
+def test_a_setting_that_cannot_be_applied_is_reported_and_changes_nothing(tmp_path, capsys):
+    """#2: the prompt file is gone, so /approval cannot rebuild the prompt: the CLI says so and carries on."""
+    prompt = tmp_path / "prompt.md"
+    prompt.write_text("You are a test agent.", encoding="utf-8")
+    s, q, fake, store = open_cli(workspace(tmp_path), [[msg("ok")]], prompt_path=prompt)
+    prompt.unlink()
+    cli = Cli(s, q, input_fn=scripted(["/approval auto-edit", "task"]), store=store)
+    assert cli.run() == 0
+    out = capsys.readouterr().out
+    assert "approval not changed: " in out and "prompt.md" in out and "(was ask)" not in out
+    assert s.config.approval == "ask" and "Approval mode: ask" in fake.requests[0]["input"][0]["content"]
+    assert cli.open_session.working.config.approval == "ask"           # not carried over to /new either
+    assert "ok" in out
+
+
+def test_the_resume_recap_never_names_a_flag_that_was_not_typed(tmp_path, monkeypatch, capsys, configs):
+    """#5: a setting changed by command says so; a typed flag is still named."""
+    root = workspace(tmp_path)
+    sid = save_session(root, model="gpt-5.6-sol", reasoning="high")
+    type_input(monkeypatch, "/model gpt-5.6-terra", f"/resume {sid}")
+    cli_mod.main(["--workspace", str(root), "--reasoning", "low"])
+    assert (configs[-1].model, configs[-1].reasoning) == ("gpt-5.6-terra", "low")
+    out = capsys.readouterr().out
+    assert "model gpt-5.6-terra (set with /model; saved with gpt-5.6-sol)" in out and "--model" not in out
+    assert "reasoning low (--reasoning; saved with high)" in out
+
+
+def test_usage_is_labelled_with_every_model_the_turns_ran_on(tmp_path, capsys):
+    """#7: /usage, the exit summary and the exported transcript name each model whose turns the totals include."""
+    s, q, fake, store = open_cli(workspace(tmp_path), [[msg("one")], [msg("two")]])
+    run_cli(s, q, ["/usage", "first", "/model gpt-5.6-sol", "/usage", "second", "/usage", "/export"], store=store)
+    labels = re.findall(r"^(.+) cost \(USD\)", capsys.readouterr().out, re.MULTILINE)
+    labels = [label for label in labels if label not in ("Web search", "Total")]
+    both = "gpt-6-luna + gpt-5.6-sol"
+    assert labels == ["gpt-6-luna", "gpt-6-luna", both, both]         # the last one is the exit summary
+    text = (store.session_dir(s.session_id) / "transcript.md").read_text(encoding="utf-8")
+    assert f"\n{both} cost (USD)" in text
