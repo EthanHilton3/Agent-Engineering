@@ -17,3 +17,6 @@ Thumbs.db
 
 # per-run benchmark event logs (regenerable; summary results are committed)
 My Agent Project/bench/results/events/
+
+# Lecture 2d: cached embedding vectors (regenerable, ~hundreds of MB)
+**/.cache/
