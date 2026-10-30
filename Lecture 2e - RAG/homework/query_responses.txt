@@ -1,0 +1,263 @@
+$ python "Lecture 2e - RAG/class materials/chroma_demo.py" query "Lecture 2e - RAG/homework/chroma_db" gc_2026_10 "How can I strengthen my faith in Jesus Christ?"
+(0.42) Neil L. Andersen (Of the Quorum of the Twelve Apostles)
+Courage Born of Our Faith in Jesus Christ
+------------------------------
+Recently a noble woman of deep faith shared her testimony in church. Confidentially, I knew that she had been devastated by the betrayal ofher husband. But with courage born of her faith, she powerfully declared that in happiness or unspeakable grief, she would trust in the rock of her salvation, her Savior, Jesus Christ.
+With our hope alive in Christ, even with life’s challenges, we too may be, as the Apostle Paul said, “troubled on every side, yet not distressed; … perplexed, but not in despair.”
+I promise you that as you strengthen your faith in Jesus Christ by believing and following Him and keeping His commandments, your answers will come, your spiritual power will increase, and your courage in following Christ will define your eternal soul.
+The Savior declared, “If a man love me, he will keep my words: and my Father will love him, and we will come unto him, and make our abode with him.”
+Peter and John were in the room when the resurrected Christ appeared to the Apostles. “Behold my hands and my feet,” Jesus said, “that it is I myself: handle me, and see.”
+
+
+
+
+(0.44) Thabo Lebethoa (Of the Seventy)
+Jesus Christ Is the Light and Life of the World
+------------------------------
+In the October 2024 general conference, President Dieter F. Uchtdorf taught: “Strong faith in Jesus Christ doesn’t happen overnight. No, inthis mortal world, it’s the thorns and thistles of doubt that grow spontaneously. The healthy, fruitful tree of faith requires intentional effort” (“Nourish the Roots, and the Branches Will Grow,” Liahona, Nov. 2024, 102).
+President Dallin H. Oaks in an address to BYU students taught that “strong faith requires more than strong desire. It means daily trying, one step at a time, with prayer and scripture study” (“Coming Closer to Jesus Christ” [Brigham Young University devotional, Feb. 10, 2026], 2, speeches.byu.edu).
+In Preach My Gospel, we learn, “As people read and pray about the Book of Mormon, they will come to know the Savior better and experience His love” (Preach My Gospel: A Guide to Sharing the Gospel of Jesus Christ [2023], 115).
+
+
+
+
+(0.45) Neil L. Andersen (Of the Quorum of the Twelve Apostles)
+Courage Born of Our Faith in Jesus Christ
+------------------------------
+As we choose faith in Christ, He blesses us with the courage, sometimes in very difficult situations, to choose the right, and as we manifest our courage to choose the right, our faith in Christ strengthens.
+We rejoice in the faith in Jesus Christ and the spiritual courage we see in you, our members of the Church across the world.
+It is our faith in Jesus Christ that gives us the desire to humbly kneel alone and pray to our Heavenly Father. In those quiet moments whenwe speak with our Heavenly Father privately, independently, we are given the increased courage to choose the right. As a young man, I heardPresident David O. McKay say, “The greatest battle of life is fought within the silent chambers of your own soul.” As we courageously win the battles of the soul, our faith in our Savior multiplies.
+Each week we prayerfully receive the sacrament and witness before God, and in the presence of others, that we “are willing to take upon [ourselves] the name of [Jesus Christ], and always remember him and keep his commandments.” Then, with courage, we are true to our covenants, and in turn, the Lord blesses us with increased faith.
+
+
+
+
+(0.46) Ciro Schmeil (Of the Seventy)
+Consider Your Ways, and from This Day Will the Lord Bless You
+------------------------------
+According to this scripture, we need to be humble and have faith in Christ for the weak things to become strong. A central feature of humility is having a broken heart, which means to be receptive to the will of God. To be receptive to the will of God, we must have faith in Christ, which means that we trust Him even when we don’t have all the answers. President Oaks said: “By far, God’s strongest mortal help was Hisprovision of a Savior, Jesus Christ, who would suffer to pay the price and provide forgiveness for repented sins. That merciful and glorious Atonement explains why faith in the Lord Jesus Christ is the first principle of the gospel.”
+We show our faith in Christ by making and keeping covenants with God. “A covenant is a sacred promise between God and His children. God gives the conditions for the covenant, and His children agree to obey those conditions. God promises to bless His children as they fulfill the covenant.”
+Covenants bind us to Jesus Christ because He is central to every covenant we make. In Matthew 11, the Savior extends a beautiful invitationand a promise to all of us. He said:
+“Come unto me, … and I will give you rest.
+
+
+
+
+(0.46) Thabo Lebethoa (Of the Seventy)
+Jesus Christ Is the Light and Life of the World
+------------------------------
+Many of us may wonder how we can receive more of the Savior’s light as we navigate through the daily challenges and struggles in our lives.We may be concerned about becoming self-reliant; meeting the demands placed upon us at school or at work; feeling inadequacy, fear, and doubt; dealing with the loss of a loved one; or simply knowing what to do with our lives. Whatever concerns, challenges, and struggles we may have in our lives, the answer is always Jesus Christ.
+Jesus Christ can bring light in our moments of darkness and restore hope where there is hopelessness. He knows where we have been, where weare, and where we need to be. Through Him, today can be a new day and tomorrow can be a better day.
+Here are some things we can do to increase the Savior’s light in our lives.
+Having faith in Jesus Christ means trusting that He understands our daily difficulties and knows how to help us rise above them because He has experienced all our pains, afflictions, and infirmities (see Alma 7:11–12). We need to trust that He is always ready to help us as we remember to “look unto [Him] in every thought” and “doubt not, fear not” (Doctrine and Covenants 6:36).
+
+
+
+
+Ethan@LAPTOP-EQBGA00L MINGW64 ~/Documents/GitHub/Agent Engineering (master)
+$ python "Lecture 2e - RAG/class materials/chroma_demo.py" query "Lecture 2e - RAG/homework/chroma_db" gc_2026_10 "What is the church's standpoint on betting?"
+(0.46) D. Todd Christofferson (Second Counselor in the First Presidency)
+O Be Wise
+------------------------------
+D. Todd Christofferson (Second Counselor in the First Presidency)
+O Be Wise
+Today I feel a bit like the Book of Mormon prophet Jacob, when he felt compelled by the Spirit to address subjects that were not particularly edifying, having to use “boldness of speech,” as he put it, instead of feasting on “the pleasing word of God.” So, with a sense of duty, I turn to the subject of gambling.
+President Gordon B. Hinckley, in addressing this subject over 20 years ago, mentioned a story about former United States President Calvin Coolidge, known as a man of few words. As Coolidge returned home from church one Sunday, his wife asked him what the preacher spoke about. Hereplied, “Sin.”
+“Well, what did he say?” she asked.
+“He was against it,” replied Coolidge.
+President Hinckley said, “I think I could answer the question concerning gambling just that briefly. We are against it.”
+Putting money or something of value at risk to bet on a particular outcome or event is an activity that has plagued mankind almost, I suppose, from the beginning of time. And time has not made it any more worthwhile or any less harmful. Unfortunately, in recent years, gambling has become incredibly pervasive.
+
+
+
+
+(0.46) D. Todd Christofferson (Second Counselor in the First Presidency)
+O Be Wise
+------------------------------
+President Oaks clearly stated the moral case against gambling some years ago in these words: “What does gambling do to its participants? The attitude of taking something from someone else in order to enhance our own position—[which is] the essence of gambling—leads us away from the giving path of Christ and toward the taking path of the adversary. The act of taking or trying to take something from someone else without giving value in return is destructive of spiritual sensitivities.”
+Today, I am pleading with all of us to live life on a higher plane. God has granted life and agency to each of us, and each of us is accountable to Him for how we live that life. A key part of a life well-lived is contributing to the well-being of others. It is being productive in worthy endeavors. It is being and doing better without others doing worse. It comes by supporting and rewarding work rather than idle pursuits. Work leads to prosperous, just, and equitable societies. Gambling, even for fun, leads in the opposite direction.
+
+
+
+
+(0.47) D. Todd Christofferson (Second Counselor in the First Presidency)
+O Be Wise
+------------------------------
+“And through thy [conduct] shall the weak brother perish, for whom Christ died?”
+In the context of my message today, Paul is saying, “Since your recreational gambling may lead a weaker brother or sister into temptation, just don’t do it. Every soul is precious, and Christ died for him, for her, as He did for you.”
+For us as Latter-day Saints, overarching all other concerns is the fact that gambling is morally wrong. Gambling is built on the desire to obtain something for nothing. Its structure requires that any gain comes at others’ expense. It’s hard to reconcile that with the commandment to love our neighbor as ourselves. In addition, our resources are stewardships, and the question is not merely whether a purchase is legalbut whether it builds anything—in us, in our families, or in those around us. In the end, gambling produces nothing of value and enriches only its purveyors.
+
+
+
+
+(0.47) D. Todd Christofferson (Second Counselor in the First Presidency)
+O Be Wise
+------------------------------
+At different times, President Dallin H. Oaks has reminded us that “as we make current decisions, we should always be asking, ‘Where will this lead?’ … What is the effect on our future of the decisions we make in the present?” President Oaks points out that each choice has an “opportunity cost,” that is, “if we spend time doing one thing, we lose the opportunity to do another.” What is the opportunity cost of gambling? What do you forgo in terms of money, time, relationships, and worthwhile pursuits? Where does it lead?
+Perhaps you think your character and your commitment to divine covenants are sufficiently strong that, for you, wagers would never become more than occasional, casual fun. Maybe. But whether you are right about that or not, have you considered how your example might affect others?
+
+
+
+
+(0.50) D. Todd Christofferson (Second Counselor in the First Presidency)
+O Be Wise
+------------------------------
+Remembering President Oaks’s comments about “opportunity cost” and the opportunities lost when a person devotes time and money to gambling,my plea again is not only to refrain from gambling but to use the time and resources saved thereby for doing good. The Lord counsels us to “be anxiously engaged in a good cause, … and bring to pass much righteousness.” Indeed, “blessed are all they who do hunger and thirst afterrighteousness, for they shall be filled with the Holy Ghost.” If we hunger and thirst after righteousness, there are many good things we will pursue and other things that, because they are incompatible with righteousness, we will put out of our lives entirely.
+I pray that you will not treat gambling lightly. Having begun these remarks quoting the prophet Jacob, I end with another of his statements: “O be wise; what can I say more?” In the name of Jesus Christ, amen.
+
+
+
+
+Ethan@LAPTOP-EQBGA00L MINGW64 ~/Documents/GitHub/Agent Engineering (master)
+$ python "Lecture 2e - RAG/class materials/chroma_demo.py" query "Lecture 2e - RAG/homework/chroma_db" gc_2026_10 "What is the church's standpoint on personal finances?"
+(0.57) Patricio M. Giuffra (Of the Seventy)
+Trusting the Lord Through Tithes and Offerings
+------------------------------
+When we began teaching the law of tithing and the promised blessings that come to those who obey it, with great sadness she said to me, “Elder Giuffra, I clean houses and wash clothes for several families. What I earn is barely enough to pay the rent for the room where we live, buy a small amount of firewood to keep us warm, and provide some food. I don’t think I will ever be able to live the law of tithing because I will not have enough money to do so.”
+We were deeply moved. Everything she said made sense from a worldly perspective. Although we bore testimony of the great blessings the Lordpromises to those who obey this commandment, she insisted that she could not do it.
+The next morning, I called my mission president, President Fernando Caballero, to seek his counsel. In my mind, I wondered whether the Lordmight have an exception for someone in her circumstances.
+President Caballero read to me the account of the widow’s mite and then said, “Elder Giuffra, you are no one to deny this sister the blessings of the law of tithing. There are no exceptions to this commandment.”
+
+
+
+
+(0.59) Patricio M. Giuffra (Of the Seventy)
+Trusting the Lord Through Tithes and Offerings
+------------------------------
+President Russell M. Nelson taught that “tithing can break cycles of poverty in poor nations and families.
+“‘We preach tithing to the poor people of the world because the poor people of the world have had cycles of poverty, generation after generation,’ he said. ‘That same poverty continues from one generation to another, until people pay their tithing.’”
+During my years of service in Central America, I have seen men and women prosper both temporally and spiritually. I have met families who once worried about their next meal but who now enjoy greater stability. I have known children of God who once could not afford a pair of shoes and who today, through faith and diligent effort, own successful businesses. I have also witnessed the Lord open doors for employment, provide education, strengthen marriages, and fill faithful hearts with peace and hope.
+
+
+
+
+(0.59) Patricio M. Giuffra (Of the Seventy)
+Trusting the Lord Through Tithes and Offerings
+------------------------------
+Patricio M. Giuffra (Of the Seventy)
+Trusting the Lord Through Tithes and Offerings
+Before I was baptized into the Church, the missionaries taught me about tithes and offerings. After my baptism, through summer jobs, I had the opportunity to pay full tithes and fast offerings. However, at that time, I did not fully understand the meaning of the promises and blessings associated with obedience to this law.
+It was not until my missionary service that I had the opportunity to teach this commandment and bear testimony of it. While serving in the Chile Osorno Mission, in the city of Puerto Montt, Elder Ruben Alvarez and I began teaching a woman who was about 70 years old and lived with her son, who was a member of the Church. She could not read and had difficulty retaining what we taught her, so we needed to repeat each lesson twice.
+
+
+
+
+(0.61) D. Todd Christofferson (Second Counselor in the First Presidency)
+O Be Wise
+------------------------------
+At different times, President Dallin H. Oaks has reminded us that “as we make current decisions, we should always be asking, ‘Where will this lead?’ … What is the effect on our future of the decisions we make in the present?” President Oaks points out that each choice has an “opportunity cost,” that is, “if we spend time doing one thing, we lose the opportunity to do another.” What is the opportunity cost of gambling? What do you forgo in terms of money, time, relationships, and worthwhile pursuits? Where does it lead?
+Perhaps you think your character and your commitment to divine covenants are sufficiently strong that, for you, wagers would never become more than occasional, casual fun. Maybe. But whether you are right about that or not, have you considered how your example might affect others?
+
+
+
+
+(0.62) D. Todd Christofferson (Second Counselor in the First Presidency)
+O Be Wise
+------------------------------
+President Oaks clearly stated the moral case against gambling some years ago in these words: “What does gambling do to its participants? The attitude of taking something from someone else in order to enhance our own position—[which is] the essence of gambling—leads us away from the giving path of Christ and toward the taking path of the adversary. The act of taking or trying to take something from someone else without giving value in return is destructive of spiritual sensitivities.”
+Today, I am pleading with all of us to live life on a higher plane. God has granted life and agency to each of us, and each of us is accountable to Him for how we live that life. A key part of a life well-lived is contributing to the well-being of others. It is being productive in worthy endeavors. It is being and doing better without others doing worse. It comes by supporting and rewarding work rather than idle pursuits. Work leads to prosperous, just, and equitable societies. Gambling, even for fun, leads in the opposite direction.
+
+
+
+
+Ethan@LAPTOP-EQBGA00L MINGW64 ~/Documents/GitHub/Agent Engineering (master)
+$ python "Lecture 2e - RAG/class materials/chroma_demo.py" query "Lecture 2e - RAG/homework/chroma_db" gc_2026_10 "How can i be saved?"
+(0.53) Edward Dube (Of the Presidency of the Seventy)
+Come unto Christ
+------------------------------
+My humble invitation to us all: Will you find one person and invite him or her to come unto Christ by exercising faith to follow His teachings, or invite a friend to meet with the missionaries?
+As you lose yourself in helping him or her come unto Christ, you will find solutions to your current problems. Our Savior has promised, “For whosoever will save his life shall lose it: and whosoever will lose his life for my sake shall find it.” I testify of His divinity in the name of Jesus Christ, amen.
+
+
+
+
+(0.57) Ronald A. Rasband (Of the Quorum of the Twelve Apostles)
+Love Like Jesus
+------------------------------
+Gratefully, the answer is in the Old Testament: “Be not afraid nor dismayed … ; for the battle is not yours, but God’s.”
+Listen carefully. I ask you to turn over to Jesus Christ your despair for those wayward souls. We cannot change their hearts, but He can; He is a God of miracles. We love our family members and friends profoundly, but they are foremost children of our Father in Heaven, who knowsand loves them even more than we do. Our Father, the great Elohim, gave His Beloved Son the authority and power necessary to heal all His children. That is the good news of the gospel. By the power of Jesus Christ’s Atonement, there is always a way back!
+By His Atonement from the Garden of Gethsemane to the cross on Golgotha, He paid for the sins and bore the disappointments that wrack theirsouls and yours.
+In the vernacular, Jesus Christ says to all who grieve, “I’ve got this!”
+
+
+
+
+(0.59) Kevin J. Hathaway (Of the Seventy)
+Jesus Christ Is the Great Deliverer!
+------------------------------
+To Kenzie and all who wait for divine deliverance, I testify that the Lord is not delayed, distracted, or derelict in His deliverance. He has not forgotten you. He does not take joy in your suffering. However, He knows that lessons learned while waiting can bring converting growth that an earlier rescue might not produce.
+But what of moments when the hour seems too late, the loss too final, and deliverance appears impossible? Surely, Jairus must have felt thetime had passed and deliverance was impossible when he received news that his daughter had died. But Jesus said, “Be not afraid, only believe.” Holding on to that assurance, Jairus watched the Savior deliver his daughter from death, showing that no mortal timeline can place us beyond Christ’s power to deliver.
+When deliverance feels impossible, remember Elder Patrick Kearon’s witness: “Jesus specializes in the seemingly impossible. He came here tomake the impossible possible, the irredeemable redeemable, to heal the unhealable, to right the unrightable, to promise the unpromisable. And He’s really good at it. In fact, He’s perfect at it.”
+
+
+
+
+(0.59) Thabo Lebethoa (Of the Seventy)
+Jesus Christ Is the Light and Life of the World
+------------------------------
+Repentance means a change of mind and a turning of the heart to God. Let us ponder about the changes that we need to make in our lives, andthese may include how we use our time, the things we watch or listen to, and the language and tone we use as we communicate with others. Perhaps we can begin by asking ourselves what is it that we need to change in our lives. It is important to remember that we do not need to gothrough this alone. The Savior is always ready to help because He sees the end from the beginning and understands our weaknesses perfectly;He is always ready “to succor his people according to their infirmities” (Alma 7:12).
+Sister Tamara W. Runia taught that “the invitation to repent is an expression of God’s love. Saying yes to that invitation is an expressionof ours” (“Your Repentance Doesn’t Burden Jesus Christ; It Brightens His Joy,” Liahona, May 2025, 91).
+I testify that today can be a new day and tomorrow will be a better day for all who come unto Jesus Christ and receive His light in their lives. He lovingly beckons, “Come unto me, … and I will give you rest” (Matthew 11:28). In the name of Jesus Christ, amen.
+
+
+
+
+(0.59) Quentin L. Cook (Of the Quorum of the Twelve Apostles)
+Integrity and Virtue Lead to Happiness
+------------------------------
+Integrity, virtue, and ongoing repentance are the answer in a world where coarse language and serious challenges are so prevalent. I am eternally grateful for the Father’s plan of happiness. I testify that Jesus Christ accomplished the eternity-shaping sacrifice necessary for our salvation and exaltation, in the name of Jesus Christ, amen.
+
+
+
+
+Ethan@LAPTOP-EQBGA00L MINGW64 ~/Documents/GitHub/Agent Engineering (master)
+$ python "Lecture 2e - RAG/class materials/chroma_demo.py" query "Lecture 2e - RAG/homework/chroma_db" gc_2026_10 "Why is the world so bad?"
+ 
+(0.63) Dieter F. Uchtdorf (Acting President of the Quorum of the Twelve Apostles)
+Christ-Centered Unity
+------------------------------
+When you think about it, it wasn’t so different from our world today.
+But the Savior of the world, the Son of God, transcended worldly boundaries and divisions. As Paul said, He “[broke] down the middle wall of partition between us.” He consistently reached out to those who would otherwise be shunned as outsiders. He touched lepers. He praised Gentiles for their faith. He used a Samaritan as an example of compassion. He gathered people from different walks of life and asked them to serve together in positions of trust. He ministered to the poor and rich alike. And today He continues to invite all to come unto Him.
+However, while Jesus Christ is reaching across worldly boundaries to unite Heavenly Father’s family, Satan is seeking to divide us. He aimsto weaken God’s children by isolating us from each other. He emphasizes our differences, making them feel like impassable barriers. We can see the fruits of his efforts in the contention, mistrust, and hatred all around us.
+
+
+
+
+(0.69) Ronald A. Rasband (Of the Quorum of the Twelve Apostles)
+Love Like Jesus
+------------------------------
+Gratefully, the answer is in the Old Testament: “Be not afraid nor dismayed … ; for the battle is not yours, but God’s.”
+Listen carefully. I ask you to turn over to Jesus Christ your despair for those wayward souls. We cannot change their hearts, but He can; He is a God of miracles. We love our family members and friends profoundly, but they are foremost children of our Father in Heaven, who knowsand loves them even more than we do. Our Father, the great Elohim, gave His Beloved Son the authority and power necessary to heal all His children. That is the good news of the gospel. By the power of Jesus Christ’s Atonement, there is always a way back!
+By His Atonement from the Garden of Gethsemane to the cross on Golgotha, He paid for the sins and bore the disappointments that wrack theirsouls and yours.
+In the vernacular, Jesus Christ says to all who grieve, “I’ve got this!”
+
+
+
+
+(0.71) Quentin L. Cook (Of the Quorum of the Twelve Apostles)
+Integrity and Virtue Lead to Happiness
+------------------------------
+The Lord wants us to experience the joy of a virtuous life. He provides us with many beautiful gifts both physical and spiritual. Those whomake sacrifices in His name will be richly rewarded.
+In contrast, what we are seeing in society and social media today is conduct and language that are often coarse and crude and lack virtue. They are destructive of civil discourse. They also violate the basic principles the Savior taught. Any use of the internet to bully, destroya reputation, or place a person in a bad light is reprehensible.
+It is clear that evil communications are not just a matter of bad manners. If practiced by Latter-day Saints, they can adversely affect others who do not have a knowledge of God or a testimony of our Savior. The Lord has inspired marvelous technology that provides us with unparalleled experiences and opportunities when used wisely.
+
+
+
+
+(0.73) Hutch U. Fale (Of the Seventy)
+I Am a Child of God
+------------------------------
+Second, when we understand God’s love for us and for the rest of His children, we become immune to the divisive and misleading labels of our fallen world, both the labels that people try to put on us and the labels the world tries to put on others. We see ourselves and all of God’s children as beloved and divine. We become quick to repent, slow to judge, and ever hopeful that the best is yet before us. We are forever willing to love and to make sure that no one is ever sitting, standing, or walking alone.
+Third, understanding our Father’s love protects us from the pernicious lie that it is too late for someone to change, too late for someone to turn to Christ, and too late to receive His redeeming grace. From the prodigal son to leaving the 99 sheep to find the one, our Father’s message, through His Son, has always been that there is still yet time if we turn to Christ today.
+
+
+
+
+(0.73) Tamara W. Runia (First Counselor in the Young Women General Presidency)
+The Sculpting of Our Souls
+------------------------------
+I’ve often wondered if the Prophet had any idea when he received this revelation what these words would mean to so many of us now who are also turning to God, pleading for a break.
+God’s answer implies that experience is valuable, and I’m learning the only way to get it is to go through it. Can’t we skip over it? Is there some other way? No, there isn’t another way.
+It’s like we heard these lessons in a premortal classroom. We studied it there, and we’re living it here, in this laboratory of life. This is where we “put on Christ.”
+C. S. Lewis explained, “God intends to give us what we need, not what we now think we want.” But sometimes we’re puzzled when we get what we need, aren’t we? How can our loving Father in Heaven watch as we go through heartbreaking experiences? I’ve wrestled with this, and maybe you have too.
+And while I know earth life is about experience, why am I so surprised every time I experience it? Maybe it’s because I grew up hearing things like “If you keep the commandments, you’ll be blessed. Pay your tithing, and the windows of heaven will open. Follow the Word of Wisdom,and you’ll have health and protection.” True promises, right?

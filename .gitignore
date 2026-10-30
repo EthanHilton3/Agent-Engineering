@@ -20,3 +20,8 @@ My Agent Project/bench/results/events/
 
 # Lecture 2d: cached embedding vectors (regenerable, ~hundreds of MB)
 **/.cache/
+
+# Lecture 2e: Chroma database and downloaded talks (regenerable), submission zip
+**/chroma_db/
+Lecture 2e - RAG/homework/talks/
+Lecture 2e - RAG/2e_homework.zip
