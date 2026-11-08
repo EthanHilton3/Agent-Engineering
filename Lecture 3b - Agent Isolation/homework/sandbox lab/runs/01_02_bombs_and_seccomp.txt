@@ -1,0 +1,20 @@
+=== 1a. Fork bomb, --pids-limit 64 ===
+
+=== 1b. Memory bomb, --memory 100m ===
+90 MB
+100 MB
+exit code: 137  (137 = killed by the OOM killer)
+
+=== 2a. Normal container, root deletes a file ===
+deleted fine
+
+=== 2b. Same thing, no-delete seccomp profile ===
+rm: cannot remove '/work/README.md': Operation not permitted
+rm: cannot remove '/work/src/todo.py': Operation not permitted
+rm: cannot remove '/work/README.md': Operation not permitted
+rm: cannot remove '/work/.env': Operation not permitted
+.env
+README.md
+src
+--- but overwriting is a different syscall:
+wiped

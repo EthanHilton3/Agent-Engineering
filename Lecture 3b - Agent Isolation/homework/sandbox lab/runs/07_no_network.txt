@@ -1,0 +1,23 @@
+agent_v3 - gpt-6-luna - reasoning medium - approval full-auto - web search off
+workspace /work
+Enter a task. /new = new session, /sessions, /resume, /export, /model, /reasoning, /approval, /usage = totals, /quit = exit. Ctrl+C cancels a running turn.
+
+You > 
+Error (connection_error): Could not reach the API: Connection error.
+  The conversation is kept; your next message continues from here.
+
+You > 
+
+----------- Usage ------------
+~~~~~~~~~~gpt-6-luna~~~~~~~~~~
+Input (tokens): 0
+Cached (tokens): 0
+Output (tokens): 0
+Reasoning (tokens): 0
+gpt-6-luna cost (USD): $0.000000
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Rounds: 0
+Tool calls: 0
+Web searches: 0
+Web search cost (USD): $0.000000
+Total cost (USD): $0.000000
