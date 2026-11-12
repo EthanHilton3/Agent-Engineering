@@ -1,0 +1,11 @@
+**Next Severance episode:** S2E7, "Chikhai Bardo". You last logged S2E6.
+
+**Goals** (4 active):
+- **Finish Severance:** 15 of 19 episodes done (78%), no deadline.
+- **Avatar: The Last Airbender:** 24 of 61 done (39%), due Dec 21. It's flagged **at risk**. You need about 6.6 episodes a week and you've been doing about 2.5. That leaves 37 episodes (15h 8m) in 39 days. The next one is S2E5, "Avatar Day".
+- **Tulsa King S4:** 3 of 10 done (30%), no deadline.
+- **Arcane:** 5 of 18 done (27%), no deadline.
+
+I only pulled detailed progress for Avatar, since it's the only goal with a deadline.
+
+**Tools called:** `list_goals`, `search_movies_tv`, `get_goal_progress` and `get_next_episodes`.

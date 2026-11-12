@@ -25,3 +25,9 @@ My Agent Project/bench/results/events/
 **/chroma_db/
 Lecture 2e - RAG/homework/talks/
 Lecture 2e - RAG/2e_homework.zip
+
+# Terraform: real values and local state stay out (the .example file is the template)
+**/terraform.tfvars
+**/.terraform/
+*.tfstate
+*.tfstate.*

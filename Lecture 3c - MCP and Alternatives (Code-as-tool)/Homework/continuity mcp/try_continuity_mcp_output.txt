@@ -1,0 +1,139 @@
+Tools: search_movies_tv, get_my_history, get_next_episodes, list_goals, get_goal_progress, get_viewing_patterns
+
+== list_goals
+{
+  "count": 4,
+  "goals": [
+    {
+      "goal_id": "fa87927a-ae70-417c-afd0-57c041a589e6",
+      "name": "Finish Avatar: The Last Airbender",
+      "status": "active",
+      "deadline": "2026-12-21",
+      "done": 24,
+      "total": 61,
+      "percent": 39
+    },
+    {
+      "goal_id": "622c2c3e-5619-42bb-9653-3d5505366cce",
+      "name": "Catch up on Tulsa King season 4",
+      "status": "active",
+      "deadline": null,
+      "done": 3,
+      "total": 10,
+      "percent": 30
+    },
+    {
+      "goal_id": "f76332f2-26d8-42d3-8553-569ead3f3e0a",
+      "name": "Finish Severance",
+      "status": "active",
+      "deadline": null,
+      "done": 15,
+      "total": 19,
+      "percent": 78
+    },
+    {
+      "goal_id": "d0dfd9d0-ede0-407c-86ec-2554b638ae39",
+      "name": "Watch Arcane",
+      "status": "active",
+      "deadline": null,
+      "done": 5,
+      "total": 18,
+      "percent": 27
+    }
+  ]
+}
+
+== get_my_history (last 5)
+{
+  "experiences": [
+    {
+      "media_id": "tmdb:tv:246",
+      "title": "Avatar: The Last Airbender",
+      "season": 2,
+      "episode": 2,
+      "completion": "finished",
+      "date": "2026-11-10",
+      "companions": [
+        "Maya"
+      ],
+      "chapter_end": null
+    },
+    {
+      "media_id": "tmdb:tv:246",
+      "title": "Avatar: The Last Airbender",
+      "season": 2,
+      "episode": 3,
+      "completion": "finished",
+      "date": "2026-11-10",
+      "companions": [
+        "Maya"
+      ],
+      "chapter_end": null
+    },
+    {
+      "media_id": "tmdb:tv:246",
+      "title": "Avatar: The Last Airbender",
+      "season": 2,
+      "episode": 4,
+      "completion": "finished",
+      "date": "2026-11-10",
+      "companions": [
+        "Maya"
+      ],
+      "chapter_end": null
+    },
+    {
+      "media_id": "ol:/works/OL21745884W",
+      "title": "Project Hail Mary",
+      "season": null,
+      "episode": null,
+      "completion": "partial",
+      "date": "2026-11-08",
+      "companions": [],
+      "chapter_end": 45
+    },
+    {
+      "media_id": "tmdb:movie:1381071",
+      "title": "Godzilla Minus Zero",
+      "season": null,
+      "episode": null,
+      "completion": "finished",
+      "date": "2026-11-07",
+      "companions": [
+        "Jake"
+      ],
+      "chapter_end": null
+    }
+  ]
+}
+
+== search_movies_tv Severance
+{
+  "result": [
+    {
+      "id": "tmdb:tv:95396",
+      "title": "Severance",
+      "year": "2022",
+      "type": "tv",
+      "in_history": true
+    }
+  ]
+}
+
+== get_next_episodes
+{
+  "last_logged": "S2E6",
+  "episodes": [
+    {
+      "season": 2,
+      "episode": 7,
+      "title": "Chikhai Bardo"
+    },
+    {
+      "season": 2,
+      "episode": 8,
+      "title": "Sweet Vitriol"
+    }
+  ],
+  "note": null
+}
